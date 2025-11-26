@@ -1,0 +1,23 @@
+# INSTRUCTION: PHASE 0 (INITIALIZATION & ARCHITECTURE DESIGN)
+
+You have been provided with:
+1. `rules.md`: The general development protocols.
+2. `subject.md`: The OFFICIAL requirements document for this project.
+
+**YOUR GOAL**:
+Analyze the Subject and establish the foundational architecture and plan.
+
+**ACTIONS**:
+
+1. **Tech Stack Selection**:
+   - Analyze `subject.md` to identify constraints (e.g., specific languages, frameworks, forbidden libraries).
+   - Select the best Tech Stack (Backend, Frontend, DB, Testing) that meets the requirements.
+   - **OUTPUT**: Create a file named **`.ai/tech_stack.md`** defining these choices strictly.
+
+2. **Project Planning**:
+   - Define the Directory Architecture based on the selected stack.
+   - Create a granular Task List (Epics > Stories > Tasks).
+   - **OUTPUT**: Create the initial content for **`PROJECT_MASTER.md`** (in Japanese).
+
+3. **Output Summary**:
+   - Explicitly output the raw markdown content for both `.ai/tech_stack.md` and `PROJECT_MASTER.md`.
