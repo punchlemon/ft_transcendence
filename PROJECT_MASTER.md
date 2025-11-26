@@ -4,7 +4,7 @@
 - Docker / Fastify / React / Prisma の最小構成は動作確認済み。
 - Prisma のバイナリ問題を解消し、バックエンド/フロントエンドともに `docker-compose up --build` で起動可能な状態を維持。
 - ソースファイル末尾に日本語の解説ブロックを追加し始めた。残りの主要ファイルにも順次適用する必要がある。
-- AI 支援ループに必要なルール類 (.ai ディレクトリ) を取り込み済み。技術選定とタスク管理ドキュメントは本ファイルと `.ai/tech_stack.md` が起点となる。
+- AI 支援ループに必要なルール類 (.ai ディレクトリ) を取り込み済み。`PROJECT_MASTER.md` と `.ai/tech_stack.md` を整備し、ディレクトリ構造説明 (`README_ARCHITECTURE.md`) も最新化した。
 
 ## エピックとタスク
 
@@ -21,7 +21,7 @@
 | --- | --- | --- |
 | ✅ | `.ai/` ディレクトリ一式をコミット | ルール・ループ・Git方針を管理 |
 | ✅ | `PROJECT_MASTER.md` 作成 | 本ファイル。進捗サマリとタスク一覧を管理 |
-| ⬜️ | `README_ARCHITECTURE.md` で各ディレクトリの役割を説明 | 現在は雛形のみ。最新構造を反映させる |
+| ✅ | `README_ARCHITECTURE.md` で各ディレクトリの役割を説明 | ルート/ backend / frontend / docs の構造を定義 |
 | ⬜️ | 主要コードファイルの解説ブロック整備 | backend/plugins 以外のルートも対応する |
 
 ### Epic C: アプリ機能 (MVP)
@@ -34,6 +34,6 @@
 | ⬜️ | 認証/ユーザ管理モジュール検討 | OAuth 2.0 (例: 42, GitHub) を想定 |
 
 ## 次のアクション (Short-Term)
-1. `README_ARCHITECTURE.md` を最新のディレクトリ構成と役割で更新する。
-2. ESLint / Prettier / Vitest のセットアッププランを作り、必要な設定ファイルを追加。
-3. Pong MVP の仕様 (画面構成、エンドポイント、DB スキーマ) を PROJECT_MASTER 上で詳細化する。
+1. ESLint / Prettier / Vitest のセットアッププランをまとめ、必要な設定ファイルを追加する。
+2. Pong MVP の仕様 (画面構成、エンドポイント、DB スキーマ) を PROJECT_MASTER 上で詳細化する。
+3. 主要ソースファイル (frontend/main.tsx など) に解説ブロックを追加し、Epic B の残タスクを消化する。
