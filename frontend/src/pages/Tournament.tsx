@@ -19,7 +19,7 @@ const TournamentPage = () => {
 
   const currentMatch = findNextMatch(matchQueue, currentMatchIndex)
   const isTournamentReady = players.length >= 2
-  const hasActiveTournament = matchQueue.length > 0 && currentMatchIndex !== -1
+  const hasTournamentHistory = matchQueue.length > 0
 
   const resetMatchProgress = () => {
     setMatchQueue([])
@@ -145,7 +145,7 @@ const TournamentPage = () => {
           </div>
         ) : (
           <p className="mt-4 text-sm text-slate-600">
-            {hasActiveTournament ? '全ての試合が終了しました。' : 'トーナメント生成ボタンでマッチメイクを開始してください。'}
+            {hasTournamentHistory ? '全ての試合が終了しました。' : 'トーナメント生成ボタンでマッチメイクを開始してください。'}
           </p>
         )}
 
