@@ -30,3 +30,23 @@ const App = () => {
 }
 
 export default App
+
+/*
+解説:
+
+1) import { BrowserRouter, Routes, Route, Link } ...
+  - React Router v6 の主要コンポーネントを読み込み、`HomePage` と `HealthCheckPage` を紐付ける。
+
+2) <BrowserRouter> ...
+  - アプリ全体をルーターで包み、URL 変化を監視できるようにする。
+  - 最上位の div には背景グラデーションと最小高さの Tailwind クラスを付与して、シンプルなヒーロー風レイアウトを作る。
+
+3) <header> ...
+  - 透明度付きホワイト背景とボーダーを使ったトップバー。`ft_transcendence` のロゴリンクと、`Home` / `Health` へのナビを表示する。
+
+4) <main> / <Routes>
+  - ルーティング定義。`/` で `HomePage`、`/health` で `HealthCheckPage` を描画し、それぞれのコンポーネント側で UI と API 呼び出しを担う。
+
+5) export default App
+  - Vite のエントリ (`main.tsx`) から読み込まれるルートコンポーネントとして公開する。
+*/
