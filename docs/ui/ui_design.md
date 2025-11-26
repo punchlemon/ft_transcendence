@@ -98,6 +98,19 @@ Authenticated Routes (Layout 配下)
   5. 進行状況カード: 現在試合 / BYE 表示 / 次試合へ進むボタン。
   6. 組み合わせ一覧: 現在試合を強調表示。
 - **ステート管理**: `players`, `matchQueue`, `currentMatchIndex`, `errorMessage`, `infoMessage`。
+- **コンポーネント分割**:
+  1. `TournamentAliasPanel`
+    - Input + CTA: エイリアス入力、`onSubmit` 発火、info/error メッセージ表示。
+    - props: `{ aliasInput, onAliasChange(value), onSubmit(event), infoMessage, errorMessage, isSubmitDisabled }`。
+    - 状態数が増えた際もフォーム部分を独立テストできるようにする。
+  2. `TournamentEntryPanel`
+    - 参加者一覧 + アクションボタン (`トーナメント生成`, `エントリーをリセット`)。
+    - props: `{ players, onRemove(alias), onGenerate(), onReset(), isGenerateDisabled }`。
+    - 空状態テキスト、削除ボタンの `aria-label` を統一。
+  3. `TournamentProgressPanel`
+    - 現在試合カード + マッチキュー (強調表示) + 「次の試合へ進む」。
+    - props: `{ currentMatch, matchQueue, currentMatchIndex, onAdvance() }`。
+    - BYE の場合は補足テキストを表示し、完了後はサマリーメッセージに切り替える。
 
 ## 4. Game Section
 - **目的**: ゲーム関連の導線 (モード選択 / 実際の対戦) を 1 つの章で整理し、仕様の抜け漏れを防ぐ。
