@@ -21,3 +21,19 @@ const HomePage = () => {
 }
 
 export default HomePage
+
+/*
+解説:
+
+1) import { useNavigate } ... Button
+  - React Router の `useNavigate` でページ遷移を行い、共通 UI コンポーネント `Button` を再利用するために読み込む。
+
+2) const HomePage = () => { ... }
+  - トップ画面としてシンプルなヒーローレイアウトを返す関数コンポーネント。`navigate` フックでヘルスチェック画面へ遷移するボタンハンドラを保持する。
+
+3) JSX 構造
+  - タイトル、説明文、2 つのボタンをセンタリングし、Tailwind クラスで余白と配色を定義している。API 動作確認導線を明示するため「ヘルスチェックへ」ボタンで `/health` へ遷移する。
+
+4) export default HomePage
+  - `App.tsx` のルーティングから利用されるようデフォルトエクスポートする。
+*/
