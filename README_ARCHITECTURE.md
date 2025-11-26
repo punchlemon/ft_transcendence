@@ -3,7 +3,7 @@
 本ドキュメントはディレクトリ構造を「なぜ存在するか」「何を置くか」で説明する。構成変更時は必ず更新する。
 
 ## ルート直下
-- `.ai/`: AI エージェント用のルール・ループ・Git 方針・技術スタック (`tech_stack.md`) を格納。AI 作業の文脈を一元管理する場所。
+- `.ai/`: AI エージェント用のルール・ループ・Git 方針・技術スタック (`tech_stack.md`)・選択モジュール表 (`selected_modules.md`) を格納。AI 作業の文脈を一元管理する場所。
 - `.github/`: GitHub Actions など CI/CD 構成を保持する。`workflows/ci.yml` で backend/frontend の lint/test/build を自動実行する。
 - `backend/`: Fastify + Prisma で実装する API サーバー。Dockerfile、`package.json`、`prisma/`、`src/` などバックエンド一式を収める。
 - `frontend/`: Vite + React + Tailwind の SPA。`src/` 以下にページ/コンポーネント/ライブラリを配置し、Vite 設定や Tailwind 設定ファイルもここに置く。

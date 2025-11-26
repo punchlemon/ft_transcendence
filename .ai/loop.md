@@ -2,10 +2,13 @@
 
 Every time you are triggered, execute the following sequence recursively:
 
-1. **READ STATE**:
-   - Check `PROJECT_MASTER.md` for the current task.
-   - Check `.ai/tech_stack.md` for the strict technology constraints.
-   - Check `README_ARCHITECTURE.md` to understand where to place files.
+1. **READ STATE (CRITICAL)**:
+   - **Context Verification**: ensure you have read the following files from the current workspace:
+     - `PROJECT_MASTER.md` (Current Status)
+     - `.ai/tech_stack.md` (Technology Constraints)
+     - `.ai/selected_modules.md` (Feature Scope)
+     - `docs/subject.md` (Official Requirements)
+     - `README_ARCHITECTURE.md` (Directory Structure)
 
 2. **EXECUTION PHASE**:
    - **Step 1: Test Design**: Create/Update test files using the Testing Framework defined in `tech_stack.md`. Explain *Why* in the header (Japanese).

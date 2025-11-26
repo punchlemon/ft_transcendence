@@ -6,44 +6,52 @@ else
 	CLIP = xclip -selection clipboard
 endif
 
-# Paths
-AI_DIR = .ai
-DOCS_DIR = docs
+# Paths (Relative to root)
+RULES = .ai/rules.md
+STACK = .ai/tech_stack.md
+MODULES = .ai/selected_modules.md
+POLICY = .ai/git_policy.md
+LOOP = .ai/loop.md
+SUBJECT = docs/subject.md
 MASTER = PROJECT_MASTER.md
-ARCH_DOC = README_ARCHITECTURE.md
-STACK_DOC = $(AI_DIR)/tech_stack.md
+ARCH = README_ARCHITECTURE.md
 
 # ==============================================================================
 # 1. Daily Development Loop
-#    Context: Rules + Tech Stack + Git Policy + Loop + Architecture + Master
+#    Generates a prompt that references files instead of dumping content.
 # ==============================================================================
 ai:
-	@echo "Loading FULL context..."
-	@if [ ! -f $(MASTER) ]; then echo "❌ Error: $(MASTER) not found. Run 'make ai-init' first."; exit 1; fi
-	@if [ ! -f $(STACK_DOC) ]; then echo "❌ Error: $(STACK_DOC) not found. Run 'make ai-init' first."; exit 1; fi
-	@if [ ! -f $(ARCH_DOC) ]; then touch $(ARCH_DOC); fi
+	@echo "Generating reference prompt..."
 	
-	@# Combine all context files INCLUDING the dynamically created tech stack
-	@cat $(AI_DIR)/rules.md $(STACK_DOC) $(AI_DIR)/git_policy.md $(AI_DIR)/loop.md $(ARCH_DOC) $(MASTER) > .ai_prompt_temp
-	
-	@# Add instruction
-	@echo "\n\n--- COMMAND: Read the above rules, tech stack, and state. Execute the next step in the loop. ALL OUTPUT MUST BE IN JAPANESE. ---" >> .ai_prompt_temp
-	
+	@# Create a prompt that tells Copilot to look at specific files
+	@echo "Please execute the next step of the autonomous loop based on the context of these files:" > .ai_prompt_temp
+	@echo "" >> .ai_prompt_temp
+	@echo "Context Files:" >> .ai_prompt_temp
+	@echo "- Rules: #$(RULES)" >> .ai_prompt_temp
+	@echo "- Tech Stack: #$(STACK)" >> .ai_prompt_temp
+	@echo "- Selected Modules: #$(MODULES)" >> .ai_prompt_temp
+	@echo "- Git Policy: #$(POLICY)" >> .ai_prompt_temp
+	@echo "- Execution Loop: #$(LOOP)" >> .ai_prompt_temp
+	@echo "- Subject: #$(SUBJECT)" >> .ai_prompt_temp
+	@echo "- Architecture: #$(ARCH)" >> .ai_prompt_temp
+	@echo "- Project Master: #$(MASTER)" >> .ai_prompt_temp
+	@echo "" >> .ai_prompt_temp
+	@echo "INSTRUCTION: Read the above files (using #file or @workspace) and execute the logic defined in #$(LOOP)." >> .ai_prompt_temp
+	@echo "ALL OUTPUT MUST BE IN JAPANESE." >> .ai_prompt_temp
+
 	@cat .ai_prompt_temp | $(CLIP)
 	@rm .ai_prompt_temp
-	@echo "✅ Context copied! Paste to AI."
+	@echo "✅ Reference prompt copied!"
+	@echo "👉 Paste into Copilot Chat. If files aren't automatically linked, type '#' to reference them."
 
 # ==============================================================================
 # 2. Project Initialization
-#    Context: Rules + Loop + Subject + Seed (No Tech Stack yet)
 # ==============================================================================
 ai-init:
 	@echo "Initializing project..."
-	@if [ ! -f $(DOCS_DIR)/subject.md ]; then echo "❌ Error: $(DOCS_DIR)/subject.md not found. Place the text content of the PDF there."; exit 1; fi
-
-	@# Initial prompt does NOT include tech_stack.md because AI will create it.
-	@cat $(AI_DIR)/rules.md $(AI_DIR)/git_policy.md $(AI_DIR)/loop.md $(DOCS_DIR)/subject.md $(AI_DIR)/seed.txt > .ai_prompt_temp
+	@# For initialization, we still dump content because files might not exist/be indexed yet.
+	@cat .ai/rules.md .ai/git_policy.md .ai/loop.md docs/subject.md .ai/seed.txt > .ai_prompt_temp
 	
 	@cat .ai_prompt_temp | $(CLIP)
 	@rm .ai_prompt_temp
-	@echo "🚀 Initialization prompt copied! Paste to AI to generate 'tech_stack.md' and 'PROJECT_MASTER.md'."
+	@echo "🚀 Initialization prompt copied! Paste to AI."
