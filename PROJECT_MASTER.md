@@ -1,0 +1,39 @@
+# PROJECT_MASTER
+
+## 進捗サマリ
+- Docker / Fastify / React / Prisma の最小構成は動作確認済み。
+- Prisma のバイナリ問題を解消し、バックエンド/フロントエンドともに `docker-compose up --build` で起動可能な状態を維持。
+- ソースファイル末尾に日本語の解説ブロックを追加し始めた。残りの主要ファイルにも順次適用する必要がある。
+- AI 支援ループに必要なルール類 (.ai ディレクトリ) を取り込み済み。技術選定とタスク管理ドキュメントは本ファイルと `.ai/tech_stack.md` が起点となる。
+
+## エピックとタスク
+
+### Epic A: インフラ・開発基盤
+| 状態 | タスク | メモ |
+| --- | --- | --- |
+| ✅ | Docker Compose で backend/frontend を同時起動 | `node:18-bullseye` ベースで安定化済み |
+| ✅ | Prisma バイナリを Linux 用に再生成 | `npx prisma generate` で `debian-openssl-1.1.x` を追加 |
+| ⬜️ | ESLint / Prettier / Vitest の設定 | ルール確定後に repository へ追加 |
+| ⬜️ | CI (GitHub Actions) で lint/test | lint 設定完了後に導入 |
+
+### Epic B: ドキュメント & ナレッジ
+| 状態 | タスク | メモ |
+| --- | --- | --- |
+| ✅ | `.ai/` ディレクトリ一式をコミット | ルール・ループ・Git方針を管理 |
+| ✅ | `PROJECT_MASTER.md` 作成 | 本ファイル。進捗サマリとタスク一覧を管理 |
+| ⬜️ | `README_ARCHITECTURE.md` で各ディレクトリの役割を説明 | 現在は雛形のみ。最新構造を反映させる |
+| ⬜️ | 主要コードファイルの解説ブロック整備 | backend/plugins 以外のルートも対応する |
+
+### Epic C: アプリ機能 (MVP)
+| 状態 | タスク | メモ |
+| --- | --- | --- |
+| ✅ | `/api/health` を Fastify で提供 | Swagger UI `/docs` から参照可 |
+| ✅ | React + Tailwind の基本レイアウトとヘルスページ | ルーティング最小構成を実装済み |
+| ⬜️ | Pong ゲームロジックの設計 | Game モジュールの要件整理から着手 |
+| ⬜️ | トーナメント・マッチメイキング仕様策定 | UI/バックエンドの責務分割を定義 |
+| ⬜️ | 認証/ユーザ管理モジュール検討 | OAuth 2.0 (例: 42, GitHub) を想定 |
+
+## 次のアクション (Short-Term)
+1. `README_ARCHITECTURE.md` を最新のディレクトリ構成と役割で更新する。
+2. ESLint / Prettier / Vitest のセットアッププランを作り、必要な設定ファイルを追加。
+3. Pong MVP の仕様 (画面構成、エンドポイント、DB スキーマ) を PROJECT_MASTER 上で詳細化する。
