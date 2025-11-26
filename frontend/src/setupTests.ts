@@ -1,8 +1,7 @@
 import '@testing-library/jest-dom'
+import { ensureSharedArrayBuffer } from './testing/ensureSharedArrayBuffer'
 
-if (typeof globalThis.SharedArrayBuffer === 'undefined') {
-  ;(globalThis as Record<string, unknown>).SharedArrayBuffer = ArrayBuffer as unknown as SharedArrayBufferConstructor
-}
+ensureSharedArrayBuffer()
 
 /*
 解説:
