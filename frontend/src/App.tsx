@@ -1,6 +1,7 @@
 import { BrowserRouter, Routes, Route, Link } from 'react-router-dom'
 import HomePage from './pages/Home'
 import HealthCheckPage from './pages/HealthCheck'
+import TournamentPage from './pages/Tournament'
 
 const App = () => {
   return (
@@ -14,6 +15,7 @@ const App = () => {
             <nav className="flex gap-4 text-sm text-slate-600">
               <Link to="/">Home</Link>
               <Link to="/health">Health</Link>
+              <Link to="/tournament">Tournament</Link>
             </nav>
           </div>
         </header>
@@ -22,6 +24,7 @@ const App = () => {
           <Routes>
             <Route path="/" element={<HomePage />} />
             <Route path="/health" element={<HealthCheckPage />} />
+            <Route path="/tournament" element={<TournamentPage />} />
           </Routes>
         </main>
       </div>
@@ -45,7 +48,7 @@ export default App
   - 透明度付きホワイト背景とボーダーを使ったトップバー。`ft_transcendence` のロゴリンクと、`Home` / `Health` へのナビを表示する。
 
 4) <main> / <Routes>
-  - ルーティング定義。`/` で `HomePage`、`/health` で `HealthCheckPage` を描画し、それぞれのコンポーネント側で UI と API 呼び出しを担う。
+  - ルーティング定義。`/` で `HomePage`、`/health` で `HealthCheckPage`、`/tournament` で `TournamentPage` を描画し、それぞれのコンポーネント側で UI やマッチ管理を担う。
 
 5) export default App
   - Vite のエントリ (`main.tsx`) から読み込まれるルートコンポーネントとして公開する。

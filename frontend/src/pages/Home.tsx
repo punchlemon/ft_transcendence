@@ -10,10 +10,10 @@ const HomePage = () => {
       <p className="text-lg text-slate-600">
         Pong をベースにした SPA を構築する最終課題です。まずはバックエンドのヘルスチェックから動作確認しましょう。
       </p>
-      <div className="flex gap-4">
+      <div className="flex flex-col gap-3 sm:flex-row">
         <Button onClick={() => navigate('/health')}>ヘルスチェックへ</Button>
-        <Button variant="secondary" disabled>
-          Coming soon...
+        <Button variant="secondary" onClick={() => navigate('/tournament')}>
+          トーナメント管理を開く
         </Button>
       </div>
     </div>
@@ -32,7 +32,7 @@ export default HomePage
   - トップ画面としてシンプルなヒーローレイアウトを返す関数コンポーネント。`navigate` フックでヘルスチェック画面へ遷移するボタンハンドラを保持する。
 
 3) JSX 構造
-  - タイトル、説明文、2 つのボタンをセンタリングし、Tailwind クラスで余白と配色を定義している。API 動作確認導線を明示するため「ヘルスチェックへ」ボタンで `/health` へ遷移する。
+  - タイトル、説明文、2 つのボタンをセンタリングし、Tailwind クラスで余白と配色を定義している。`/health` への導線に加えて `/tournament` へ遷移するボタンでゲーム機能への入口を示す。
 
 4) export default HomePage
   - `App.tsx` のルーティングから利用されるようデフォルトエクスポートする。

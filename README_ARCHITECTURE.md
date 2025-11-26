@@ -32,9 +32,9 @@
 - `src/`: フロントエンドの TypeScript/TSX コード。
 	- `main.tsx`: React エントリポイント。`App` を `#root` にマウント。
 	- `App.tsx`: ルーターと共通レイアウトを定義。
-	- `pages/`: 画面単位のコンポーネント (`Home`, `HealthCheck` 等)。
+	- `pages/`: 画面単位のコンポーネント (`Home`, `HealthCheck`, `Tournament` など)。`Tournament.tsx` はエイリアス登録やマッチ進行を管理するSPAの中核画面。
 	- `components/`: 再利用コンポーネント群 (今後増加予定)。
-	- `lib/`: API クライアントなどのユーティリティ。
+	- `lib/`: API クライアントなどのユーティリティ。`tournament.ts` はトーナメントのマッチキュー生成や重複チェックなどの純粋関数を集約する。
 	- `index.css`: Tailwind ベーススタイル。
 - `vite.config.ts`, `tailwind.config.js`, `postcss.config.js`: ビルド/スタイル設定。
 - `dist/`: `npm run build` の成果物。

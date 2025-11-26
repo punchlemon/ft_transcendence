@@ -11,6 +11,7 @@
 - backend / frontend 双方の Dockerfile を `node:18-bullseye` ベースへ差し戻し、Subject と tech_stack に沿った root ユーザー構成を維持した。
 - backend 側の Vitest を 1.6 系へ固定し、CI で発生していた Vite ESM 読み込みエラーを解消した。
 - CI の Node.js バージョンを 22 へ更新し、ローカル環境と統一することで SharedArrayBuffer 関連の互換性問題を解決した。
+- Subject で要求されるトーナメント登録/マッチメイクの最初の UI を `Tournament` ページとして実装し、純粋関数化したロジックとユニットテストで堅牢性を担保した。
 
 ## エピックとタスク
 
