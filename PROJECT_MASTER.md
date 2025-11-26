@@ -1,48 +1,52 @@
 # PROJECT_MASTER
 
 ## 進捗サマリ
+- **ステータス**: Phase 1 (Foundation) 完了 → Phase 2 (Design & Core Logic) へ移行中
 - Docker / Fastify / React / Prisma の最小構成は動作確認済み。
 - Prisma のバイナリ問題を解消し、バックエンド/フロントエンドともに `docker-compose up --build` で起動可能な状態を維持。
 - ソースファイル末尾に日本語の解説ブロックを追加し始めた。残りの主要ファイルにも順次適用する必要がある。
-- AI 支援ループに必要なルール類 (.ai ディレクトリ) を取り込み済み。`PROJECT_MASTER.md` と `.ai/tech_stack.md` を整備し、ディレクトリ構造説明 (`README_ARCHITECTURE.md`) も最新化した。
-- ESLint / Prettier / Vitest を backend・frontend 両方に導入し、ヘルスチェック統合テストで API 応答保証までカバーした。
-- GitHub Actions (ci.yml) で backend/frontend の lint・test・build を自動実行するパイプラインを追加。
-- フロントエンドの Home / HealthCheck / Button / API ユーティリティに解説ブロックを追加し、Button のビジュアル一貫性を守るテストを導入した。
-- backend / frontend 双方の Dockerfile を `node:22-bullseye` ベースへ更新し、テスト依存が要求する Node 20+ エンジン警告を解消した。
-- backend 側の Vitest を 1.6 系へ固定し、CI で発生していた Vite ESM 読み込みエラーを解消した。
-- CI の Node.js バージョンを 22 へ更新し、ローカル環境と統一することで SharedArrayBuffer 関連の互換性問題を解決した。
-- Subject で要求されるトーナメント登録/マッチメイクの最初の UI を `Tournament` ページとして実装し、純粋関数化したロジックとユニットテストで堅牢性を担保した。
-- Tournament ページの UI 操作 (登録・重複検証・進行管理) を React Testing Library で自動化し、試合完了メッセージの表示条件も修正してユーザー体験を改善した。
-- Home ページのヒーロー要素と主要ボタンについて React Testing Library で UI テストを追加し、`useNavigate` の遷移呼び出しを検証できるようにした。
+- AI 支援ループに必要なルール類 (.ai ディレクトリ) を取り込み済み。
+- ESLint / Prettier / Vitest を導入し、CI (GitHub Actions) での自動テストパイプラインを構築済み。
+- フロントエンドの基盤コンポーネント（Button等）とHealthCheckページの実装・テストが完了。
+- `docs/ui/ui_design.md` に Home / HealthCheck / Tournament の状態遷移とテスト観点を整理し、UI 変更前の合意形成プロセスを整備した。
+- 同 UI 設計書にサイトマップ / Layout / Auth / Profile / Game / Chat の骨格を追記し、選択モジュール要件を満たすための画面・導線を明文化した。
+- `docs/schema/prisma_draft.md` を追加し、User / Tournament / Game / Chat など全ドメインの Prisma モデル草案を確定。
+- `backend/prisma/schema.prisma` を草案に沿って大幅拡張（SQLite 制約に合わせ enum / JSON は String 保存へ変更）し、Prisma Client を再生成。
+- `docs/api/api_design.md` に REST + WS エンドポイント、リクエスト/レスポンス例、通知フローを整理。
+- `docs/game/pong_logic.md` でサーバ権威の Pong ループ・WebSocket イベント・AI (1 Hz 視界制約) のロジックを設計。
+- `/api/users` 検索エンドポイントを Fastify + Prisma で実装し、ページング・フィルタ・除外 ID をサポートする統合テストを追加。
+- `/api/tournaments` (POST/GET) を追加し、トーナメント作成・一覧 API と Prisma モデル/マイグレーション、統合テストを整備。
+- HealthCheck ページに Vitest + React Testing Library でローディング/成功/失敗/導線を検証する UI テストを追加した。
+- **方針変更**: 実装の手戻りを防ぐため、コードを書く前に `docs/` 配下の設計ドキュメント（DBスキーマ、API仕様、UI設計）を確定させる「設計ファースト」プロセスを導入。
 
 ## エピックとタスク
 
 ### Epic A: インフラ・開発基盤
 | 状態 | タスク | メモ |
-| --- | --- | --- |
-| ✅ | Docker Compose で backend/frontend を同時起動 | `node:18-bullseye` ベースで安定化済み |
-| ✅ | Prisma バイナリを Linux 用に再生成 | `npx prisma generate` で `debian-openssl-1.1.x` を追加 |
-| ✅ | ESLint / Prettier / Vitest の設定 | 両モジュールにフラット ESLint と Vitest を導入、サンプルテスト完走 |
-| ✅ | CI (GitHub Actions) で lint/test | `ci.yml` で backend/frontend の lint/test/build を検証 |
+| :---: | --- | --- |
+| ✅ | Docker Compose で backend/frontend を同時起動 | `node:22-bullseye` ベース |
+| ✅ | Prisma バイナリを Linux 用に再生成 | `debian-openssl-1.1.x` |
+| ✅ | ESLint / Prettier / Vitest の設定 | 共通化完了 |
+| ✅ | CI (GitHub Actions) で lint/test | `ci.yml` 稼働中 |
+| 🔄 | 主要コードファイルの解説ブロック整備 | `frontend/src/main.tsx`, `pages/*` 等進行中。残りは都度対応 |
 
-### Epic B: ドキュメント & ナレッジ
+### Epic B: 詳細設計 (Design Phase) 🚀 Current Focus
+*実装前にここを確定させることで、AIの実装精度を最大化する*
+
 | 状態 | タスク | メモ |
-| --- | --- | --- |
-| ✅ | `.ai/` ディレクトリ一式をコミット | ルール・ループ・Git方針を管理 |
-| ✅ | `PROJECT_MASTER.md` 作成 | 本ファイル。進捗サマリとタスク一覧を管理 |
-| ✅ | `README_ARCHITECTURE.md` で各ディレクトリの役割を説明 | ルート/ backend / frontend / docs の構造を定義 |
-| ⬜️ | 主要コードファイルの解説ブロック整備 | `frontend/src/main.tsx` / `pages/Home` / `pages/HealthCheck` / `components/ui/Button` / `lib/api` まで対応。残りの画面/ユーティリティへ展開する |
+| :---: | --- | --- |
+| ✅ | **DBスキーマ設計** | `docs/schema/prisma_draft.md` 作成済み。User, Game, Friend 等のリレーション定義と未決事項を明文化。 |
+| ✅ | **APIインターフェース設計** | `docs/api/api_design.md` 作成済み。エンドポイント、Req/Res 型、通知ポリシーを定義。 |
+| 🔄 | **UIコンポーネント設計** | `docs/ui/ui_design.md` にサイトマップ / Layout / Auth / Profile / Game / Chat を追記済み。今後の画面詳細・テスト観点を継続精緻化。 |
+| ✅ | **ゲームロジック設計** | `docs/game/pong_logic.md` 作成済み。ステート管理、WebSocket 通信、AI 1Hz 視界制約を設計。 |
 
-### Epic C: アプリ機能 (MVP)
+### Epic C: アプリ機能実装 (Implementation Phase)
+*Epic B の設計承認後に着手*
+
 | 状態 | タスク | メモ |
-| --- | --- | --- |
-| ✅ | `/api/health` を Fastify で提供 | Swagger UI `/docs` から参照可 |
-| ✅ | React + Tailwind の基本レイアウトとヘルスページ | ルーティング最小構成を実装済み |
-| ⬜️ | Pong ゲームロジックの設計 | Game モジュールの要件整理から着手 |
-| ⬜️ | トーナメント・マッチメイキング仕様策定 | UI/バックエンドの責務分割を定義 |
-| ⬜️ | 認証/ユーザ管理モジュール検討 | OAuth 2.0 (例: 42, GitHub) を想定 |
-
-## 次のアクション (Short-Term)
-1. Pong MVP の仕様 (画面構成、エンドポイント、DB スキーマ) を PROJECT_MASTER 上で詳細化する。
-2. 主要ソースファイル (frontend/pages 配下や `components/` / `lib/` の残り) に解説ブロックを追加し、Epic B の残タスクを消化する。
-3. 認証・トーナメント機能の要件整理を進め、Epic C の設計タスクに優先順位をつける。
+| :---: | --- | --- |
+| ✅ | `/api/health` 実装 & テスト | 疎通確認用 |
+| 🔄 | **認証・ユーザー管理機能** | 登録/ログイン/OAuth/2FA。API設計待ち。 |
+| 🔄 | **ユーザー検索 API** | `/api/users` 実装済み。残課題: 認証・mutualFriends算出。 |
+| 🔄 | **トーナメント API** | `/api/tournaments` (POST/GET) 実装済み。残課題: 認証・参加者編集・マッチ生成ロジック。 |
+|
