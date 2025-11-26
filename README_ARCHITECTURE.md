@@ -9,6 +9,7 @@
 - `frontend/`: Vite + React + Tailwind の SPA。`src/` 以下にページ/コンポーネント/ライブラリを配置し、Vite 設定や Tailwind 設定ファイルもここに置く。
 - `docs/`: 公式課題 (`subject.md`) など要件ドキュメントを保管。要件確認やレビュー時の参照用。
 - `README_ARCHITECTURE.md`: 本ファイル。構造説明の単一情報源。
+- `README.md`: 起動方法や Docker Compose コマンド、ローカル開発手順をまとめたクイックスタートガイド。
 - `PROJECT_MASTER.md`: エピック/タスク/進捗サマリを日本語で管理するマスタードキュメント。
 - `.env` / `.env.example`: Docker Compose から共有される環境変数ファイル。本番用秘密は `.env` のみに保持し git ignore する。
 - `docker-compose.yml`: backend / frontend コンテナをまとめて起動する設定。環境変数マッピングとビルド手順を記述。

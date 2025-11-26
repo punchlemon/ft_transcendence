@@ -58,3 +58,22 @@ const HealthCheckPage = () => {
 }
 
 export default HealthCheckPage
+
+/*
+解説:
+
+1) import 群 / type HealthResponse
+  - React のステート・副作用フック、ルーティングの `useNavigate`、共通 Button、`fetchHealth` API クライアントを読み込み、ヘルスチェック結果の型を定義する。
+
+2) const HealthCheckPage = () => { ... }
+  - `health`, `error`, `loading` の 3 種の状態を管理し、ユーザー操作なしでもバックエンドの状態を取得できるようにする。
+
+3) useEffect -> loadHealth
+  - 初回マウント時に `fetchHealth` を呼び出し、ローディング/エラーを制御する。API 失敗時は日本語メッセージを表示する。
+
+4) JSX レイアウト
+  - API 応答をカード表示し、ステータス/タイムスタンプ/エラー/ローディングを条件分岐で描画。最後にトップへ戻るボタンを配置してナビゲーションを完結させる。
+
+5) export default HealthCheckPage
+  - ルーターから参照されるようデフォルトエクスポートする。
+*/

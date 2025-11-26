@@ -1,6 +1,15 @@
 import { defineConfig } from 'vitest/config'
 import react from '@vitejs/plugin-react'
 
+// SharedArrayBuffer polyfill - must run before any imports
+if (typeof globalThis.SharedArrayBuffer === 'undefined') {
+  Object.defineProperty(globalThis, 'SharedArrayBuffer', {
+    value: ArrayBuffer,
+    writable: true,
+    configurable: true
+  })
+}
+
 export default defineConfig({
   plugins: [react()],
   test: {

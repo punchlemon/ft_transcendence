@@ -7,6 +7,10 @@
 - AI 支援ループに必要なルール類 (.ai ディレクトリ) を取り込み済み。`PROJECT_MASTER.md` と `.ai/tech_stack.md` を整備し、ディレクトリ構造説明 (`README_ARCHITECTURE.md`) も最新化した。
 - ESLint / Prettier / Vitest を backend・frontend 両方に導入し、ヘルスチェック統合テストで API 応答保証までカバーした。
 - GitHub Actions (ci.yml) で backend/frontend の lint・test・build を自動実行するパイプラインを追加。
+- フロントエンドの Home / HealthCheck / Button / API ユーティリティに解説ブロックを追加し、Button のビジュアル一貫性を守るテストを導入した。
+- backend / frontend 双方の Dockerfile を `node:18-bullseye` ベースへ差し戻し、Subject と tech_stack に沿った root ユーザー構成を維持した。
+- backend 側の Vitest を 1.6 系へ固定し、CI で発生していた Vite ESM 読み込みエラーを解消した。
+- frontend テスト向け SharedArrayBuffer ポリフィルを global setup で先行登録し、CI (Linux) での jsdom / webidl-conversions エラーを恒久対策した。
 
 ## エピックとタスク
 
@@ -24,7 +28,7 @@
 | ✅ | `.ai/` ディレクトリ一式をコミット | ルール・ループ・Git方針を管理 |
 | ✅ | `PROJECT_MASTER.md` 作成 | 本ファイル。進捗サマリとタスク一覧を管理 |
 | ✅ | `README_ARCHITECTURE.md` で各ディレクトリの役割を説明 | ルート/ backend / frontend / docs の構造を定義 |
-| ⬜️ | 主要コードファイルの解説ブロック整備 | `frontend/src/main.tsx` に追記済み。残りの画面/ユーティリティへ展開する |
+| ⬜️ | 主要コードファイルの解説ブロック整備 | `frontend/src/main.tsx` / `pages/Home` / `pages/HealthCheck` / `components/ui/Button` / `lib/api` まで対応。残りの画面/ユーティリティへ展開する |
 
 ### Epic C: アプリ機能 (MVP)
 | 状態 | タスク | メモ |
@@ -37,5 +41,5 @@
 
 ## 次のアクション (Short-Term)
 1. Pong MVP の仕様 (画面構成、エンドポイント、DB スキーマ) を PROJECT_MASTER 上で詳細化する。
-2. 主要ソースファイル (frontend/pages 配下など) に解説ブロックを追加し、Epic B の残タスクを消化する。
+2. 主要ソースファイル (frontend/pages 配下や `components/` / `lib/` の残り) に解説ブロックを追加し、Epic B の残タスクを消化する。
 3. 認証・トーナメント機能の要件整理を進め、Epic C の設計タスクに優先順位をつける。

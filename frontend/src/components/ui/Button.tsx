@@ -29,3 +29,22 @@ export const Button = forwardRef<HTMLButtonElement, ButtonProps>(function Button
 Button.displayName = 'Button'
 
 export default Button
+
+/*
+解説:
+
+1) import { forwardRef ... } / clsx
+  - ボタン属性の型安全性を保ちながら props を受け取るため TypeScript の型と React の `forwardRef` を利用し、Tailwind クラス結合のために `clsx` を読み込む。
+
+2) baseClasses / variants
+  - 共通スタイルと variant ごとの配色を分離し、Primary/Secondary のクラスを `Record` 型で管理することで IDE 補完と型チェックを効かせる。
+
+3) export const Button = forwardRef(...)
+  - `variant`, `className`, `children` などを受け取り、`clsx` でクラスを組み合わせて `<button>` に適用する。`ref` を透過させることでフォーム制御やフォーカス操作にも対応する。
+
+4) Button.displayName
+  - DevTools でコンポーネント名が分かるよう displayName を設定する。
+
+5) export default Button
+  - 他ファイルから共通 UI コンポーネントとして再利用可能にする。
+*/
