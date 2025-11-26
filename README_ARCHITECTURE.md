@@ -4,6 +4,7 @@
 
 ## ルート直下
 - `.ai/`: AI エージェント用のルール・ループ・Git 方針・技術スタック (`tech_stack.md`) を格納。AI 作業の文脈を一元管理する場所。
+- `.github/`: GitHub Actions など CI/CD 構成を保持する。`workflows/ci.yml` で backend/frontend の lint/test/build を自動実行する。
 - `backend/`: Fastify + Prisma で実装する API サーバー。Dockerfile、`package.json`、`prisma/`、`src/` などバックエンド一式を収める。
 - `frontend/`: Vite + React + Tailwind の SPA。`src/` 以下にページ/コンポーネント/ライブラリを配置し、Vite 設定や Tailwind 設定ファイルもここに置く。
 - `docs/`: 公式課題 (`subject.md`) など要件ドキュメントを保管。要件確認やレビュー時の参照用。

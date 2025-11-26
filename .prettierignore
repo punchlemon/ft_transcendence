@@ -1,0 +1,20 @@
+node_modules
+**/node_modules
+**/dist
+backend/dist
+frontend/dist
+backend/prisma/dev.db
+backend/prisma/*.db
+coverage
+.tmp
+
+# 解説:
+#
+# 1) node_modules / dist
+#   - 生成物や依存はフォーマッタ対象外にして処理時間を削減し、実コードのみ整形する。
+#
+# 2) backend/prisma/*.db
+#   - SQLite ファイルはバイナリのため Prettier アクセスを防ぎ、誤書き込みを避ける。
+#
+# 3) coverage / .tmp
+#   - テストや作業ディレクトリで生成される一時ファイルは整形不要なため除外する。
