@@ -9,6 +9,7 @@
 - GitHub Actions (ci.yml) で backend/frontend の lint・test・build を自動実行するパイプラインを追加。
 - フロントエンドの Home / HealthCheck / Button / API ユーティリティに解説ブロックを追加し、Button のビジュアル一貫性を守るテストを導入した。
 - backend / frontend 双方の Dockerfile を `node:18-bullseye` ベースへ差し戻し、Subject と tech_stack に沿った root ユーザー構成を維持した。
+- backend 側の Vitest を 1.6 系へ固定し、CI で発生していた Vite ESM 読み込みエラーを解消した。
 
 ## エピックとタスク
 
