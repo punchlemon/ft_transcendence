@@ -11,6 +11,7 @@ services:
       - .env
     ports:
       - "${BACKEND_PORT:-3000}:3000"
+    command: sh -c "npm ci && npm run dev"
     networks:
       - ft_net
 
@@ -24,6 +25,7 @@ services:
       - .env
     ports:
       - "${FRONTEND_PORT:-5173}:5173"
+    command: sh -c "npm ci && npm run dev"
     depends_on:
       - backend
     networks:
