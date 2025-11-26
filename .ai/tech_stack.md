@@ -3,7 +3,7 @@
 プロジェクト全体で使用する技術要素を以下に固定する。以後の開発は本ドキュメントを唯一の参照源 (Single Source of Truth) として扱う。
 
 ## Backend
-- **言語 / Runtime**: TypeScript (Node.js 18.x)
+- **言語 / Runtime**: TypeScript (Node.js 22.x LTS)
 - **Webフレームワーク**: Fastify 4系
 - **ORM / DBアクセス**: Prisma 5系
 - **データベース**: SQLite3 (ローカルファイル、`/app/prisma/dev.db`)
@@ -26,6 +26,7 @@
 
 ## DevOps / インフラ
 - **コンテナ**: Docker / Docker Compose。Node公式 `node:18-bullseye` ベースを利用。
+ - **コンテナ**: Docker / Docker Compose。Node公式 `node:22-bullseye` ベースを利用。
 - **環境変数管理**: `.env` + Docker Compose でマッピング。
 - **ドキュメント**: Markdown (日本語)。`README_ARCHITECTURE.md` と `PROJECT_MASTER.md` を常に更新。
 - **CI/CD (予定)**: GitHub Actions で Lint / Test / Build を自動化。

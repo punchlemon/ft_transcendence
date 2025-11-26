@@ -8,11 +8,12 @@
 - ESLint / Prettier / Vitest を backend・frontend 両方に導入し、ヘルスチェック統合テストで API 応答保証までカバーした。
 - GitHub Actions (ci.yml) で backend/frontend の lint・test・build を自動実行するパイプラインを追加。
 - フロントエンドの Home / HealthCheck / Button / API ユーティリティに解説ブロックを追加し、Button のビジュアル一貫性を守るテストを導入した。
-- backend / frontend 双方の Dockerfile を `node:18-bullseye` ベースへ差し戻し、Subject と tech_stack に沿った root ユーザー構成を維持した。
+- backend / frontend 双方の Dockerfile を `node:22-bullseye` ベースへ更新し、テスト依存が要求する Node 20+ エンジン警告を解消した。
 - backend 側の Vitest を 1.6 系へ固定し、CI で発生していた Vite ESM 読み込みエラーを解消した。
 - CI の Node.js バージョンを 22 へ更新し、ローカル環境と統一することで SharedArrayBuffer 関連の互換性問題を解決した。
 - Subject で要求されるトーナメント登録/マッチメイクの最初の UI を `Tournament` ページとして実装し、純粋関数化したロジックとユニットテストで堅牢性を担保した。
 - Tournament ページの UI 操作 (登録・重複検証・進行管理) を React Testing Library で自動化し、試合完了メッセージの表示条件も修正してユーザー体験を改善した。
+- Home ページのヒーロー要素と主要ボタンについて React Testing Library で UI テストを追加し、`useNavigate` の遷移呼び出しを検証できるようにした。
 
 ## エピックとタスク
 
