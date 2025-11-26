@@ -1,18 +1,38 @@
 // SharedArrayBuffer polyfill - apply before any other imports
 if (typeof globalThis.SharedArrayBuffer === 'undefined') {
+  // Create a minimal SharedArrayBuffer polyfill with required prototype properties
+  const SharedArrayBufferPolyfill = function(this: any, length: number) {
+    return new ArrayBuffer(length)
+  } as any
+  
+  SharedArrayBufferPolyfill.prototype = Object.create(ArrayBuffer.prototype)
+  SharedArrayBufferPolyfill.prototype.constructor = SharedArrayBufferPolyfill
+  
+  // Add the required 'byteLength' getter that webidl-conversions expects
+  Object.defineProperty(SharedArrayBufferPolyfill.prototype, 'byteLength', 
+    Object.getOwnPropertyDescriptor(ArrayBuffer.prototype, 'byteLength') || {
+      get: function(this: ArrayBuffer) {
+        return this.byteLength
+      },
+      enumerable: false,
+      configurable: true
+    }
+  )
+  
+  // Add the 'growable' getter for newer Node versions
+  Object.defineProperty(SharedArrayBufferPolyfill.prototype, 'growable', {
+    get: function() {
+      return false
+    },
+    enumerable: false,
+    configurable: true
+  })
+  
   Object.defineProperty(globalThis, 'SharedArrayBuffer', {
-    value: ArrayBuffer,
+    value: SharedArrayBufferPolyfill,
     writable: true,
     configurable: true,
     enumerable: false
-  })
-  
-  // Ensure prototype exists for webidl-conversions descriptor access
-  Object.defineProperty(ArrayBuffer, 'prototype', {
-    value: ArrayBuffer.prototype,
-    writable: true,
-    enumerable: false,
-    configurable: true
   })
 }
 
