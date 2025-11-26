@@ -104,6 +104,76 @@ describe('Tournaments API', () => {
     expect(body.data[0].name).toBe('Running Cup')
   })
 
+  it('returns tournament detail with participants and matches ordered properly', async () => {
+    const owner = await createUser(server, { displayName: 'Owner' })
+    const guest = await createUser(server, { displayName: 'Guest' })
+
+    const tournament = await server.prisma.tournament.create({
+      data: {
+        name: 'Detail Cup',
+        status: 'RUNNING',
+        bracketType: 'DOUBLE_ELIMINATION',
+        createdById: owner.id,
+        startsAt: new Date('2025-12-01T09:00:00.000Z')
+      }
+    })
+
+    const alice = await server.prisma.tournamentParticipant.create({
+      data: {
+        tournamentId: tournament.id,
+        alias: 'Alice',
+        userId: owner.id,
+        inviteState: 'INVITED',
+        seed: 1
+      }
+    })
+    const bob = await server.prisma.tournamentParticipant.create({
+      data: {
+        tournamentId: tournament.id,
+        alias: 'Bob',
+        userId: guest.id,
+        inviteState: 'ACCEPTED',
+        seed: 2
+      }
+    })
+
+    await server.prisma.tournamentMatch.create({
+      data: {
+        tournamentId: tournament.id,
+        round: 1,
+        playerAId: alice.id,
+        playerBId: bob.id,
+        status: 'IN_PROGRESS',
+        scheduledAt: new Date('2025-12-01T10:00:00.000Z')
+      }
+    })
+
+    const response = await server.inject({ method: 'GET', url: `/api/tournaments/${tournament.id}` })
+
+    expect(response.statusCode).toBe(200)
+    const body = response.json<{
+      data: {
+        name: string
+        participants: Array<{ alias: string; seed: number | null }>
+        matches: Array<{ round: number; playerA: { alias: string }; playerB: { alias: string } }>
+      }
+    }>()
+
+    expect(body.data.name).toBe('Detail Cup')
+    expect(body.data.participants.map((participant) => participant.alias)).toEqual(['Alice', 'Bob'])
+    expect(body.data.matches).toHaveLength(1)
+    expect(body.data.matches[0].playerA.alias).toBe('Alice')
+    expect(body.data.matches[0].playerB.alias).toBe('Bob')
+  })
+
+  it('returns 404 when tournament detail is missing', async () => {
+    const response = await server.inject({ method: 'GET', url: '/api/tournaments/9999' })
+
+    expect(response.statusCode).toBe(404)
+    const body = response.json<{ error: { code: string } }>()
+    expect(body.error.code).toBe('TOURNAMENT_NOT_FOUND')
+  })
+
   it('returns 404 if creator does not exist', async () => {
     const response = await server.inject({
       method: 'POST',

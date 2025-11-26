@@ -83,6 +83,7 @@ Response `201`: `{ "user": { ...basic profile... }, "tokens": { "access", "refre
 | POST | `/tournaments` | ✅ | Create draft tournament. |
 | GET | `/tournaments` | ✅ | List tournaments (filters: status, owner). |
 | GET | `/tournaments/:id` | ✅ | Tournament detail (participants, matches). |
+> **備考**: 参加者は `seed asc, id asc` で整列し、試合は `round asc, id asc` で返す。404 の場合は `{ error: { code: "TOURNAMENT_NOT_FOUND" } }` を返す。
 | PATCH | `/tournaments/:id` | ✅ | Update name, start time, bracket type. |
 | POST | `/tournaments/:id/publish` | ✅ | Move from draft → ready. |
 
