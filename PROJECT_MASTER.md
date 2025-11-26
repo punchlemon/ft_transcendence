@@ -8,6 +8,7 @@
 - ESLint / Prettier / Vitest を backend・frontend 両方に導入し、ヘルスチェック統合テストで API 応答保証までカバーした。
 - GitHub Actions (ci.yml) で backend/frontend の lint・test・build を自動実行するパイプラインを追加。
 - フロントエンドの Home / HealthCheck / Button / API ユーティリティに解説ブロックを追加し、Button のビジュアル一貫性を守るテストを導入した。
+- backend / frontend 双方の Dockerfile を `node:18-bullseye` ベースへ差し戻し、Subject と tech_stack に沿った root ユーザー構成を維持した。
 
 ## エピックとタスク
 
