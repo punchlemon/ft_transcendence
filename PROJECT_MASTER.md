@@ -22,7 +22,7 @@
 | ✅ | `.ai/` ディレクトリ一式をコミット | ルール・ループ・Git方針を管理 |
 | ✅ | `PROJECT_MASTER.md` 作成 | 本ファイル。進捗サマリとタスク一覧を管理 |
 | ✅ | `README_ARCHITECTURE.md` で各ディレクトリの役割を説明 | ルート/ backend / frontend / docs の構造を定義 |
-| ⬜️ | 主要コードファイルの解説ブロック整備 | backend/plugins 以外のルートも対応する |
+| ⬜️ | 主要コードファイルの解説ブロック整備 | `frontend/src/main.tsx` に追記済み。残りの画面/ユーティリティへ展開する |
 
 ### Epic C: アプリ機能 (MVP)
 | 状態 | タスク | メモ |
