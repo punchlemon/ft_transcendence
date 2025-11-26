@@ -10,6 +10,7 @@
 - フロントエンドの Home / HealthCheck / Button / API ユーティリティに解説ブロックを追加し、Button のビジュアル一貫性を守るテストを導入した。
 - backend / frontend 双方の Dockerfile を `node:18-bullseye` ベースへ差し戻し、Subject と tech_stack に沿った root ユーザー構成を維持した。
 - backend 側の Vitest を 1.6 系へ固定し、CI で発生していた Vite ESM 読み込みエラーを解消した。
+- frontend テスト向けに SharedArrayBuffer ポリフィルを追加し、CI (Linux) で発生した jsdom の webidl-conversions エラーを回避した。
 
 ## エピックとタスク
 
