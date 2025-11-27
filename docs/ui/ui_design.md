@@ -112,6 +112,21 @@ Authenticated Routes (Layout 配下)
     - props: `{ currentMatch, matchQueue, currentMatchIndex, onAdvance() }`。
     - BYE の場合は補足テキストを表示し、完了後はサマリーメッセージに切り替える。
 
+  #### テスト計画 (Alias / Entry / Progress Panels)
+  1. **TournamentAliasPanel**
+    - 入力値変更で `onAliasChange` が呼ばれること。
+    - エラー/情報メッセージが DOM 上に正しく描画されること。
+    - `isSubmitDisabled` で送信ボタンの活性/非活性が切り替わること。
+  2. **TournamentEntryPanel**
+    - プレイヤー未登録時に空状態テキストを出し、登録済み時は `aria-label="登録済みプレイヤー一覧"` が付与された `ul` に項目が並ぶこと。
+    - 各「削除」ボタンで `onRemove` が正しいエイリアス付きで呼ばれること。
+    - 生成/リセットボタンがそれぞれ `onGenerate` / `onReset` を発火し、`isGenerateDisabled` が `true` の場合は生成ボタンが無効化されること。
+  3. **TournamentProgressPanel**
+    - 現在試合が存在する場合はカードが描画され、BYE (`players[1] === null`) の説明が表示されること。
+    - 「次の試合へ進む」ボタンで `onAdvance` が呼ばれること。
+    - `matchQueue` が空のときは未生成メッセージ、履歴ありで `currentMatch` が無い場合は完了メッセージが表示されること。
+    - 組み合わせ一覧で現在試合のみ `aria-current="true"` が付与されること。
+
 ## 4. Game Section
 - **目的**: ゲーム関連の導線 (モード選択 / 実際の対戦) を 1 つの章で整理し、仕様の抜け漏れを防ぐ。
 - **ルート**: `/game/new`, `/game/:id`
