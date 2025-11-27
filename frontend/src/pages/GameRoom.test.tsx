@@ -1,7 +1,8 @@
-import { render, screen, fireEvent, waitFor } from '@testing-library/react'
-import { describe, it, expect, vi } from 'vitest'
-import { MemoryRouter, Route, Routes } from 'react-router-dom'
+import { render, screen, fireEvent, waitFor, act } from '@testing-library/react'
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
+import { MemoryRouter } from 'react-router-dom'
 import GameRoomPage from './GameRoom'
+import useAuthStore from '../stores/authStore'
 
 const mockNavigate = vi.fn()
 
@@ -13,6 +14,11 @@ vi.mock('react-router-dom', async () => {
     useParams: () => ({ id: 'test-game-id' }),
   }
 })
+
+// Mock Auth Store
+vi.mock('../stores/authStore', () => ({
+  default: vi.fn(),
+}))
 
 // Mock Canvas context
 HTMLCanvasElement.prototype.getContext = vi.fn(() => ({
@@ -28,7 +34,42 @@ HTMLCanvasElement.prototype.getContext = vi.fn(() => ({
   setLineDash: vi.fn(),
 })) as any
 
+// Mock WebSocket
+class MockWebSocket {
+  onopen: (() => void) | null = null
+  onmessage: ((event: any) => void) | null = null
+  onclose: (() => void) | null = null
+  send = vi.fn()
+  close = vi.fn()
+
+  constructor(public url: string) {
+    setTimeout(() => {
+      this.onopen?.()
+    }, 0)
+  }
+}
+
 describe('GameRoomPage', () => {
+  let mockWs: MockWebSocket
+
+  beforeEach(() => {
+    vi.clearAllMocks()
+    
+    // Setup Auth Store mock
+    ;(useAuthStore as unknown as ReturnType<typeof vi.fn>).mockImplementation((selector) =>
+      selector({
+        accessToken: 'test-token',
+      })
+    )
+
+    // Setup WebSocket mock
+    vi.stubGlobal('WebSocket', MockWebSocket)
+  })
+
+  afterEach(() => {
+    vi.unstubAllGlobals()
+  })
+
   it('renders game canvas and info', () => {
     render(
       <MemoryRouter>
@@ -39,7 +80,6 @@ describe('GameRoomPage', () => {
     expect(screen.getByTestId('game-canvas')).toBeInTheDocument()
     expect(screen.getByText('Match Info')).toBeInTheDocument()
     expect(screen.getByText('Player 1 (You)')).toBeInTheDocument()
-    // Player 2 appears twice (label and name), so we check if at least one exists
     expect(screen.getAllByText('Player 2').length).toBeGreaterThan(0)
   })
 
@@ -54,41 +94,73 @@ describe('GameRoomPage', () => {
     expect(screen.getByText('connecting')).toBeInTheDocument()
   })
 
-  it('transitions to playing state', async () => {
+  it('transitions to playing state on CONNECTED message', async () => {
+    // Capture the WebSocket instance
+    let wsInstance: MockWebSocket | undefined
+    vi.spyOn(global, 'WebSocket').mockImplementation((url) => {
+      wsInstance = new MockWebSocket(url as string)
+      return wsInstance as any
+    })
+
     render(
       <MemoryRouter>
         <GameRoomPage />
       </MemoryRouter>
     )
 
+    // Wait for WebSocket to be created
+    await waitFor(() => expect(wsInstance).toBeDefined())
+
+    // Simulate server message
+    act(() => {
+      wsInstance?.onmessage?.({
+        data: JSON.stringify({
+          event: 'match:event',
+          payload: { type: 'CONNECTED' }
+        })
+      })
+    })
+
     await waitFor(() => {
       expect(screen.queryByText('Connecting to server...')).not.toBeInTheDocument()
-    }, { timeout: 2000 })
+    })
 
     expect(screen.getByText('playing')).toBeInTheDocument()
   })
 
   it('toggles pause state', async () => {
+    let wsInstance: MockWebSocket | undefined
+    vi.spyOn(global, 'WebSocket').mockImplementation((url) => {
+      wsInstance = new MockWebSocket(url as string)
+      return wsInstance as any
+    })
+
     render(
       <MemoryRouter>
         <GameRoomPage />
       </MemoryRouter>
     )
 
-    // Wait for playing state
+    await waitFor(() => expect(wsInstance).toBeDefined())
+
+    act(() => {
+      wsInstance?.onmessage?.({
+        data: JSON.stringify({
+          event: 'match:event',
+          payload: { type: 'CONNECTED' }
+        })
+      })
+    })
+
     await waitFor(() => {
       expect(screen.getByText('playing')).toBeInTheDocument()
-    }, { timeout: 2000 })
+    })
 
     // Click Pause
     fireEvent.click(screen.getByText('Pause'))
     expect(screen.getByText('PAUSED')).toBeInTheDocument()
     
-    // Resume buttons appear in overlay and side panel
     const resumeButtons = screen.getAllByText('Resume')
-    expect(resumeButtons.length).toBeGreaterThan(0)
-
-    // Click Resume (use the first one found, likely the overlay one or side panel)
     fireEvent.click(resumeButtons[0])
     expect(screen.queryByText('PAUSED')).not.toBeInTheDocument()
   })

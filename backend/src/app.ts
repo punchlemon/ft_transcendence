@@ -3,11 +3,13 @@ import Fastify from 'fastify'
 import swagger from '@fastify/swagger'
 import swaggerUi from '@fastify/swagger-ui'
 import cors from '@fastify/cors'
+import fastifyWebsocket from '@fastify/websocket'
 import dbPlugin from './plugins/db'
 import jwtPlugin from './plugins/jwt'
 import usersRoutes from './routes/users'
 import tournamentsRoutes from './routes/tournaments'
 import authRoutes from './routes/auth'
+import gameRoutes from './routes/game'
 
 if (!process.env.DATABASE_URL) {
   const sqlitePath = path.resolve(process.cwd(), 'prisma', 'dev.db')
@@ -18,6 +20,7 @@ export const buildServer = async () => {
   const server = Fastify({ logger: true })
 
   await server.register(cors, { origin: true })
+  await server.register(fastifyWebsocket)
   await server.register(swagger, {
     swagger: {
       info: { title: 'ft_transcendence API', version: '0.1.0' }
@@ -29,6 +32,7 @@ export const buildServer = async () => {
   await server.register(authRoutes)
   await server.register(usersRoutes)
   await server.register(tournamentsRoutes)
+  await server.register(gameRoutes)
 
   server.get('/api/health', async () => {
     return { status: 'ok', timestamp: new Date().toISOString() }

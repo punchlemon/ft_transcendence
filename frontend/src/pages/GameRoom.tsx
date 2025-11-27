@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
+import useAuthStore from '../stores/authStore'
 
 type GameStatus = 'connecting' | 'playing' | 'paused' | 'finished'
 
@@ -7,12 +8,52 @@ const GameRoomPage = () => {
   const { id } = useParams<{ id: string }>()
   const navigate = useNavigate()
   const canvasRef = useRef<HTMLCanvasElement>(null)
+  const socketRef = useRef<WebSocket | null>(null)
+  const gameStateRef = useRef<any>(null)
+  const token = useAuthStore((state) => state.accessToken)
   
   const [status, setStatus] = useState<GameStatus>('connecting')
   const [scores, setScores] = useState({ p1: 0, p2: 0 })
   const [players, setPlayers] = useState({ p1: 'Player 1', p2: 'Player 2' })
 
-  // Game loop simulation
+  // WebSocket connection
+  useEffect(() => {
+    if (!token) return
+
+    const wsUrl = `ws://localhost:3000/ws/game`
+    const ws = new WebSocket(wsUrl)
+    socketRef.current = ws
+
+    ws.onopen = () => {
+      console.log('Connected to game server')
+      ws.send(JSON.stringify({ event: 'ready', payload: { token } }))
+    }
+
+    ws.onmessage = (event) => {
+      try {
+        const data = JSON.parse(event.data)
+        
+        if (data.event === 'match:event' && data.payload.type === 'CONNECTED') {
+          setStatus('playing')
+        } else if (data.event === 'state:update') {
+          gameStateRef.current = data.payload
+        }
+      } catch (err) {
+        console.error('Failed to parse message', err)
+      }
+    }
+
+    ws.onclose = () => {
+      console.log('Disconnected from game server')
+      setStatus('connecting')
+    }
+
+    return () => {
+      ws.close()
+    }
+  }, [token])
+
+  // Game loop
   useEffect(() => {
     if (status !== 'playing') return
 
@@ -21,7 +62,6 @@ const GameRoomPage = () => {
     if (!canvas || !ctx) return
 
     let animationFrameId: number
-    let ball = { x: canvas.width / 2, y: canvas.height / 2, dx: 4, dy: 4, radius: 8 }
     const paddleHeight = 80
     const paddleWidth = 10
     const p1Y = canvas.height / 2 - paddleHeight / 2
@@ -41,27 +81,23 @@ const GameRoomPage = () => {
       ctx.stroke()
       ctx.setLineDash([])
 
-      // Draw paddles
-      ctx.fillStyle = '#f8fafc' // slate-50
-      ctx.fillRect(10, p1Y, paddleWidth, paddleHeight)
-      ctx.fillRect(canvas.width - 20, p2Y, paddleWidth, paddleHeight)
+      const state = gameStateRef.current
+      if (state) {
+        // Draw paddles
+        ctx.fillStyle = '#f8fafc' // slate-50
+        // Use server state for paddles if available, otherwise default
+        const p1Pos = state.paddles?.p1 ?? p1Y
+        const p2Pos = state.paddles?.p2 ?? p2Y
+        
+        ctx.fillRect(10, p1Pos, paddleWidth, paddleHeight)
+        ctx.fillRect(canvas.width - 20, p2Pos, paddleWidth, paddleHeight)
 
-      // Draw ball
-      ctx.beginPath()
-      ctx.arc(ball.x, ball.y, ball.radius, 0, Math.PI * 2)
-      ctx.fillStyle = '#f8fafc'
-      ctx.fill()
-      ctx.closePath()
-
-      // Update ball position (simple bounce)
-      ball.x += ball.dx
-      ball.y += ball.dy
-
-      if (ball.y + ball.radius > canvas.height || ball.y - ball.radius < 0) {
-        ball.dy = -ball.dy
-      }
-      if (ball.x + ball.radius > canvas.width || ball.x - ball.radius < 0) {
-        ball.dx = -ball.dx
+        // Draw ball
+        ctx.beginPath()
+        ctx.arc(state.ball.x, state.ball.y, 8, 0, Math.PI * 2)
+        ctx.fillStyle = '#f8fafc'
+        ctx.fill()
+        ctx.closePath()
       }
 
       animationFrameId = requestAnimationFrame(render)
@@ -71,16 +107,6 @@ const GameRoomPage = () => {
 
     return () => {
       cancelAnimationFrame(animationFrameId)
-    }
-  }, [status])
-
-  // Simulate connection sequence
-  useEffect(() => {
-    if (status === 'connecting') {
-      const timer = setTimeout(() => {
-        setStatus('playing')
-      }, 1500)
-      return () => clearTimeout(timer)
     }
   }, [status])
 

@@ -77,8 +77,8 @@
 
 ## Next Actions
 - [x] **Profile API 統合 (Basic)**: `ProfilePage` を `/api/users/:id` と接続し、基本情報と統計を表示する。
-- [ ] **Profile API 統合 (History/Friends)**: 対戦履歴とフレンドリストの API を実装し、`ProfilePage` に統合する。
-- [ ] **Game WebSocket 統合**: `GameRoom` で WebSocket 接続を確立し、サーバーからの状態更新を受け取る。
+- [x] **Profile API 統合 (History/Friends)**: 対戦履歴とフレンドリストの API を実装し、`ProfilePage` に統合する。
+- [x] **Game WebSocket 統合**: `GameRoom` で WebSocket 接続を確立し、サーバーからの状態更新を受け取る。
 - [ ] **Chat API 統合**: `ChatDrawer` でメッセージの送受信を API 経由で行う。
 
 ## Current Focus
