@@ -28,6 +28,18 @@ const parseExcludeIds = (excludeFriendIds?: string) => {
     .filter((id) => Number.isInteger(id) && id > 0)
 }
 
+const parseViewerId = (rawHeader?: string | string[]) => {
+  const value = Array.isArray(rawHeader) ? rawHeader[0] : rawHeader
+  if (!value) return undefined
+
+  const parsed = Number(value)
+  if (!Number.isInteger(parsed) || parsed <= 0) {
+    return undefined
+  }
+
+  return parsed
+}
+
 const usersRoutes: FastifyPluginAsync = async (fastify) => {
   fastify.get('/api/users', async (request, reply) => {
     const parsed = searchQuerySchema.safeParse(request.query)
@@ -48,6 +60,7 @@ const usersRoutes: FastifyPluginAsync = async (fastify) => {
     const limit = Math.min(rawLimit, 50)
     const excludeIds = parseExcludeIds(excludeFriendIds)
     const skip = (page - 1) * limit
+    const viewerId = parseViewerId(request.headers['x-user-id'])
 
     const where: Prisma.UserWhereInput = {
       deletedAt: null
@@ -87,10 +100,74 @@ const usersRoutes: FastifyPluginAsync = async (fastify) => {
       })
     ])
 
+    let mutualFriendsMap: Record<number, number> = {}
+
+    if (viewerId && users.length > 0) {
+      const viewerFriendships = await fastify.prisma.friendship.findMany({
+        where: {
+          status: 'ACCEPTED',
+          OR: [{ requesterId: viewerId }, { addresseeId: viewerId }]
+        },
+        select: {
+          requesterId: true,
+          addresseeId: true
+        }
+      })
+
+      if (viewerFriendships.length > 0) {
+        const viewerFriendIds = new Set<number>()
+        for (const edge of viewerFriendships) {
+          const friendId = edge.requesterId === viewerId ? edge.addresseeId : edge.requesterId
+          viewerFriendIds.add(friendId)
+        }
+
+        if (viewerFriendIds.size > 0) {
+          const candidateIds = users.map((user) => user.id)
+          const viewerFriendIdsArray = Array.from(viewerFriendIds)
+          const candidateFriendships = await fastify.prisma.friendship.findMany({
+            where: {
+              status: 'ACCEPTED',
+              OR: [
+                {
+                  requesterId: { in: candidateIds },
+                  addresseeId: { in: viewerFriendIdsArray }
+                },
+                {
+                  addresseeId: { in: candidateIds },
+                  requesterId: { in: viewerFriendIdsArray }
+                }
+              ]
+            },
+            select: {
+              requesterId: true,
+              addresseeId: true
+            }
+          })
+
+          if (candidateFriendships.length > 0) {
+            const candidateSet = new Set(candidateIds)
+            mutualFriendsMap = candidateFriendships.reduce<Record<number, number>>((acc, edge) => {
+              const { requesterId, addresseeId } = edge
+
+              if (candidateSet.has(requesterId) && viewerFriendIds.has(addresseeId)) {
+                acc[requesterId] = (acc[requesterId] ?? 0) + 1
+              }
+
+              if (candidateSet.has(addresseeId) && viewerFriendIds.has(requesterId)) {
+                acc[addresseeId] = (acc[addresseeId] ?? 0) + 1
+              }
+
+              return acc
+            }, {})
+          }
+        }
+      }
+    }
+
     return {
       data: users.map((user) => ({
         ...user,
-        mutualFriends: 0
+        mutualFriends: mutualFriendsMap[user.id] ?? 0
       })),
       meta: {
         page,
@@ -102,3 +179,10 @@ const usersRoutes: FastifyPluginAsync = async (fastify) => {
 }
 
 export default fp(usersRoutes)
+
+/*
+解説:
+1) `parseViewerId` で `X-User-Id` ヘッダーを数値化し、暫定的に viewer 文脈を確立して mutualFriends を算出できるようにした。
+2) viewer フレンド集合を一度だけ取得し、検索結果ユーザーに紐づく `Friendship` をまとめて読み込むことで N+1 クエリを避けた。
+3) reduce で候補ごとの友人数をマップ化し、レスポンスでは既存フィールドに `mutualFriends` を安全に付与している。
+*/
