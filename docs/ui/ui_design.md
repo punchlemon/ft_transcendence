@@ -97,6 +97,59 @@ Authenticated Routes (Layout 配下)
   - OAuth ボタン押下で `fetchOAuthAuthorizationUrl()` を呼び出し、返却 URL へ `window.location.assign` が実行される。
   - バリデーション失敗時はネットワークリクエストが発生しないことを `vi.mock` で確認する。
 
+### 0.4 Auth Store / セッション再開
+- **Zustand ベースの `authStore`** を SPA 全体で共有し、`user`, `accessToken`, `refreshToken`, `isHydrated` を保持する。
+- ログイン成功時は `setSession()` で状態と `sessionStorage` を同時に更新する。保存キーは `ft_access_token`, `ft_refresh_token`, `ft_user` (JSON) とし、2FA チャレンジ ID など他の値と衝突しない命名を維持する。
+- アプリ起動時 (例: `App.tsx` の `useEffect`) に `hydrateFromStorage()` を一度だけ呼び出し、セッション情報を即時に復元する。StrictMode の二重呼び出しでも多重セットが起きないよう、ハイドレーション完了フラグでガードする。
+- `clearSession()` はログアウトやトークン破棄時に利用し、ストアと `sessionStorage` 双方を初期化する。API リクエストヘッダーへトークンを添付する実装を追加する際はこのストアを単一情報源として参照する。
+
+### 0.5 2FA チャレンジページ (`/auth/2fa`)
+- **役割**: `/auth/login` で `423 MFA_REQUIRED` が返却された際に、ユーザーが TOTP もしくはバックアップコードを入力してセッションを確立する画面。
+- **チャレンジ ID 取得**:
+  - `sessionStorage` の `ft_mfa_challenge_id` から読み取る。存在しない場合はエラーカードで「再度ログインしてください」と案内し、フォームを無効化する。
+  - 「チャレンジ ID をリロード」ボタンで再度 `sessionStorage` から読み込み、開発中に ID を差し替えたケースでも復旧できるようにする。
+- **フォーム構成**:
+  1. 6 桁 TOTP 入力 (`code`)。数値以外は拒否し、6 桁揃わないと送信ボタンが無効化される。
+  2. 「バックアップコードを使用する」チェックボックスを有効化すると、`XXXX-XXXX` 形式の入力欄 (`backupCode`) が表示され、`code` は任意になる。
+  3. 送信ボタンは `challengeId` と (`code` or `backupCode`) が揃った時のみ活性。
+- **API 呼び出し**: `POST /auth/mfa/challenge` に `{ challengeId, code?, backupCode? }` を送信。成功時は `authStore.setSession()` を呼び出して JWT/ユーザー情報を保存し、「ログインが完了しました」と通知 → `/` へ遷移 (現状は完了メッセージ表示のみで可)。
+- **エラーハンドリング**:
+  - `404/410`: チャレンジ未検出/期限切れ → ID を削除し、ログインページへ再誘導。
+  - `400 INVALID_MFA_CODE`: 入力欄横にエラーを表示して再入力を促す。
+  - `409 MFA_BACKUP_CODES_EXHAUSTED`: バックアップコード欄に専用メッセージを表示。
+- **状態**:
+  - `idle` / `submitting` / `success` / `error` / `challengeMissing`。
+  - ローディング中は全入力と送信ボタンをロックし、スピナー表示の代わりにボタン文言を「送信中...」へ変更。
+- **ナビゲーション**: ログインページから `Link` で `/auth/2fa` に遷移できるショートカットを設置し、MFA 必須ユーザーが迷わないようにする。
+
+#### テスト観点 (2FA ページ)
+- `ft_mfa_challenge_id` が存在しない場合にエラーが描画され、送信ボタンが無効化されること。
+- 正しい 6 桁コード入力で `submitMfaChallenge()` を呼び、成功時に `authStore` と `sessionStorage` が更新されること。
+- バックアップコードモードでコード入力欄が切り替わり、`backupCode` だけでも送信できること。
+- API から `INVALID_MFA_CODE` が返った場合にフォーム値が保持されたままエラーメッセージが表示されること。
+- チャレンジ期限切れレスポンスでストレージの ID が削除され、ユーザーへ再ログイン案内が表示されること。
+
+### 0.6 OAuth コールバックページ (`/oauth/callback`)
+- **役割**: OAuth プロバイダからリダイレクトされた際にクエリパラメータ (`code`, `state`, `error`) を検証し、バックエンドの `/auth/oauth/:provider/callback` と連携して最終的なセッションを確立する。`mfaRequired=true` が返却された場合は `ft_mfa_challenge_id` を保存し `/auth/2fa` に遷移させる。
+- **事前共有情報**:
+  - ログイン画面で OAuth ボタンを押した時点で `sessionStorage` に `ft_oauth_state`, `ft_oauth_provider`, `ft_oauth_code_challenge?(pkce)` を保存する。コールバックでは最低限 `state` と `provider` を照合できること。
+  - `redirectUri` は `resolveOAuthRedirectUri()` で一貫して算出し (`VITE_OAUTH_REDIRECT_URI` 優先、未設定は `window.location.origin + /oauth/callback`)、バックエンドに送信する値と完全一致させる。
+- **フロー**:
+  1. 初期状態で「認証コードを検証中...」スピナーを表示し、`useEffect` で URLSearchParams から `code`/`state`/`error` を取得。
+  2. `error` が存在する場合は内容を翻訳して表示し、セッションストレージの OAuth 情報を削除して `/login` リンクを提示。
+  3. `code` または `state` が欠落、あるいは受信した `state` と `ft_oauth_state` が一致しない場合は `状態が一致しません` エラーを表示しリトライ導線を出す。
+  4. `provider` は `ft_oauth_provider` から取得し、存在しない場合は致命的エラーとして扱う（ブラウズバック時にストレージが消える可能性を考慮し案内文を表示）。
+  5. `completeOAuthCallback(provider, { code, state, redirectUri })` を呼び出し、成功したら `authStore.setSession()` を経由してトークン/ユーザーを保存。ストレージの OAuth 補助情報をすべて削除する。
+  6. 成功時は「OAuth ログインが完了しました」のメッセージと `/` への自動遷移 (3 秒) を行う。ユーザー操作で即座にトップへ戻るボタンも表示。
+  7. レスポンスで `mfaRequired=true` かつ `challengeId` があれば `ft_mfa_challenge_id` を保存し、「2FA を完了してください」メッセージと共に `/auth/2fa` へのボタンを表示。
+  8. API エラー時はエラー内容を表示しつつ、`ft_oauth_state` 等を削除し再試行用の「ログインへ戻る」ボタンを提示。`INVALID_REDIRECT_URI` や `OAUTH_STATE_EXPIRED` など主要コードは日本語にマッピングする。
+- **状態管理**: `status`（`initial` / `validating` / `success` / `needsMfa` / `error`）、`message`, `details`, `countdownSeconds`。フッターに `再試行` / `サポート` (未実装プレースホルダー) を配置。
+- **テスト観点**:
+  - 正常な `code`/`state` で API が呼ばれ、成功レスポンス後に `authStore` が更新されること。
+  - `mfaRequired` ルートで `ft_mfa_challenge_id` が保存され `/auth/2fa` へ案内されること。
+  - `state` 不一致・クエリ欠落・`error=access_denied` 等でエラーメッセージが表示され、OAuth ストレージ情報がクリアされること。
+  - API 失敗 (`OAUTH_STATE_EXPIRED` など) でリトライ導線が表示され、`completeOAuthCallback` の再試行ボタンで再び呼び出せること。
+
 ## 1. Home Page
 - **目的**: プロジェクト名・概要の提示と主要導線 (Health / Tournament) の提供。
 - **要素**:
@@ -126,6 +179,8 @@ Authenticated Routes (Layout 配下)
   5. 進行状況カード: 現在試合 / BYE 表示 / 次試合へ進むボタン。
   6. 組み合わせ一覧: 現在試合を強調表示。
 - **ステート管理**: `players`, `matchQueue`, `currentMatchIndex`, `errorMessage`, `infoMessage`。
+- **状態永続化**: ユーザーがページをリロードしても入力内容が失われないよう、`localStorage` (`ft_tournament_state_v1`) に `players` / `matchQueue` / `currentMatchIndex` をシリアライズして保存する。初期レンダリング時にストレージから復元し、構造が不正な場合は破棄する。エントリーをリセットした際はストレージも即座に初期化される。
+- **状態永続化**: ユーザーがページをリロードしても入力内容が失われないよう、`localStorage` (`ft_tournament_state_v1`) に `players` / `matchQueue` / `currentMatchIndex` をシリアライズして保存する。初期レンダリング時にストレージから復元し、構造が不正な場合は破棄する。エントリーをリセットした際はストレージも即座に初期化される。React StrictMode で副作用が二重実行されても初期スナップショットが上書きされないよう、復元完了フラグ (`isHydrated`) を用いて最初の書き込みを抑制する。
 - **コンポーネント分割**:
   1. `TournamentAliasPanel`
     - Input + CTA: エイリアス入力、`onSubmit` 発火、info/error メッセージ表示。

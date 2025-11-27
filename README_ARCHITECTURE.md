@@ -33,9 +33,13 @@
 - `src/`: フロントエンドの TypeScript/TSX コード。
 	- `main.tsx`: React エントリポイント。`App` を `#root` にマウント。
 	- `App.tsx`: ルーターと共通レイアウトを定義。
-	- `pages/`: 画面単位のコンポーネント (`Home`, `HealthCheck`, `Tournament`, `Login` など)。`Tournament.tsx` はエイリアス登録やマッチ進行を管理するSPAの中核画面、`Login.tsx` はメール+OAuth ログイン UI を提供する。
+	- `pages/`: 画面単位のコンポーネント (`Home`, `HealthCheck`, `Tournament`, `Login`, `MfaChallenge` など)。`Tournament.tsx` はエイリアス登録やマッチ進行を管理する SPA の中核画面、`Login.tsx` はメール+OAuth ログイン UI、`MfaChallenge.tsx` は 2FA チャレンジコードを入力してセッションを完了させる。
+	- `pages/`: 画面単位のコンポーネント (`Home`, `HealthCheck`, `Tournament`, `Login`, `MfaChallenge`, `OAuthCallback` など)。`Tournament.tsx` はエイリアス登録やマッチ進行を管理する SPA の中核画面、`Login.tsx` はメール+OAuth ログイン UI、`MfaChallenge.tsx` は 2FA チャレンジコードを入力してセッションを完了させ、`OAuthCallback.tsx` は OAuth プロバイダからのリダイレクトを検証して JWT または 2FA チャレンジへ導く。
+	- `lib/`: API クライアントなどのユーティリティ。`api.ts` は axios インターセプタで `sessionStorage` 中のアクセストークンを拾い Authorization ヘッダーを自動付与し、`tournament.ts` はトーナメントのマッチキュー生成や重複チェックなどの純粋関数を集約する。
+	- `lib/`: API クライアントなどのユーティリティ。`api.ts` は axios インターセプタで `sessionStorage` 中のアクセストークンを拾い Authorization ヘッダーを自動付与し、OAuth コールバック API も提供する。`oauth.ts` は リダイレクト URI の解決と state/provider/codeChallenge の保存/復元を司り、`tournament.ts` はトーナメントのマッチキュー生成や重複チェックなどの純粋関数を集約する。
 	- `components/`: 再利用コンポーネント群 (今後増加予定)。`tournament/__tests__/` 配下に TournamentAliasPanel / EntryPanel / ProgressPanel の UI 単体テストを配置し、画面分割コンポーネントごとに挙動を検証する。
-	- `lib/`: API クライアントなどのユーティリティ。`tournament.ts` はトーナメントのマッチキュー生成や重複チェックなどの純粋関数を集約する。
+	- `stores/`: グローバル状態を担う Zustand ストアを配置する。`authStore.ts` でログインユーザーのトークン/スナップショットを保持し、将来的にチャットやゲームの共有状態もここへ追加する。
+	- `lib/`: API クライアントなどのユーティリティ。`api.ts` は axios インターセプタで `sessionStorage` 中のアクセストークンを拾い Authorization ヘッダーを自動付与し、`tournament.ts` はトーナメントのマッチキュー生成や重複チェックなどの純粋関数を集約する。
 	- `index.css`: Tailwind ベーススタイル。
 - `vite.config.ts`, `tailwind.config.js`, `postcss.config.js`: ビルド/スタイル設定。
 - `dist/`: `npm run build` の成果物。

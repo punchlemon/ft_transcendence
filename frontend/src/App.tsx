@@ -1,10 +1,21 @@
+import { useEffect } from 'react'
 import { BrowserRouter, Routes, Route, Link } from 'react-router-dom'
 import HomePage from './pages/Home'
 import HealthCheckPage from './pages/HealthCheck'
 import TournamentPage from './pages/Tournament'
 import LoginPage from './pages/Login'
+import MfaChallengePage from './pages/MfaChallenge'
+import OAuthCallbackPage from './pages/OAuthCallback'
+import useAuthStore from './stores/authStore'
 
 const App = () => {
+  const user = useAuthStore((state) => state.user)
+  const clearSession = useAuthStore((state) => state.clearSession)
+
+  useEffect(() => {
+    useAuthStore.getState().hydrateFromStorage()
+  }, [])
+
   return (
     <BrowserRouter>
       <div className="min-h-screen bg-gradient-to-b from-slate-50 via-white to-slate-100">
@@ -13,11 +24,31 @@ const App = () => {
             <Link to="/" className="text-xl font-semibold text-slate-900">
               ft_transcendence
             </Link>
-            <nav className="flex gap-4 text-sm text-slate-600">
+            <nav className="flex flex-wrap items-center gap-4 text-sm text-slate-600">
               <Link to="/">Home</Link>
               <Link to="/health">Health</Link>
               <Link to="/tournament">Tournament</Link>
-              <Link to="/login">ログイン</Link>
+              {user ? (
+                <div className="flex items-center gap-3" data-testid="navbar-auth-state">
+                  <span className="text-xs font-semibold text-slate-900 sm:text-sm">
+                    {user.displayName} でログイン中
+                  </span>
+                  <button
+                    type="button"
+                    onClick={clearSession}
+                    className="rounded-md border border-slate-300 px-3 py-1 text-xs font-medium text-slate-700 hover:bg-slate-50"
+                  >
+                    ログアウト
+                  </button>
+                </div>
+              ) : (
+                <Link
+                  to="/login"
+                  className="rounded-md border border-slate-300 px-3 py-1 text-xs font-medium text-slate-700 hover:bg-slate-50"
+                >
+                  ログイン
+                </Link>
+              )}
             </nav>
           </div>
         </header>
@@ -28,6 +59,8 @@ const App = () => {
             <Route path="/health" element={<HealthCheckPage />} />
             <Route path="/tournament" element={<TournamentPage />} />
             <Route path="/login" element={<LoginPage />} />
+            <Route path="/auth/2fa" element={<MfaChallengePage />} />
+            <Route path="/oauth/callback" element={<OAuthCallbackPage />} />
           </Routes>
         </main>
       </div>
@@ -40,19 +73,18 @@ export default App
 /*
 解説:
 
-1) import { BrowserRouter, Routes, Route, Link } ...
-  - React Router v6 の主要コンポーネントを読み込み、Home/Health/Tournament/Login など各ページを紐付ける。
+1) useAuthStore の導入
+  - Zustand ストアからユーザー情報とログアウトアクションを取得し、`useEffect` でアプリ起動時に `hydrateFromStorage()` を呼び出してセッションを復元している。
 
-2) <BrowserRouter> ...
-  - アプリ全体をルーターで包み、URL 変化を監視できるようにする。
-  - 最上位の div には背景グラデーションと最小高さの Tailwind クラスを付与して、シンプルなヒーロー風レイアウトを作る。
+2) ルーティング構成
+  - React Router v6 の `<BrowserRouter>` / `<Routes>` / `<Route>` を利用して Home / Health / Tournament / Login / 2FA / OAuth Callback を描画し、SPA の基本導線と認証フローを構築する。
 
-3) <header> ...
-  - 透明度付きホワイト背景とボーダーを使ったトップバー。`ft_transcendence` のロゴリンクと、`Home` / `Health` へのナビを表示する。
+3) ナビゲーションバー
+  - 共通リンクに加えて、認証状態に応じて「ログイン」リンクまたは「ログイン中 + ログアウトボタン」を表示し、ストア状態が UI に反映されることを確認している。
 
-4) <main> / <Routes>
-  - ルーティング定義。`/` / `/health` / `/tournament` に加え `/login` で `LoginPage` を描画し、将来の認証導線にも対応できる構成にした。
+4) レイアウト
+  - 背景グラデーションとヘッダーボーダーでシンプルな見た目を維持しつつ、認証導線を目立たせている。
 
 5) export default App
-  - Vite のエントリ (`main.tsx`) から読み込まれるルートコンポーネントとして公開する。
+  - Vite エントリポイントから読み込まれるトップレベルコンポーネントとして公開している。
 */

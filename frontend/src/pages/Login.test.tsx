@@ -9,6 +9,8 @@ import userEvent from '@testing-library/user-event'
 import { AxiosError, type AxiosResponse } from 'axios'
 import LoginPage from './Login'
 import { login, fetchOAuthAuthorizationUrl } from '../lib/api'
+import { getOAuthStorageKeys } from '../lib/oauth'
+import useAuthStore, { resetAuthStoreForTesting } from '../stores/authStore'
 
 type LoginResponse = Awaited<ReturnType<typeof login>>
 
@@ -40,6 +42,7 @@ describe('LoginPage', () => {
   beforeEach(() => {
     mockedLogin.mockReset()
     mockedFetchOAuthUrl.mockReset()
+    resetAuthStoreForTesting()
     sessionStorage.clear()
     openSpy.mockClear()
   })
@@ -67,6 +70,10 @@ describe('LoginPage', () => {
     expect(await screen.findByText('Alice としてログインに成功しました。')).toBeInTheDocument()
     expect(sessionStorage.getItem('ft_access_token')).toBe('access-token')
     expect(sessionStorage.getItem('ft_refresh_token')).toBe('refresh-token')
+    expect(sessionStorage.getItem('ft_user')).toBe(
+      JSON.stringify({ id: 1, displayName: 'Alice', status: 'ONLINE' })
+    )
+    expect(useAuthStore.getState().user?.displayName).toBe('Alice')
   })
 
   it('shows validation error when input is empty and does not call API', async () => {
@@ -98,6 +105,7 @@ describe('LoginPage', () => {
 
     expect(await screen.findByText('追加の二段階認証が必要です。')).toBeInTheDocument()
     expect(sessionStorage.getItem('ft_mfa_challenge_id')).toBe('challenge-123')
+    expect(screen.getByRole('link', { name: '2FA コード入力ページを開く' })).toHaveAttribute('href', '/auth/2fa')
   })
 
   it('redirects to OAuth provider when button is clicked', async () => {
@@ -108,6 +116,7 @@ describe('LoginPage', () => {
       codeChallenge: 'challenge-abc',
       expiresIn: 600
     } as OAuthUrlResponse)
+    const { stateKey, providerKey, codeChallengeKey } = getOAuthStorageKeys()
 
     render(<LoginPage />)
 
@@ -116,8 +125,9 @@ describe('LoginPage', () => {
     await waitFor(() => {
       expect(mockedFetchOAuthUrl).toHaveBeenCalled()
     })
-    expect(sessionStorage.getItem('ft_oauth_state')).toBe('state-1')
-    expect(sessionStorage.getItem('ft_oauth_code_challenge')).toBe('challenge-abc')
+    expect(sessionStorage.getItem(stateKey)).toBe('state-1')
+    expect(sessionStorage.getItem(providerKey)).toBe('fortytwo')
+    expect(sessionStorage.getItem(codeChallengeKey)).toBe('challenge-abc')
     expect(openSpy).toHaveBeenCalledWith('https://oauth.example/authorize', '_self')
   })
 })

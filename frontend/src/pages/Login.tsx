@@ -1,27 +1,13 @@
 import { FormEvent, useMemo, useState } from 'react'
 import { isAxiosError } from 'axios'
-import {
-  login,
-  fetchOAuthAuthorizationUrl,
-  type OAuthProvider,
-  type LoginSuccessResponse
-} from '../lib/api'
+import { login, fetchOAuthAuthorizationUrl, type OAuthProvider } from '../lib/api'
+import { resolveOAuthRedirectUri, saveOAuthRequestContext } from '../lib/oauth'
+import useAuthStore from '../stores/authStore'
 
 const OAUTH_PROVIDERS: Array<{ id: OAuthProvider; label: string }> = [
   { id: 'fortytwo', label: '42 OAuthでログイン' },
   { id: 'google', label: 'Google OAuthでログイン' }
 ]
-
-const resolveRedirectUri = () => {
-  const envValue = import.meta.env.VITE_OAUTH_REDIRECT_URI?.trim()
-  if (envValue) {
-    return envValue
-  }
-  if (typeof window !== 'undefined' && window.location) {
-    return `${window.location.origin}/oauth/callback`
-  }
-  return '/oauth/callback'
-}
 
 const LoginPage = () => {
   const [email, setEmail] = useState('')
@@ -32,8 +18,9 @@ const LoginPage = () => {
   const [mfaChallengeId, setMfaChallengeId] = useState<string | null>(null)
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [oauthLoadingProvider, setOauthLoadingProvider] = useState<OAuthProvider | null>(null)
+  const setSession = useAuthStore((state) => state.setSession)
 
-  const oauthRedirectUri = useMemo(resolveRedirectUri, [])
+  const oauthRedirectUri = useMemo(() => resolveOAuthRedirectUri(), [])
 
   const resetAlerts = () => {
     setErrorMessage(null)
@@ -60,11 +47,6 @@ const LoginPage = () => {
     return normalizedEmail
   }
 
-  const persistTokens = (data: LoginSuccessResponse) => {
-    sessionStorage.setItem('ft_access_token', data.tokens.access)
-    sessionStorage.setItem('ft_refresh_token', data.tokens.refresh)
-  }
-
   const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault()
     resetAlerts()
@@ -77,7 +59,7 @@ const LoginPage = () => {
     setIsSubmitting(true)
     try {
       const response = await login({ email: normalizedEmail, password })
-      persistTokens(response)
+      setSession({ user: response.user, tokens: response.tokens })
       setStatusMessage(`${response.user.displayName} としてログインに成功しました。`)
       setPassword('')
     } catch (error) {
@@ -104,12 +86,11 @@ const LoginPage = () => {
     setOauthLoadingProvider(provider)
     try {
       const result = await fetchOAuthAuthorizationUrl(provider, oauthRedirectUri)
-      sessionStorage.setItem('ft_oauth_state', result.state)
-      if (result.codeChallenge) {
-        sessionStorage.setItem('ft_oauth_code_challenge', result.codeChallenge)
-      } else {
-        sessionStorage.removeItem('ft_oauth_code_challenge')
-      }
+      saveOAuthRequestContext({
+        state: result.state,
+        provider,
+        codeChallenge: result.codeChallenge ?? null
+      })
       window.open(result.authorizationUrl, '_self')
     } catch (error) {
       if (isAxiosError(error) && error.response?.data && 'error' in error.response.data) {
@@ -147,7 +128,10 @@ const LoginPage = () => {
           <div role="alert" className="mt-6 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
             <p>{mfaMessage}</p>
             {mfaChallengeId ? <p className="mt-2 text-xs">チャレンジ ID: {mfaChallengeId}</p> : null}
-            <p className="mt-2 text-xs text-amber-800">2FA コードを入力できる画面を後続タスクで実装します。</p>
+            <p className="mt-2 text-xs text-amber-800">下記リンクから 2FA コード入力画面を開いてください。</p>
+            <a href="/auth/2fa" className="mt-2 inline-flex text-xs text-indigo-700 underline">
+              2FA コード入力ページを開く
+            </a>
           </div>
         ) : null}
 
@@ -214,17 +198,17 @@ export default LoginPage
 /*
 解説:
 
-1) OAUTH_PROVIDERS / resolveRedirectUri
-  - フロント側で有効な OAuth プロバイダとリダイレクト URI を定義し、環境変数が無い場合でも `window.location.origin` からデフォルトを導き出している。
+1) OAUTH_PROVIDERS / resolveOAuthRedirectUri
+  - フロント側で有効な OAuth プロバイダとリダイレクト URI を定義し、共通ヘルパーで `.env` 未設定時も `window.location.origin` からデフォルトを導き出している。
 
 2) state 管理
   - メール/パスワード/エラー/成功/MFA/送信状態/OAuth ローディングを `useState` で保持し、`resetAlerts` で画面上のメッセージをまとめて初期化できるようにした。
 
 3) handleSubmit
-  - クライアントバリデーション後に `login` API を呼び出し、成功時はトークンを `sessionStorage` に保存、失敗時は 423 (MFA) と 401/400 系で扱いを分けてユーザーへ明示的にフィードバックする。
+  - クライアントバリデーション後に `login` API を呼び出し、成功時は `authStore.setSession()` を通じて Zustand と `sessionStorage` を同時に更新し、失敗時は 423 (MFA) と 401/400 系で扱いを分けてユーザーへ明示的にフィードバックする。
 
 4) handleOAuthLogin
-  - `/auth/oauth/:provider/url` を叩いて state/codeChallenge を保存し、取得した `authorizationUrl` へブラウザをリダイレクトする。失敗時は共通アラートでエラーを知らせる。
+  - `/auth/oauth/:provider/url` を叩いて state/codeChallenge/選択したプロバイダを `sessionStorage` に保存するヘルパーを呼び出し、取得した `authorizationUrl` へブラウザをリダイレクトする。失敗時は共通アラートでエラーを知らせる。
 
 5) JSX レイアウト
   - メールログインフォームと OAuth ボタン群をカード状に配置し、アラート枠で状態を視覚化することで UX を損なわないようにしている。

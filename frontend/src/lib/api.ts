@@ -1,4 +1,5 @@
-import axios from 'axios'
+import axios, { type InternalAxiosRequestConfig } from 'axios'
+import useAuthStore, { readAccessTokenFromStorage } from '../stores/authStore'
 
 const rawBaseUrl = import.meta.env.VITE_API_BASE_URL?.trim()
 const shouldUseRelativeBase =
@@ -14,6 +15,18 @@ const baseURL = resolvedBaseUrl?.endsWith('/') ? resolvedBaseUrl.slice(0, -1) : 
 const apiClient = axios.create({
   baseURL
 })
+
+export const attachAuthorizationHeader = (config: InternalAxiosRequestConfig) => {
+  const storeToken = useAuthStore.getState().accessToken
+  const token = storeToken ?? readAccessTokenFromStorage()
+  if (token) {
+    config.headers = config.headers ?? {}
+    config.headers.Authorization = `Bearer ${token}`
+  }
+  return config
+}
+
+apiClient.interceptors.request.use(attachAuthorizationHeader)
 
 export const fetchHealth = async () => {
   const response = await apiClient.get('/health')
@@ -36,6 +49,7 @@ export type LoginSuccessResponse = {
     refresh: string
   }
   mfaRequired: boolean
+  challengeId?: string | null
 }
 
 export const login = async (payload: LoginPayload) => {
@@ -59,6 +73,39 @@ export const fetchOAuthAuthorizationUrl = async (provider: OAuthProvider, redire
   return response.data as OAuthAuthorizationUrlResponse
 }
 
+export type OAuthCallbackPayload = {
+  code: string
+  state: string
+  redirectUri: string
+}
+
+export type OAuthCallbackResponse = {
+  user: LoginSuccessResponse['user'] | null
+  tokens: LoginSuccessResponse['tokens'] | null
+  mfaRequired: boolean
+  challengeId: string | null
+  oauthProvider: OAuthProvider
+}
+
+export const completeOAuthCallback = async (
+  provider: OAuthProvider,
+  payload: OAuthCallbackPayload
+) => {
+  const response = await apiClient.post(`/auth/oauth/${provider}/callback`, payload)
+  return response.data as OAuthCallbackResponse
+}
+
+export type MfaChallengePayload = {
+  challengeId: string
+  code?: string
+  backupCode?: string
+}
+
+export const submitMfaChallenge = async (payload: MfaChallengePayload) => {
+  const response = await apiClient.post('/auth/mfa/challenge', payload)
+  return response.data as LoginSuccessResponse
+}
+
 /*
 解説:
 
@@ -71,6 +118,9 @@ export const fetchOAuthAuthorizationUrl = async (provider: OAuthProvider, redire
 3) const apiClient = axios.create
   - 計算した `baseURL` で axios インスタンスを生成し、以降の API 呼び出しで URL の重複指定を避ける。
 
-4) export const fetchHealth / login / fetchOAuthAuthorizationUrl
-  - `/health` 取得に加えて、`login` ではメール+パスワードのレスポンス (`user` + `tokens`) を返し、`fetchOAuthAuthorizationUrl` はバックエンド側で組み立てた認可 URL 情報を取得する。API 毎に baseURL や axios 設定を複製せず、同一クライアントを共有する狙いがある。
+4) attachAuthorizationHeader / 各 API 関数
+  - リクエスト前に `authStore`/`sessionStorage` からアクセストークンを取得し、`Authorization` ヘッダーへ付与するインターセプターを登録している。`fetchHealth`（匿名）以外の API でも個別処理を記述せずに済むよう統合した。
+
+5) completeOAuthCallback
+  - OAuth リダイレクト後の `code`/`state` をバックエンドへ橋渡しするための関数とレスポンス型を用意し、`mfaRequired` や `challengeId` フラグも併せて扱えるようにしている。
 */
