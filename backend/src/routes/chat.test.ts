@@ -22,6 +22,9 @@ beforeEach(async () => {
   await prisma.channelInvite.deleteMany()
   await prisma.channelBan.deleteMany()
   await prisma.channel.deleteMany()
+  await prisma.partyMember.deleteMany()
+  await prisma.partyInvite.deleteMany()
+  await prisma.party.deleteMany()
   
   // Auth related
   await prisma.session.deleteMany()
@@ -39,6 +42,20 @@ beforeEach(async () => {
   await prisma.blocklist.deleteMany()
   await prisma.friendRequest.deleteMany()
   await prisma.notification.deleteMany()
+
+  // Game related
+  await prisma.matchResult.deleteMany()
+  await prisma.matchRound.deleteMany()
+  await prisma.penalty.deleteMany()
+  await prisma.match.deleteMany()
+  await prisma.ladderEnrollment.deleteMany()
+  await prisma.ladderProfile.deleteMany()
+  await prisma.userStats.deleteMany()
+  await prisma.userAchievement.deleteMany()
+  await prisma.inventoryItem.deleteMany()
+  await prisma.transaction.deleteMany()
+  await prisma.wallet.deleteMany()
+  await prisma.auditLog.deleteMany()
 
   // User related
   await prisma.user.deleteMany()
