@@ -6,6 +6,10 @@ import TournamentPage from './pages/Tournament'
 import LoginPage from './pages/Login'
 import MfaChallengePage from './pages/MfaChallenge'
 import OAuthCallbackPage from './pages/OAuthCallback'
+import ProfilePage from './pages/Profile'
+import GameLobbyPage from './pages/GameLobby'
+import GameRoomPage from './pages/GameRoom'
+import ChatDrawer from './components/chat/ChatDrawer'
 import useAuthStore from './stores/authStore'
 
 const App = () => {
@@ -26,6 +30,7 @@ const App = () => {
             </Link>
             <nav className="flex flex-wrap items-center gap-4 text-sm text-slate-600">
               <Link to="/">Home</Link>
+              <Link to="/game/new">Game</Link>
               <Link to="/health">Health</Link>
               <Link to="/tournament">Tournament</Link>
               {user ? (
@@ -61,8 +66,13 @@ const App = () => {
             <Route path="/login" element={<LoginPage />} />
             <Route path="/auth/2fa" element={<MfaChallengePage />} />
             <Route path="/oauth/callback" element={<OAuthCallbackPage />} />
+            <Route path="/profile/:id" element={<ProfilePage />} />
+            <Route path="/game/new" element={<GameLobbyPage />} />
+            <Route path="/game/:id" element={<GameRoomPage />} />
           </Routes>
         </main>
+
+        {user && <ChatDrawer />}
       </div>
     </BrowserRouter>
   )

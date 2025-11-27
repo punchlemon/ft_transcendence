@@ -1,5 +1,5 @@
 import fp from 'fastify-plugin'
-import type { FastifyPluginAsync } from 'fastify'
+import type { FastifyPluginAsync, FastifyRequest } from 'fastify'
 import { randomBytes, randomUUID, createHash } from 'node:crypto'
 import { fetch as undiciFetch } from 'undici'
 import argon2 from 'argon2'
@@ -47,6 +47,11 @@ type OAuthProviderConfig = {
 }
 
 type OAuthProviderStaticConfig = Omit<OAuthProviderConfig, 'clientId' | 'clientSecret'>
+
+type SessionClientMetadata = {
+  ipAddress?: string | null
+  userAgent?: string | null
+}
 
 const getAllowedRedirects = () => {
   const raw = process.env.OAUTH_REDIRECT_WHITELIST ?? DEFAULT_REDIRECT_URI
@@ -201,6 +206,10 @@ const backupCodesQuerySchema = z.object({
   regenerate: z.enum(['true', 'false']).optional()
 })
 
+const sessionIdParamSchema = z.object({
+  sessionId: z.coerce.number().int().positive()
+})
+
 const challengeSchema = z
   .object({
     challengeId: z.string().uuid(),
@@ -246,6 +255,34 @@ const isRedirectAllowed = (redirectUri: string) => getAllowedRedirects().include
 
 const isSupportedProvider = (provider?: string): provider is OAuthProviderKey =>
   provider === 'fortytwo' || provider === 'google'
+
+const sanitizeClientMetadata = (metadata?: SessionClientMetadata) => {
+  const ipAddress = typeof metadata?.ipAddress === 'string' ? metadata.ipAddress.slice(0, 128) : null
+  const rawAgent = metadata?.userAgent
+  const userAgent = typeof rawAgent === 'string' ? rawAgent.slice(0, 512) : null
+  return { ipAddress, userAgent }
+}
+
+const extractClientMetadata = (request: FastifyRequest): SessionClientMetadata => {
+  const uaHeader = request.headers['user-agent']
+  const resolvedUserAgent = Array.isArray(uaHeader) ? uaHeader[0] : uaHeader
+  return sanitizeClientMetadata({
+    ipAddress: request.ip,
+    userAgent: resolvedUserAgent ?? null
+  })
+}
+
+const buildSessionData = (userId: number, metadata?: SessionClientMetadata) => {
+  const sanitized = sanitizeClientMetadata(metadata)
+  return {
+    userId,
+    token: randomUUID(),
+    expiresAt: new Date(Date.now() + SESSION_TTL_MS),
+    lastUsedAt: new Date(),
+    ipAddress: sanitized.ipAddress,
+    userAgent: sanitized.userAgent
+  }
+}
 
 const buildAuthorizationUrl = (
   config: OAuthProviderConfig,
@@ -349,7 +386,7 @@ const ensureUniqueDisplayName = async (prisma: PrismaClient, preferred: string) 
 }
 
 const authRoutes: FastifyPluginAsync = async (fastify) => {
-  const issueSessionTokens = async (userId: number) => {
+  const issueSessionTokens = async (userId: number, metadata?: SessionClientMetadata) => {
     const user = await fastify.prisma.user.update({
       where: { id: userId },
       data: {
@@ -363,13 +400,8 @@ const authRoutes: FastifyPluginAsync = async (fastify) => {
       }
     })
 
-    const refreshToken = randomUUID()
     const session = await fastify.prisma.session.create({
-      data: {
-        userId,
-        token: refreshToken,
-        expiresAt: new Date(Date.now() + SESSION_TTL_MS)
-      },
+      data: buildSessionData(userId, metadata),
       select: {
         id: true,
         token: true
@@ -442,28 +474,15 @@ const authRoutes: FastifyPluginAsync = async (fastify) => {
       }
     })
 
-    const refreshToken = randomUUID()
-    const session = await fastify.prisma.session.create({
-      data: {
-        userId: user.id,
-        token: refreshToken,
-        expiresAt: new Date(Date.now() + SESSION_TTL_MS)
-      },
-      select: {
-        id: true,
-        token: true
-      }
-    })
-
-    const accessToken = await fastify.issueAccessToken({ userId: user.id, sessionId: session.id })
+    const sessionResult = await issueSessionTokens(user.id, extractClientMetadata(request))
 
     reply.code(201)
     return {
-      user,
-      tokens: {
-        access: accessToken,
-        refresh: session.token
-      }
+      user: {
+        ...user,
+        status: sessionResult.user.status
+      },
+      tokens: sessionResult.tokens
     }
   })
 
@@ -756,7 +775,7 @@ const authRoutes: FastifyPluginAsync = async (fastify) => {
       })
     }
 
-    const result = await issueSessionTokens(userId)
+    const result = await issueSessionTokens(userId, extractClientMetadata(request))
 
     return {
       ...result,
@@ -833,40 +852,11 @@ const authRoutes: FastifyPluginAsync = async (fastify) => {
       }
     }
 
-    const updatedUser = await fastify.prisma.user.update({
-      where: { id: userRecord.id },
-      data: {
-        status: 'ONLINE',
-        lastLoginAt: new Date()
-      },
-      select: {
-        id: true,
-        displayName: true,
-        status: true
-      }
-    })
-
-    const refreshToken = randomUUID()
-    const session = await fastify.prisma.session.create({
-      data: {
-        userId: updatedUser.id,
-        token: refreshToken,
-        expiresAt: new Date(Date.now() + SESSION_TTL_MS)
-      },
-      select: {
-        id: true,
-        token: true
-      }
-    })
-
-    const accessToken = await fastify.issueAccessToken({ userId: updatedUser.id, sessionId: session.id })
+    const sessionResult = await issueSessionTokens(userRecord.id, extractClientMetadata(request))
 
     return {
-      user: updatedUser,
-      tokens: {
-        access: accessToken,
-        refresh: session.token
-      },
+      user: sessionResult.user,
+      tokens: sessionResult.tokens,
       mfaRequired: false
     }
   })
@@ -1226,6 +1216,8 @@ const authRoutes: FastifyPluginAsync = async (fastify) => {
       }
     }
 
+    const clientMetadata = extractClientMetadata(request)
+
     const result = await fastify.prisma.$transaction(async (tx) => {
       await tx.mfaChallenge.delete({ where: { id: challenge.id } })
 
@@ -1249,13 +1241,8 @@ const authRoutes: FastifyPluginAsync = async (fastify) => {
         }
       })
 
-      const refreshToken = randomUUID()
       const session = await tx.session.create({
-        data: {
-          userId: updatedUser.id,
-          token: refreshToken,
-          expiresAt: new Date(Date.now() + SESSION_TTL_MS)
-        },
+        data: buildSessionData(updatedUser.id, clientMetadata),
         select: {
           id: true,
           token: true
@@ -1321,12 +1308,16 @@ const authRoutes: FastifyPluginAsync = async (fastify) => {
 
     const nextRefresh = randomUUID()
     const nextExpiry = new Date(Date.now() + SESSION_TTL_MS)
+    const clientMetadata = extractClientMetadata(request)
 
     await fastify.prisma.session.update({
       where: { id: session.id },
       data: {
         token: nextRefresh,
-        expiresAt: nextExpiry
+        expiresAt: nextExpiry,
+        lastUsedAt: new Date(),
+        ipAddress: clientMetadata.ipAddress,
+        userAgent: clientMetadata.userAgent
       }
     })
 
@@ -1339,6 +1330,86 @@ const authRoutes: FastifyPluginAsync = async (fastify) => {
         refresh: nextRefresh
       }
     }
+  })
+
+  fastify.get('/auth/sessions', { preHandler: fastify.authenticate }, async (request, reply) => {
+    const userId = request.user?.userId
+    if (!userId) {
+      reply.code(401)
+      return {
+        error: {
+          code: 'UNAUTHORIZED',
+          message: 'Access token is invalid'
+        }
+      }
+    }
+
+    const currentSessionId = request.user?.sessionId ?? null
+    const sessions = await fastify.prisma.session.findMany({
+      where: { userId },
+      orderBy: { createdAt: 'desc' },
+      select: {
+        id: true,
+        createdAt: true,
+        expiresAt: true,
+        lastUsedAt: true,
+        ipAddress: true,
+        userAgent: true
+      }
+    })
+
+    return {
+      sessions: sessions.map((session) => ({
+        ...session,
+        current: session.id === currentSessionId
+      }))
+    }
+  })
+
+  fastify.delete('/auth/sessions/:sessionId', { preHandler: fastify.authenticate }, async (request, reply) => {
+    const userId = request.user?.userId
+    if (!userId) {
+      reply.code(401)
+      return {
+        error: {
+          code: 'UNAUTHORIZED',
+          message: 'Access token is invalid'
+        }
+      }
+    }
+
+    const parsedParams = sessionIdParamSchema.safeParse(request.params ?? {})
+    if (!parsedParams.success) {
+      reply.code(400)
+      return {
+        error: {
+          code: 'INVALID_PARAMS',
+          message: 'Session id must be a positive integer'
+        }
+      }
+    }
+
+    const session = await fastify.prisma.session.findFirst({
+      where: {
+        id: parsedParams.data.sessionId,
+        userId
+      },
+      select: { id: true }
+    })
+
+    if (!session) {
+      reply.code(404)
+      return {
+        error: {
+          code: 'SESSION_NOT_FOUND',
+          message: 'Session does not exist or does not belong to the user'
+        }
+      }
+    }
+
+    await fastify.prisma.session.delete({ where: { id: session.id } })
+    reply.code(204)
+    return null
   })
 
   fastify.post('/auth/logout', async (request, reply) => {

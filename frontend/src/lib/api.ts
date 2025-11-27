@@ -16,6 +16,8 @@ const apiClient = axios.create({
   baseURL
 })
 
+export const api = apiClient
+
 export const attachAuthorizationHeader = (config: InternalAxiosRequestConfig) => {
   const storeToken = useAuthStore.getState().accessToken
   const token = storeToken ?? readAccessTokenFromStorage()
@@ -110,6 +112,146 @@ export const submitMfaChallenge = async (payload: MfaChallengePayload) => {
   return response.data as LoginSuccessResponse
 }
 
+export type UserProfileResponse = {
+  id: number
+  displayName: string
+  login: string
+  status: string
+  avatarUrl: string | null
+  country: string | null
+  bio: string | null
+  createdAt: string
+  stats: {
+    wins: number
+    losses: number
+    matchesPlayed: number
+    pointsScored: number
+    pointsAgainst: number
+  } | null
+  ladder: {
+    tier: string
+    division: number
+    mmr: number
+  } | null
+  friendshipStatus: 'NONE' | 'FRIEND' | 'PENDING_SENT' | 'PENDING_RECEIVED'
+  mutualFriends: number
+}
+
+export const fetchUserProfile = async (userId: string) => {
+  const response = await apiClient.get(`/users/${userId}`)
+  return response.data as UserProfileResponse
+}
+
+export type MatchHistoryResponse = {
+  data: Array<{
+    id: number
+    opponent: {
+      id: number
+      displayName: string
+      avatarUrl: string | null
+    }
+    result: 'WIN' | 'LOSS' | 'UNKNOWN'
+    score: string
+    date: string
+    mode: string
+  }>
+  meta: {
+    page: number
+    limit: number
+    total: number
+  }
+}
+
+export const fetchUserMatches = async (userId: string, page = 1, limit = 20) => {
+  const response = await apiClient.get(`/users/${userId}/matches`, {
+    params: { page, limit }
+  })
+  return response.data as MatchHistoryResponse
+}
+
+export type FriendResponse = {
+  data: Array<{
+    id: number
+    displayName: string
+    status: string
+    avatarUrl: string | null
+  }>
+}
+
+export const fetchUserFriends = async (userId: string) => {
+  const response = await apiClient.get(`/users/${userId}/friends`)
+  return response.data as FriendResponse
+}
+
+export type Tournament = {
+  id: number
+  name: string
+  status: string
+  bracketType: string
+  startsAt: string | null
+  owner: {
+    id: number
+    displayName: string
+  }
+  participantCount: number
+}
+
+export type TournamentDetail = Tournament & {
+  participants: Array<{
+    id: number
+    alias: string
+    userId: number | null
+    inviteState: string
+    seed: number | null
+    joinedAt: string
+  }>
+  matches: Array<{
+    id: number
+    round: number
+    status: string
+    scheduledAt: string | null
+    playerA: {
+      participantId: number
+      alias: string
+    }
+    playerB: {
+      participantId: number
+      alias: string
+    }
+    winnerId: number | null
+  }>
+}
+
+export type CreateTournamentPayload = {
+  name: string
+  createdById: number
+  bracketType?: 'SINGLE_ELIMINATION' | 'DOUBLE_ELIMINATION'
+  startsAt?: string
+  participants?: Array<{
+    alias: string
+    userId?: number
+    inviteState?: string
+    seed?: number
+  }>
+}
+
+export const fetchTournaments = async (page = 1, limit = 20) => {
+  const response = await apiClient.get('/tournaments', {
+    params: { page, limit }
+  })
+  return response.data as { data: Tournament[]; meta: { page: number; limit: number; total: number } }
+}
+
+export const fetchTournament = async (id: number) => {
+  const response = await apiClient.get(`/tournaments/${id}`)
+  return response.data as { data: TournamentDetail }
+}
+
+export const createTournament = async (payload: CreateTournamentPayload) => {
+  const response = await apiClient.post('/tournaments', payload)
+  return response.data as { data: Tournament }
+}
+
 /*
 解説:
 
@@ -127,4 +269,7 @@ export const submitMfaChallenge = async (payload: MfaChallengePayload) => {
 
 5) completeOAuthCallback
   - OAuth リダイレクト後の `code`/`state` をバックエンドへ橋渡しするための関数とレスポンス型を用意し、`mfaRequired` や `challengeId` フラグも併せて扱えるようにしている。
+
+6) トーナメント関連の型と API 関数
+  - トーナメントの一覧取得、詳細取得、作成を行うための型定義と API 関数を追加した。
 */

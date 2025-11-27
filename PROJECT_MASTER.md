@@ -33,6 +33,18 @@
 - `/auth/2fa` (MFA チャレンジ) ページを追加し、TOTP/バックアップコード送信で `submitMfaChallenge` → `authStore` を更新するフローと UI テストを実装。`Login` から 2FA 画面への導線も整備した。
 - `/oauth/callback` ページを追加し、`completeOAuthCallback` API / OAuth コンテキストヘルパー (`lib/oauth.ts`) / 画面テストを実装。state/provider を検証し、成功時は `authStore` を更新、`mfaRequired` 時はチャレンジIDを保存して `/auth/2fa` に誘導するフローを確立した。
 - `frontend/src/lib/api.ts` に axios リクエストインターセプタを追加し、Zustand `authStore` または `sessionStorage` からアクセストークンを読み出して全 API 呼び出しへ Authorization ヘッダーを自動付与する仕組みを導入。テスト (`frontend/src/lib/api.test.ts`) でヘッダー注入とトークン欠如時のフォールバックを検証し、`authStore.ts` へ `readAccessTokenFromStorage` ヘルパーを公開した。
+- `frontend/src/pages/Profile.tsx` を実装し、ユーザー情報・戦績・対戦履歴・フレンドリストを表示する UI を作成。`useParams` で ID を取得し、モックデータを用いてローディング/エラー/成功状態を表現した。
+- `frontend/src/pages/Profile.test.tsx` を追加し、プロフィールのレンダリング、自身のプロフィールでの「編集」ボタン表示、他人のプロフィールでの非表示、エラーハンドリングをテストした。
+- `App.tsx` に `/profile/:id` ルートを追加し、ナビゲーションを有効化した。
+- `frontend/src/pages/GameLobby.tsx` を実装し、Local/Remote/AI モード選択、Remote 時の Public/Private オプション、マッチング待機画面を作成した。
+- `frontend/src/pages/GameLobby.test.tsx` を追加し、モード選択による UI 変化、Start ボタンの活性制御、マッチング待機・キャンセル動作を検証した。
+- `App.tsx` に `/game/new` ルートとナビゲーションリンクを追加した。
+- `frontend/src/pages/GameRoom.tsx` を実装し、Canvas による Pong ゲーム描画、スコア表示、Pause/Resume/Surrender 機能を実装した。
+- `frontend/src/pages/GameRoom.test.tsx` を追加し、Canvas レンダリング、接続ステータス遷移、Pause トグル、Surrender 遷移を検証した。
+- `App.tsx` に `/game/:id` ルートを追加した。
+- `frontend/src/components/chat/ChatDrawer.tsx` を実装し、折りたたみ可能なチャットドロワー、スレッド一覧、メッセージ送受信（モック）、タブ切り替えを作成した。
+- `frontend/src/components/chat/ChatDrawer.test.tsx` を追加し、開閉動作、メッセージ送信、画面遷移を検証した。
+- `App.tsx` に `ChatDrawer` を追加し、ログイン時のみ表示されるようにした。
 
 ### Epic A: インフラ・開発基盤
 | 状態 | タスク | メモ |
@@ -43,17 +55,17 @@
 | ✅ | CI (GitHub Actions) で lint/test | `ci.yml` 稼働中 |
 | 🔄 | 主要コードファイルの解説ブロック整備 | `frontend/src/main.tsx`, `pages/*` 等進行中。残りは都度対応 |
 
-### Epic B: 詳細設計 (Design Phase) 🚀 Current Focus
+### Epic B: 詳細設計 (Design Phase)
 *実装前にここを確定させることで、AIの実装精度を最大化する*
 
 | 状態 | タスク | メモ |
 | :---: | --- | --- |
 | ✅ | **DBスキーマ設計** | `docs/schema/prisma_draft.md` 作成済み。User, Game, Friend 等のリレーション定義と未決事項を明文化。 |
 | ✅ | **APIインターフェース設計** | `docs/api/api_design.md` 作成済み。エンドポイント、Req/Res 型、通知ポリシーを定義。 |
-| 🔄 | **UIコンポーネント設計** | `docs/ui/ui_design.md` にサイトマップ / Layout / Auth / Profile / Game / Chat を追記済み。Auth セクションへ `authStore` とセッション再開フローも追加し、画面詳細・テスト観点を継続精緻化。 |
+| ✅ | **UIコンポーネント設計** | `docs/ui/ui_design.md` にサイトマップ / Layout / Auth / Profile / Game / Chat を追記済み。Auth セクションへ `authStore` とセッション再開フローも追加し、画面詳細・テスト観点を継続精緻化。 |
 | ✅ | **ゲームロジック設計** | `docs/game/pong_logic.md` 作成済み。ステート管理、WebSocket 通信、AI 1Hz 視界制約を設計。 |
 
-### Epic C: アプリ機能実装 (Implementation Phase)
+### Epic C: アプリ機能実装 (Implementation Phase) 🚀 Current Focus
 *Epic B の設計承認後に着手*
 
 | 状態 | タスク | メモ |
@@ -61,5 +73,15 @@
 | ✅ | `/api/health` 実装 & テスト | 疎通確認用 |
 | 🔄 | **認証・ユーザー管理機能** | `/auth/register` `/auth/login` `/auth/refresh` `/auth/logout` に加え、`/auth/mfa/setup|verify|challenge|delete|backup-codes` と OAuth 認可 URL/コールバック、およびフロントエンド `/login` `/auth/2fa` `/oauth/callback` ページ (Vitest 付き) を実装。Zustand `authStore` によるセッション復元と `App` ナビバーのログアウトボタンを追加済み。残課題: OAuth プロバイダ追加ガイド、セッション一覧/失効 UI。 |
 | 🔄 | **ユーザー検索 API** | `/api/users` 実装済み。mutualFriends 算出は JWT ビューア ID で動作。残課題: 認可ロール/ソート機能の拡張。 |
-| 🔄 | **トーナメント API** | `/api/tournaments` (POST/GET) 実装済み。残課題: 認証・参加者編集・マッチ生成ロジック。 |
-|
+| ✅ | **トーナメント API** | `/api/tournaments` (POST/GET) 実装済み。バックエンドでのマッチ生成ロジックを追加し、フロントエンドと統合完了。 |
+
+## Next Actions
+- [x] **Profile API 統合 (Basic)**: `ProfilePage` を `/api/users/:id` と接続し、基本情報と統計を表示する。
+- [x] **Profile API 統合 (History/Friends)**: 対戦履歴とフレンドリストの API を実装し、`ProfilePage` に統合する。
+- [x] **Game WebSocket 統合**: `GameRoom` で WebSocket 接続を確立し、サーバーからの状態更新を受け取る。
+- [x] **Chat API 統合**: `ChatDrawer` でメッセージの送受信を API 経由で行う。
+- [x] **Tournament API 統合**: `TournamentPage` から API 経由でトーナメントを作成し、バックエンドでマッチ生成を行うように変更。
+
+## Current Focus
+**Epic C: アプリ機能実装 (Implementation Phase)**
+*主要機能の統合が完了。E2Eテストや細かいUX改善へ移行*|

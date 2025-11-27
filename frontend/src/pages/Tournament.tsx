@@ -1,99 +1,27 @@
-import { FormEvent, useEffect, useMemo, useState } from 'react'
+import { FormEvent, useEffect, useState } from 'react'
 import {
   MatchQueueItem,
   advanceToNextMatch,
   aliasExists,
-  buildMatchQueue,
   findNextMatch,
   normalizeAlias
 } from '../lib/tournament'
 import TournamentAliasPanel from '../components/tournament/TournamentAliasPanel'
 import TournamentEntryPanel from '../components/tournament/TournamentEntryPanel'
 import TournamentProgressPanel from '../components/tournament/TournamentProgressPanel'
-
-export const TOURNAMENT_STATE_STORAGE_KEY = 'ft_tournament_state_v1'
-
-type PersistedTournamentState = {
-  players: string[]
-  matchQueue: MatchQueueItem[]
-  currentMatchIndex: number
-}
-
-const isStringArray = (value: unknown): value is string[] => Array.isArray(value) && value.every((entry) => typeof entry === 'string')
-
-const isMatchQueueItem = (value: unknown): value is MatchQueueItem => {
-  if (!value || typeof value !== 'object') {
-    return false
-  }
-  const candidate = value as MatchQueueItem
-  if (typeof candidate.id !== 'string' || !Array.isArray(candidate.players) || candidate.players.length !== 2) {
-    return false
-  }
-  return typeof candidate.players[0] === 'string' && (typeof candidate.players[1] === 'string' || candidate.players[1] === null)
-}
-
-const parsePersistedState = (raw: string): PersistedTournamentState | null => {
-  try {
-    const parsed = JSON.parse(raw)
-    if (
-      parsed &&
-      isStringArray(parsed.players) &&
-      Array.isArray(parsed.matchQueue) &&
-      parsed.matchQueue.every((entry: unknown) => isMatchQueueItem(entry)) &&
-      typeof parsed.currentMatchIndex === 'number' &&
-      Number.isInteger(parsed.currentMatchIndex)
-    ) {
-      return {
-        players: parsed.players,
-        matchQueue: parsed.matchQueue,
-        currentMatchIndex: parsed.currentMatchIndex
-      }
-    }
-  } catch {
-    return null
-  }
-  return null
-}
+import { api, createTournament, fetchTournament, TournamentDetail } from '../lib/api'
+import useAuthStore from '../stores/authStore'
 
 const TournamentPage = () => {
-  const hydrationSnapshot = useMemo<PersistedTournamentState | null>(() => {
-    if (typeof window === 'undefined') {
-      return null
-    }
-    const rawState = window.localStorage.getItem(TOURNAMENT_STATE_STORAGE_KEY)
-    if (!rawState) {
-      return null
-    }
-    const parsed = parsePersistedState(rawState)
-    if (!parsed) {
-      window.localStorage.removeItem(TOURNAMENT_STATE_STORAGE_KEY)
-      return null
-    }
-    return parsed
-  }, [])
-
+  const { user } = useAuthStore()
   const [aliasInput, setAliasInput] = useState('')
-  const [players, setPlayers] = useState<string[]>(() => hydrationSnapshot?.players ?? [])
-  const [matchQueue, setMatchQueue] = useState<MatchQueueItem[]>(() => hydrationSnapshot?.matchQueue ?? [])
-  const [currentMatchIndex, setCurrentMatchIndex] = useState(() => hydrationSnapshot?.currentMatchIndex ?? -1)
+  const [players, setPlayers] = useState<string[]>([])
+  const [activeTournament, setActiveTournament] = useState<TournamentDetail | null>(null)
+  const [matchQueue, setMatchQueue] = useState<MatchQueueItem[]>([])
+  const [currentMatchIndex, setCurrentMatchIndex] = useState(-1)
   const [errorMessage, setErrorMessage] = useState<string | null>(null)
   const [infoMessage, setInfoMessage] = useState<string | null>(null)
-
-  useEffect(() => {
-    if (typeof window === 'undefined') {
-      return
-    }
-    const snapshot: PersistedTournamentState = {
-      players,
-      matchQueue,
-      currentMatchIndex
-    }
-    try {
-      window.localStorage.setItem(TOURNAMENT_STATE_STORAGE_KEY, JSON.stringify(snapshot))
-    } catch {
-      // 保存に失敗しても UX を阻害しない
-    }
-  }, [players, matchQueue, currentMatchIndex])
+  const [isCreating, setIsCreating] = useState(false)
 
   const currentMatch = findNextMatch(matchQueue, currentMatchIndex)
   const isTournamentReady = players.length >= 2
@@ -101,6 +29,7 @@ const TournamentPage = () => {
   const resetMatchProgress = () => {
     setMatchQueue([])
     setCurrentMatchIndex(-1)
+    setActiveTournament(null)
   }
 
   const handleRegisterPlayer = (event: FormEvent<HTMLFormElement>) => {
@@ -130,11 +59,38 @@ const TournamentPage = () => {
     setInfoMessage('参加者を削除しました。必要であれば再度トーナメントを生成してください。')
   }
 
-  const handleGenerateMatches = () => {
-    const queue = buildMatchQueue(players)
-    setMatchQueue(queue)
-    setCurrentMatchIndex(queue.length > 0 ? 0 : -1)
-    setInfoMessage(queue.length > 0 ? 'トーナメントを開始しました。' : 'プレイヤー数が不足しています。')
+  const handleCreateTournament = async () => {
+    if (!user) {
+      setErrorMessage('トーナメントを作成するにはログインが必要です')
+      return
+    }
+
+    setIsCreating(true)
+    try {
+      const res = await createTournament({
+        name: `${user.displayName}'s Tournament ${new Date().toLocaleTimeString()}`,
+        createdById: user.id,
+        participants: players.map(p => ({ alias: p }))
+      })
+      
+      const detail = await fetchTournament(res.data.id)
+      setActiveTournament(detail.data)
+      
+      // Map API matches to UI MatchQueueItem
+      const queue: MatchQueueItem[] = detail.data.matches.map(m => ({
+        id: `match-${m.id}`,
+        players: [m.playerA.alias, m.playerB.alias]
+      }))
+      
+      setMatchQueue(queue)
+      setCurrentMatchIndex(queue.length > 0 ? 0 : -1)
+      setInfoMessage('トーナメントを作成しました。')
+    } catch (err) {
+      console.error(err)
+      setErrorMessage('トーナメントの作成に失敗しました')
+    } finally {
+      setIsCreating(false)
+    }
   }
 
   const handleAdvanceMatch = () => {
@@ -151,9 +107,6 @@ const TournamentPage = () => {
     setInfoMessage('エントリーを初期化しました。')
     setErrorMessage(null)
     resetMatchProgress()
-    if (typeof window !== 'undefined') {
-      window.localStorage.removeItem(TOURNAMENT_STATE_STORAGE_KEY)
-    }
   }
 
   return (
@@ -164,22 +117,39 @@ const TournamentPage = () => {
           参加者のエイリアスを登録し、順番を確定してからトーナメント生成ボタンを押してください。
         </p>
 
-        <TournamentAliasPanel
-          aliasInput={aliasInput}
-          onAliasChange={setAliasInput}
-          onSubmit={handleRegisterPlayer}
-          errorMessage={errorMessage}
-          infoMessage={infoMessage}
-          isSubmitDisabled={!aliasInput.trim()}
-        />
+        {!activeTournament && (
+          <>
+            <TournamentAliasPanel
+              aliasInput={aliasInput}
+              onAliasChange={setAliasInput}
+              onSubmit={handleRegisterPlayer}
+              errorMessage={errorMessage}
+              infoMessage={infoMessage}
+              isSubmitDisabled={!aliasInput.trim()}
+            />
 
-        <TournamentEntryPanel
-          players={players}
-          onRemove={handleRemovePlayer}
-          onGenerate={handleGenerateMatches}
-          onReset={handleResetTournament}
-          isGenerateDisabled={!isTournamentReady}
-        />
+            <TournamentEntryPanel
+              players={players}
+              onRemove={handleRemovePlayer}
+              onGenerate={handleCreateTournament}
+              onReset={handleResetTournament}
+              isGenerateDisabled={!isTournamentReady || isCreating}
+            />
+          </>
+        )}
+        
+        {activeTournament && (
+          <div className="mt-4 p-4 bg-indigo-50 rounded-lg">
+            <h2 className="font-bold text-indigo-900">{activeTournament.name}</h2>
+            <p className="text-sm text-indigo-700">Status: {activeTournament.status}</p>
+            <button 
+              onClick={handleResetTournament}
+              className="mt-2 text-xs text-indigo-600 underline"
+            >
+              新しいトーナメントを作成
+            </button>
+          </div>
+        )}
       </section>
 
       <TournamentProgressPanel

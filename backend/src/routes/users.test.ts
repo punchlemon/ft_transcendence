@@ -41,7 +41,10 @@ const createSessionToken = async (server: FastifyInstance, prisma: PrismaClient,
     data: {
       userId,
       token: randomUUID(),
-      expiresAt: new Date(Date.now() + 1000 * 60 * 60)
+      expiresAt: new Date(Date.now() + 1000 * 60 * 60),
+      lastUsedAt: new Date(),
+      ipAddress: '127.0.0.1',
+      userAgent: 'vitest'
     }
   })
 
@@ -64,6 +67,21 @@ describe('GET /api/users', () => {
   })
 
   beforeEach(async () => {
+    await prisma.message.deleteMany()
+    await prisma.channelMember.deleteMany()
+    await prisma.channelInvite.deleteMany()
+    await prisma.channelBan.deleteMany()
+    await prisma.channel.deleteMany()
+    await prisma.partyMember.deleteMany()
+    await prisma.partyInvite.deleteMany()
+    await prisma.party.deleteMany()
+    await prisma.tournamentMatch.deleteMany()
+    await prisma.tournamentParticipant.deleteMany()
+    await prisma.tournament.deleteMany()
+    await prisma.matchResult.deleteMany()
+    await prisma.match.deleteMany()
+    await prisma.userStats.deleteMany()
+    await prisma.ladderProfile.deleteMany()
     await prisma.session.deleteMany()
     await prisma.friendship.deleteMany()
     await prisma.twoFactorBackupCode.deleteMany()
