@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { useParams } from 'react-router-dom'
 import useAuthStore from '../stores/authStore'
 import { fetchUserProfile, fetchUserMatches, fetchUserFriends } from '../lib/api'
+import { EditProfileModal } from '../components/profile/EditProfileModal'
 
 // Mock types
 interface UserProfile {
@@ -49,6 +50,7 @@ const ProfilePage = () => {
   const [friends, setFriends] = useState<Friend[]>([])
   const [isLoading, setIsLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+  const [isEditModalOpen, setIsEditModalOpen] = useState(false)
 
   useEffect(() => {
     const fetchProfileData = async () => {
@@ -165,7 +167,10 @@ const ProfilePage = () => {
           <p className="mt-2 text-slate-600">{profile.bio}</p>
           
           {isOwnProfile && (
-            <button className="mt-4 rounded-md bg-slate-900 px-4 py-2 text-sm font-medium text-white hover:bg-slate-800">
+            <button
+              onClick={() => setIsEditModalOpen(true)}
+              className="mt-4 rounded-md bg-slate-900 px-4 py-2 text-sm font-medium text-white hover:bg-slate-800"
+            >
               Edit Profile
             </button>
           )}
@@ -304,6 +309,31 @@ const ProfilePage = () => {
           </div>
         </div>
       </div>
+
+      {profile && (
+        <EditProfileModal
+          userId={profile.id}
+          initialData={{
+            displayName: profile.displayName,
+            bio: profile.bio,
+            avatarUrl: profile.avatarUrl
+          }}
+          isOpen={isEditModalOpen}
+          onClose={() => setIsEditModalOpen(false)}
+          onSuccess={(updated) => {
+            setProfile((prev) =>
+              prev
+                ? {
+                    ...prev,
+                    displayName: updated.displayName,
+                    bio: updated.bio || '',
+                    avatarUrl: updated.avatarUrl || 'https://via.placeholder.com/150'
+                  }
+                : null
+            )
+          }}
+        />
+      )}
     </div>
   )
 }

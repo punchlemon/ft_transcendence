@@ -76,12 +76,11 @@
 | ✅ | **トーナメント API** | `/api/tournaments` (POST/GET) 実装済み。バックエンドでのマッチ生成ロジックを追加し、フロントエンドと統合完了。 |
 
 ## Next Actions
-- [x] **Profile API 統合 (Basic)**: `ProfilePage` を `/api/users/:id` と接続し、基本情報と統計を表示する。
-- [x] **Profile API 統合 (History/Friends)**: 対戦履歴とフレンドリストの API を実装し、`ProfilePage` に統合する。
-- [x] **Game WebSocket 統合**: `GameRoom` で WebSocket 接続を確立し、サーバーからの状態更新を受け取る。
-- [x] **Chat API 統合**: `ChatDrawer` でメッセージの送受信を API 経由で行う。
-- [x] **Tournament API 統合**: `TournamentPage` から API 経由でトーナメントを作成し、バックエンドでマッチ生成を行うように変更。
+- [x] **Profile Edit API**: Implement `PATCH /api/users/:id` for updating displayName, bio, avatarUrl.
+- [x] **Profile Edit UI**: Implement `EditProfileModal` in frontend and integrate with API.
+- [ ] **Session Management UI**: Implement `/settings/account` active sessions list.
+- [ ] **User Search Improvements**: Add sorting/filtering to `/api/users`.
 
 ## Current Focus
 **Epic C: アプリ機能実装 (Implementation Phase)**
-*主要機能の統合が完了。E2Eテストや細かいUX改善へ移行*|
+*Session Management UI の実装*|

@@ -201,6 +201,98 @@ describe('GET /api/users', () => {
   })
 })
 
+describe('PATCH /api/users/:id', () => {
+  let server: FastifyInstance
+  let prisma: PrismaClient
+
+  beforeAll(async () => {
+    server = await buildServer()
+    prisma = server.prisma
+  })
+
+  afterAll(async () => {
+    await server.close()
+  })
+
+  beforeEach(async () => {
+    await prisma.message.deleteMany()
+    await prisma.channelMember.deleteMany()
+    await prisma.channelInvite.deleteMany()
+    await prisma.channelBan.deleteMany()
+    await prisma.channel.deleteMany()
+    await prisma.partyMember.deleteMany()
+    await prisma.partyInvite.deleteMany()
+    await prisma.party.deleteMany()
+    await prisma.tournamentMatch.deleteMany()
+    await prisma.tournamentParticipant.deleteMany()
+    await prisma.tournament.deleteMany()
+    await prisma.matchResult.deleteMany()
+    await prisma.match.deleteMany()
+    await prisma.userStats.deleteMany()
+    await prisma.ladderProfile.deleteMany()
+    await prisma.session.deleteMany()
+    await prisma.friendship.deleteMany()
+    await prisma.twoFactorBackupCode.deleteMany()
+    await prisma.mfaChallenge.deleteMany()
+    await prisma.user.deleteMany()
+  })
+
+  it('updates user profile successfully', async () => {
+    const user = await createUser(prisma, { login: 'alice', email: 'alice@example.com', displayName: 'Alice' })
+    const token = await createSessionToken(server, prisma, user.id)
+
+    const response = await server.inject({
+      method: 'PATCH',
+      url: `/api/users/${user.id}`,
+      headers: authHeader(token),
+      payload: {
+        displayName: 'AliceWonderland',
+        bio: 'I love coding',
+        avatarUrl: 'https://example.com/avatar.png'
+      }
+    })
+
+    expect(response.statusCode).toBe(200)
+    const body = response.json<{ displayName: string; bio: string; avatarUrl: string }>()
+    expect(body.displayName).toBe('AliceWonderland')
+    expect(body.bio).toBe('I love coding')
+    expect(body.avatarUrl).toBe('https://example.com/avatar.png')
+
+    const dbUser = await prisma.user.findUnique({ where: { id: user.id } })
+    expect(dbUser?.displayName).toBe('AliceWonderland')
+  })
+
+  it('forbids updating other users profile', async () => {
+    const alice = await createUser(prisma, { login: 'alice', email: 'alice@example.com', displayName: 'Alice' })
+    const bob = await createUser(prisma, { login: 'bob', email: 'bob@example.com', displayName: 'Bob' })
+    const token = await createSessionToken(server, prisma, alice.id)
+
+    const response = await server.inject({
+      method: 'PATCH',
+      url: `/api/users/${bob.id}`,
+      headers: authHeader(token),
+      payload: { bio: 'Hacked' }
+    })
+
+    expect(response.statusCode).toBe(403)
+  })
+
+  it('rejects duplicate display name', async () => {
+    const alice = await createUser(prisma, { login: 'alice', email: 'alice@example.com', displayName: 'Alice' })
+    await createUser(prisma, { login: 'bob', email: 'bob@example.com', displayName: 'Bob' })
+    const token = await createSessionToken(server, prisma, alice.id)
+
+    const response = await server.inject({
+      method: 'PATCH',
+      url: `/api/users/${alice.id}`,
+      headers: authHeader(token),
+      payload: { displayName: 'Bob' }
+    })
+
+    expect(response.statusCode).toBe(409)
+  })
+})
+
 /*
 解説:
 1) connectFriends ヘルパーでフレンド関係生成を簡潔化し、JWT 導入後も再利用できる形にした。

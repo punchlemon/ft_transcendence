@@ -28,9 +28,79 @@ const parseExcludeIds = (excludeFriendIds?: string) => {
     .filter((id) => Number.isInteger(id) && id > 0)
 }
 
+const updateProfileSchema = z.object({
+  displayName: z.string().trim().min(1).max(32).optional(),
+  bio: z.string().trim().max(255).optional(),
+  avatarUrl: z.string().trim().url().optional()
+})
+
 const usersRoutes: FastifyPluginAsync = async (fastify) => {
   const paramsSchema = z.object({
     id: z.coerce.number().int().positive()
+  })
+
+  fastify.patch('/api/users/:id', { preHandler: fastify.authenticate }, async (request, reply) => {
+    const paramsParsed = paramsSchema.safeParse(request.params)
+    if (!paramsParsed.success) {
+      reply.code(400)
+      return { error: { code: 'INVALID_PARAMS', message: 'Invalid user ID' } }
+    }
+
+    const { id: targetId } = paramsParsed.data
+    const viewerId = request.user.userId
+
+    if (targetId !== viewerId) {
+      reply.code(403)
+      return { error: { code: 'FORBIDDEN', message: 'You can only edit your own profile' } }
+    }
+
+    const bodyParsed = updateProfileSchema.safeParse(request.body)
+    if (!bodyParsed.success) {
+      reply.code(400)
+      return {
+        error: {
+          code: 'INVALID_BODY',
+          message: 'Invalid request body',
+          details: bodyParsed.error.flatten().fieldErrors
+        }
+      }
+    }
+
+    const { displayName, bio, avatarUrl } = bodyParsed.data
+
+    // Check if displayName is taken (if changed)
+    if (displayName) {
+      const existing = await fastify.prisma.user.findFirst({
+        where: {
+          displayName,
+          id: { not: viewerId }
+        }
+      })
+      if (existing) {
+        reply.code(409)
+        return { error: { code: 'DISPLAY_NAME_TAKEN', message: 'Display name is already taken' } }
+      }
+    }
+
+    const updatedUser = await fastify.prisma.user.update({
+      where: { id: viewerId },
+      data: {
+        displayName,
+        bio,
+        avatarUrl
+      },
+      select: {
+        id: true,
+        displayName: true,
+        login: true,
+        status: true,
+        avatarUrl: true,
+        bio: true,
+        country: true
+      }
+    })
+
+    return updatedUser
   })
 
   fastify.get('/api/users/:id', { preHandler: fastify.authenticate }, async (request, reply) => {

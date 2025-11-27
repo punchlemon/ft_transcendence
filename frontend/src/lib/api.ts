@@ -252,6 +252,17 @@ export const createTournament = async (payload: CreateTournamentPayload) => {
   return response.data as { data: Tournament }
 }
 
+export type UpdateProfilePayload = {
+  displayName?: string
+  bio?: string
+  avatarUrl?: string
+}
+
+export const updateUserProfile = async (userId: string, payload: UpdateProfilePayload) => {
+  const response = await apiClient.patch(`/users/${userId}`, payload)
+  return response.data as UserProfileResponse
+}
+
 /*
 解説:
 
@@ -272,4 +283,7 @@ export const createTournament = async (payload: CreateTournamentPayload) => {
 
 6) トーナメント関連の型と API 関数
   - トーナメントの一覧取得、詳細取得、作成を行うための型定義と API 関数を追加した。
+
+7) updateUserProfile
+  - ユーザープロフィールの更新を行うための関数と型定義を追加した。
 */
