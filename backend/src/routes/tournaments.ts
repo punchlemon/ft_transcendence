@@ -86,9 +86,33 @@ const tournamentsRoutes: FastifyPluginAsync = async (fastify) => {
       },
       include: {
         _count: { select: { participants: true } },
-        createdBy: { select: { id: true, displayName: true } }
+        createdBy: { select: { id: true, displayName: true } },
+        participants: true
       }
     })
+
+    // Generate Round 1 Matches
+    if (tournament.participants.length >= 2) {
+      const participants = [...tournament.participants]
+      // Simple shuffle or seed sort could go here. For now, use insertion order.
+      
+      const matchesToCreate = []
+      for (let i = 0; i < participants.length - 1; i += 2) {
+        matchesToCreate.push({
+          tournamentId: tournament.id,
+          round: 1,
+          playerAId: participants[i].id,
+          playerBId: participants[i+1].id,
+          status: 'PENDING'
+        })
+      }
+
+      if (matchesToCreate.length > 0) {
+        await fastify.prisma.tournamentMatch.createMany({
+          data: matchesToCreate
+        })
+      }
+    }
 
     reply.code(201)
     return {

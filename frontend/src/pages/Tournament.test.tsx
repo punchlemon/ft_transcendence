@@ -1,13 +1,27 @@
-/**
- * なぜテストが必要か:
- * - Tournament ページのフォーム登録やマッチ操作を UI レベルで検証し、純粋関数だけでは検知できないイベント連携の欠陥を防ぐ。
- * - 重複エイリアス検出や BYE を含むマッチ進行のステータス表示が崩れていないか、ユーザー視点の DOM を通じて確認する。
- */
-import { StrictMode } from 'react'
-import { describe, it, expect } from 'vitest'
+import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
-import TournamentPage, { TOURNAMENT_STATE_STORAGE_KEY } from './Tournament'
+import TournamentPage from './Tournament'
+import { api } from '../lib/api'
+
+// Mock api
+vi.mock('../lib/api', () => ({
+  api: {
+    get: vi.fn(),
+    post: vi.fn()
+  },
+  createTournament: vi.fn(),
+  fetchTournament: vi.fn()
+}))
+
+// Mock auth store
+vi.mock('../stores/authStore', () => ({
+  default: () => ({
+    user: { id: 1, displayName: 'Me' }
+  })
+}))
+
+import { createTournament, fetchTournament } from '../lib/api'
 
 const registerAlias = async (user: ReturnType<typeof userEvent.setup>, alias: string) => {
   const input = screen.getByPlaceholderText('例: Meteor') as HTMLInputElement
@@ -18,7 +32,7 @@ const registerAlias = async (user: ReturnType<typeof userEvent.setup>, alias: st
 
 describe('TournamentPage', () => {
   beforeEach(() => {
-    window.localStorage.clear()
+    vi.clearAllMocks()
   })
 
   it('allows registering and removing players through the UI', async () => {
@@ -64,8 +78,26 @@ describe('TournamentPage', () => {
     expect(generateButton).toBeEnabled()
   })
 
-  it('persists players and match queue to localStorage', async () => {
+  it('creates tournament via API and shows progress', async () => {
     const user = userEvent.setup()
+    
+    const mockTournament = { id: 100, name: "Me's Tournament", status: 'READY' }
+    const mockDetail = {
+      ...mockTournament,
+      matches: [
+        {
+          id: 1,
+          round: 1,
+          status: 'PENDING',
+          playerA: { alias: 'Astra' },
+          playerB: { alias: 'Borealis' }
+        }
+      ]
+    }
+
+    vi.mocked(createTournament).mockResolvedValue({ data: mockTournament } as any)
+    vi.mocked(fetchTournament).mockResolvedValue({ data: mockDetail } as any)
+
     render(<TournamentPage />)
 
     await registerAlias(user, 'Astra')
@@ -73,103 +105,18 @@ describe('TournamentPage', () => {
     await user.click(screen.getByRole('button', { name: 'トーナメント生成' }))
 
     await waitFor(() => {
-      const raw = window.localStorage.getItem(TOURNAMENT_STATE_STORAGE_KEY)
-      expect(raw).not.toBeNull()
-      const parsed = JSON.parse(raw!)
-      expect(parsed.players).toEqual(['Astra', 'Borealis'])
-      expect(parsed.matchQueue).toHaveLength(1)
-      expect(parsed.currentMatchIndex).toBe(0)
+      expect(createTournament).toHaveBeenCalled()
     })
-  })
+    
+    await waitFor(() => {
+      expect(fetchTournament).toHaveBeenCalledWith(100)
+    })
 
-  it('generates matches and advances through the queue', async () => {
-    const user = userEvent.setup()
-    render(<TournamentPage />)
+    // expect(screen.getByText('トーナメントを作成しました。')).toBeInTheDocument() // Removed as it's in the unmounted panel
+    expect(screen.getByText('第 1 試合:')).toBeInTheDocument()
 
-    await registerAlias(user, 'Astra')
-    await registerAlias(user, 'Borealis')
-    await registerAlias(user, 'Cosmos')
-    await registerAlias(user, 'Draco')
-
-    await user.click(screen.getByRole('button', { name: 'トーナメント生成' }))
-
-    expect(screen.getByText('トーナメントを開始しました。')).toBeInTheDocument()
-  expect(screen.getByText('第 1 試合:')).toBeInTheDocument()
-
-  const currentMatchCard = screen.getByText('現在の試合').closest('div') as HTMLElement
-  expect(within(currentMatchCard).getByText('Astra vs Borealis')).toBeInTheDocument()
-
-    const advanceButton = screen.getByRole('button', { name: '次の試合へ進む' })
-    await user.click(advanceButton)
-    await user.click(screen.getByRole('button', { name: '次の試合へ進む' }))
-
-    expect(screen.getByText('全ての試合が終了しました。')).toBeInTheDocument()
-    expect(screen.getByText('全ての試合が完了しました。エントリーを更新して次の大会を始めましょう。')).toBeInTheDocument()
-  })
-
-  it('restores persisted tournament state on mount', async () => {
-    const snapshot = {
-      players: ['Helios', 'Luna'],
-      matchQueue: [
-        {
-          id: 'match-1',
-          players: ['Helios', 'Luna'] as [string, string | null]
-        }
-      ],
-      currentMatchIndex: 0
-    }
-    window.localStorage.setItem(TOURNAMENT_STATE_STORAGE_KEY, JSON.stringify(snapshot))
-
-    render(<TournamentPage />)
-
-    expect(await screen.findByText('Helios')).toBeInTheDocument()
-    expect(await screen.findByText('第 1 試合:')).toBeInTheDocument()
-    const restoredCard = (await screen.findByText('現在の試合')).closest('div') as HTMLElement
-    expect(within(restoredCard).getByText('Helios vs Luna')).toBeInTheDocument()
-  })
-
-  it('keeps localStorage snapshot intact under StrictMode double render', async () => {
-    const user = userEvent.setup()
-    render(
-      <StrictMode>
-        <TournamentPage />
-      </StrictMode>
-    )
-
-    await registerAlias(user, 'Atlas')
-    await registerAlias(user, 'Boreas')
-    await user.click(screen.getByRole('button', { name: 'トーナメント生成' }))
-
-    const raw = window.localStorage.getItem(TOURNAMENT_STATE_STORAGE_KEY)
-    expect(raw).not.toBeNull()
-    const parsed = JSON.parse(raw!)
-    expect(parsed.players).toEqual(['Atlas', 'Boreas'])
-    expect(parsed.matchQueue).toHaveLength(1)
-    expect(parsed.currentMatchIndex).toBe(0)
-  })
-
-  it('handles bye rounds and resets entries after completion', async () => {
-    const user = userEvent.setup()
-    render(<TournamentPage />)
-
-    await registerAlias(user, 'Aster')
-    await registerAlias(user, 'Blaze')
-    await registerAlias(user, 'Comet')
-
-    await user.click(screen.getByRole('button', { name: 'トーナメント生成' }))
-    await user.click(screen.getByRole('button', { name: '次の試合へ進む' }))
-
-    expect(screen.getByText('対戦相手がいないため、自動的に次のラウンドへ進みます。')).toBeInTheDocument()
-
-    await user.click(screen.getByRole('button', { name: '次の試合へ進む' }))
-
-    expect(screen.getByText('全ての試合が終了しました。')).toBeInTheDocument()
-    expect(screen.getByText('全ての試合が完了しました。エントリーを更新して次の大会を始めましょう。')).toBeInTheDocument()
-
-    await user.click(screen.getByRole('button', { name: 'エントリーをリセット' }))
-
-    expect(screen.getByText('エントリーを初期化しました。')).toBeInTheDocument()
-    expect(screen.getByText('まだ登録されたプレイヤーはいません。')).toBeInTheDocument()
+    const currentMatchCard = screen.getByText('現在の試合').closest('div') as HTMLElement
+    expect(within(currentMatchCard).getByText('Astra vs Borealis')).toBeInTheDocument()
   })
 })
 

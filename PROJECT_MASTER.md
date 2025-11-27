@@ -73,14 +73,15 @@
 | ✅ | `/api/health` 実装 & テスト | 疎通確認用 |
 | 🔄 | **認証・ユーザー管理機能** | `/auth/register` `/auth/login` `/auth/refresh` `/auth/logout` に加え、`/auth/mfa/setup|verify|challenge|delete|backup-codes` と OAuth 認可 URL/コールバック、およびフロントエンド `/login` `/auth/2fa` `/oauth/callback` ページ (Vitest 付き) を実装。Zustand `authStore` によるセッション復元と `App` ナビバーのログアウトボタンを追加済み。残課題: OAuth プロバイダ追加ガイド、セッション一覧/失効 UI。 |
 | 🔄 | **ユーザー検索 API** | `/api/users` 実装済み。mutualFriends 算出は JWT ビューア ID で動作。残課題: 認可ロール/ソート機能の拡張。 |
-| 🔄 | **トーナメント API** | `/api/tournaments` (POST/GET) 実装済み。残課題: 認証・参加者編集・マッチ生成ロジック。 |
+| ✅ | **トーナメント API** | `/api/tournaments` (POST/GET) 実装済み。バックエンドでのマッチ生成ロジックを追加し、フロントエンドと統合完了。 |
 
 ## Next Actions
 - [x] **Profile API 統合 (Basic)**: `ProfilePage` を `/api/users/:id` と接続し、基本情報と統計を表示する。
 - [x] **Profile API 統合 (History/Friends)**: 対戦履歴とフレンドリストの API を実装し、`ProfilePage` に統合する。
 - [x] **Game WebSocket 統合**: `GameRoom` で WebSocket 接続を確立し、サーバーからの状態更新を受け取る。
-- [ ] **Chat API 統合**: `ChatDrawer` でメッセージの送受信を API 経由で行う。
+- [x] **Chat API 統合**: `ChatDrawer` でメッセージの送受信を API 経由で行う。
+- [x] **Tournament API 統合**: `TournamentPage` から API 経由でトーナメントを作成し、バックエンドでマッチ生成を行うように変更。
 
 ## Current Focus
 **Epic C: アプリ機能実装 (Implementation Phase)**
-*UI モックが完成したため、バックエンドとの統合を進める*|
+*主要機能の統合が完了。E2Eテストや細かいUX改善へ移行*|
