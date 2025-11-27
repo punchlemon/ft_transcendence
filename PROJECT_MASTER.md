@@ -76,11 +76,10 @@
 | 🔄 | **トーナメント API** | `/api/tournaments` (POST/GET) 実装済み。残課題: 認証・参加者編集・マッチ生成ロジック。 |
 
 ## Next Actions
-- [x] **Profile Page 実装**: `/profile/:id` の UI とテストを作成。アバター、戦績、フレンドリストのモック表示を含む。
-- [x] **Game Lobby 実装**: `/game/new` の UI とテストを作成。モード選択とマッチング待機画面。
-- [x] **Game Room 実装**: `/game/:id` の UI とテストを作成。Canvas 描画とサイドパネルの基本構造。
-- [x] **Chat Overlay 実装**: グローバルチャットドロワーの UI とテストを作成。
+- [ ] **Profile API 統合**: `ProfilePage` を `/api/users/:id` および `/api/users/:id/stats` と接続する。
+- [ ] **Game WebSocket 統合**: `GameRoom` で WebSocket 接続を確立し、サーバーからの状態更新を受け取る。
+- [ ] **Chat API 統合**: `ChatDrawer` でメッセージの送受信を API 経由で行う。
 
 ## Current Focus
 **Epic C: アプリ機能実装 (Implementation Phase)**
-*設計に基づき、各画面と機能を実装・テストする*|
+*UI モックが完成したため、バックエンドとの統合を進める*|
