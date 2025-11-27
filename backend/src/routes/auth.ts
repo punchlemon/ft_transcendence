@@ -43,6 +43,10 @@ const loginSchema = z.object({
   password: z.string().min(8).max(128)
 })
 
+const refreshSchema = z.object({
+  refreshToken: z.string().uuid()
+})
+
 const authRoutes: FastifyPluginAsync = async (fastify) => {
   fastify.post('/auth/register', async (request, reply) => {
     const parsed = registerSchema.safeParse(request.body)
@@ -206,13 +210,95 @@ const authRoutes: FastifyPluginAsync = async (fastify) => {
       mfaRequired: false
     }
   })
+
+  fastify.post('/auth/refresh', async (request, reply) => {
+    const parsed = refreshSchema.safeParse(request.body)
+
+    if (!parsed.success) {
+      reply.code(400)
+      return {
+        error: {
+          code: 'INVALID_BODY',
+          message: 'Invalid refresh payload',
+          details: parsed.error.flatten().fieldErrors
+        }
+      }
+    }
+
+    const { refreshToken } = parsed.data
+    const session = await fastify.prisma.session.findUnique({
+      where: { token: refreshToken },
+      include: {
+        user: {
+          select: {
+            id: true,
+            displayName: true,
+            status: true
+          }
+        }
+      }
+    })
+
+    if (!session || session.expiresAt.getTime() <= Date.now()) {
+      if (session) {
+        await fastify.prisma.session.delete({ where: { id: session.id } })
+      }
+
+      reply.code(401)
+      return {
+        error: {
+          code: 'INVALID_REFRESH_TOKEN',
+          message: 'Refresh token is invalid or expired'
+        }
+      }
+    }
+
+    const nextRefresh = randomUUID()
+    const nextExpiry = new Date(Date.now() + SESSION_TTL_MS)
+
+    await fastify.prisma.session.update({
+      where: { id: session.id },
+      data: {
+        token: nextRefresh,
+        expiresAt: nextExpiry
+      }
+    })
+
+    return {
+      user: session.user,
+      tokens: {
+        access: randomUUID(),
+        refresh: nextRefresh
+      }
+    }
+  })
+
+  fastify.post('/auth/logout', async (request, reply) => {
+    const parsed = refreshSchema.safeParse(request.body)
+
+    if (!parsed.success) {
+      reply.code(400)
+      return {
+        error: {
+          code: 'INVALID_BODY',
+          message: 'Invalid logout payload',
+          details: parsed.error.flatten().fieldErrors
+        }
+      }
+    }
+
+    await fastify.prisma.session.deleteMany({ where: { token: parsed.data.refreshToken } })
+    reply.code(204)
+    return null
+  })
 }
 
 export default fp(authRoutes)
 
 /*
 解説:
-1) Zod スキーマで登録/ログイン双方の入力制約を定義し、バリデーション失敗時に 400 を即時返却する。
+1) Zod スキーマで登録/ログイン/リフレッシュ/ログアウトの入力制約を定義し、バリデーション失敗時は詳細付きで 400 を返す。
 2) 登録時は Argon2id でハッシュ化した上でユーザーを作成し、`Session` にリフレッシュトークンと有効期限を保存してレスポンスと同期させる。
 3) ログイン時は資格情報を検証し、2FA フラグをチェックした後に `ONLINE` へ状態更新・セッション生成・暫定アクセス/リフレッシュトークン返却を行う。
+4) リフレッシュではトークンをローテーションして期限を延長し、ログアウトでは対象セッションを削除することで将来の JWT 化に備えたセッション管理を成立させている。
 */

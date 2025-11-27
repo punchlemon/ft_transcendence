@@ -7,6 +7,7 @@ import { describe, it, expect, beforeAll, afterAll, beforeEach } from 'vitest'
 import type { FastifyInstance } from 'fastify'
 import type { PrismaClient } from '@prisma/client'
 import argon2 from 'argon2'
+import { randomUUID } from 'node:crypto'
 import { buildServer } from '../app'
 
 const basePayload = {
@@ -155,6 +156,90 @@ describe('POST /auth/login', () => {
       payload: { email: 'not-an-email', password: '123' }
     })
 
+    expect(response.statusCode).toBe(400)
+    const body = response.json<{ error: { code: string } }>()
+    expect(body.error.code).toBe('INVALID_BODY')
+  })
+})
+
+describe('POST /auth/refresh', () => {
+  it('rotates the refresh token and extends the session validity', async () => {
+    const registerResponse = await server.inject({ method: 'POST', url: '/auth/register', payload: basePayload })
+    const registerBody = registerResponse.json<{ tokens: { refresh: string } }>()
+
+    const response = await server.inject({
+      method: 'POST',
+      url: '/auth/refresh',
+      payload: { refreshToken: registerBody.tokens.refresh }
+    })
+
+    expect(response.statusCode).toBe(200)
+    const body = response.json<{
+      user: { id: number; displayName: string; status: string }
+      tokens: { access: string; refresh: string }
+    }>()
+
+    expect(body.tokens.refresh).not.toBe(registerBody.tokens.refresh)
+    const newSession = await prisma.session.findUnique({ where: { token: body.tokens.refresh } })
+    expect(newSession).not.toBeNull()
+    expect(newSession?.expiresAt.getTime() ?? 0).toBeGreaterThan(Date.now())
+    const oldSession = await prisma.session.findFirst({ where: { token: registerBody.tokens.refresh } })
+    expect(oldSession).toBeNull()
+  })
+
+  it('rejects expired refresh tokens and purges the session', async () => {
+    const registerResponse = await server.inject({ method: 'POST', url: '/auth/register', payload: basePayload })
+    const registered = registerResponse.json<{ user: { id: number } }>()
+    const expiredToken = randomUUID()
+
+    await prisma.session.create({
+      data: {
+        userId: registered.user.id,
+        token: expiredToken,
+        expiresAt: new Date(Date.now() - 1000)
+      }
+    })
+
+    const response = await server.inject({
+      method: 'POST',
+      url: '/auth/refresh',
+      payload: { refreshToken: expiredToken }
+    })
+
+    expect(response.statusCode).toBe(401)
+    const body = response.json<{ error: { code: string } }>()
+    expect(body.error.code).toBe('INVALID_REFRESH_TOKEN')
+    const leftover = await prisma.session.findFirst({ where: { token: expiredToken } })
+    expect(leftover).toBeNull()
+  })
+})
+
+describe('POST /auth/logout', () => {
+  it('deletes the session and is idempotent', async () => {
+    const registerResponse = await server.inject({ method: 'POST', url: '/auth/register', payload: basePayload })
+    const registerBody = registerResponse.json<{ tokens: { refresh: string } }>()
+
+    const firstResponse = await server.inject({
+      method: 'POST',
+      url: '/auth/logout',
+      payload: { refreshToken: registerBody.tokens.refresh }
+    })
+
+    expect(firstResponse.statusCode).toBe(204)
+    const sessionsAfterLogout = await prisma.session.count({ where: { token: registerBody.tokens.refresh } })
+    expect(sessionsAfterLogout).toBe(0)
+
+    const secondResponse = await server.inject({
+      method: 'POST',
+      url: '/auth/logout',
+      payload: { refreshToken: registerBody.tokens.refresh }
+    })
+
+    expect(secondResponse.statusCode).toBe(204)
+  })
+
+  it('validates body shape and returns 400 when missing token', async () => {
+    const response = await server.inject({ method: 'POST', url: '/auth/logout', payload: {} })
     expect(response.statusCode).toBe(400)
     const body = response.json<{ error: { code: string } }>()
     expect(body.error.code).toBe('INVALID_BODY')

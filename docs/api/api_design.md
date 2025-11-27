@@ -4,7 +4,7 @@
 
 ## 0. General Conventions
 - **Base URL**: `/api` (served via Fastify). Versioning is handled via `Accept-Version` header (`v1`).
-- **Auth**: JWT-based bearer tokens on all protected routes. Refresh tokens managed via `/auth/refresh` and stored in `UserSession`.
+- **Auth**: JWT-based bearer tokens on all protected routes。リフレッシュトークンは `/auth/refresh` でローテーションし、`Session` テーブルに保存する。JWT 実装まではアクセストークン/リフレッシュトークンともに UUID 文字列のプレースホルダーだが、レスポンス構造は最終仕様と揃えておく。
 - **Errors**: JSON envelope `{ error: { code, message, details? } }`. HTTP status codes follow RFC 7231.
 - **Pagination**: `?page=1&limit=20`. Responses include `{ data, meta: { page, limit, total } }`.
 - **WebSockets**: `/ws/game` for game state, `/ws/chat` for live chat. REST endpoints focus on configuration/storage.
@@ -58,6 +58,32 @@ Response `201`: `{ "user": { ...basic profile... }, "tokens": { "access", "refre
   - `401 INVALID_CREDENTIALS`: メール/パスワード不一致。
   - `423 MFA_REQUIRED`: `twoFAEnabled = true` の場合は `mfaRequired: true` とチャレンジ ID を返し、`/auth/mfa/challenge` に誘導。
   - `400 INVALID_BODY`: バリデーション失敗。
+
+**POST /auth/refresh**
+- Request: `{ "refreshToken": string }`
+  - UUID v4 形式 (36 文字) を期待。未指定や不正形式は `400 INVALID_BODY`。
+  - 送信されたトークンで `Session.token` を検索し、有効期限 (`expiresAt`) が現在時刻よりも未来であることを必須とする。
+  - セッションが有効な場合は **トークンをローテーション** し、新しい `token` と `expiresAt = now + 7days` を保存する。
+  - レスポンス `200`:
+```json
+{
+  "user": { "id": 1, "displayName": "Pong Fan", "status": "ONLINE" },
+  "tokens": { "access": "...", "refresh": "..." }
+}
+```
+- エラー:
+  - `401 INVALID_REFRESH_TOKEN`: セッションが存在しない / 有効期限切れの場合。期限切れはサーバー側で削除してから返却する。
+  - `400 INVALID_BODY`: フォーマット不正。
+- 備考: JWT 導入前はボディのリフレッシュトークンのみで認証する。将来的に `Authorization: Bearer <access>` を検証し、`refreshToken` は httpOnly Cookie へ移行する予定。
+
+**POST /auth/logout**
+- Request: `{ "refreshToken": string }`
+  - `Auth` 列が ✅ なのは、JWT 完了後に `access` 検証を行う想定のため。現時点では `refreshToken` を送信してもらい、該当セッションがユーザー自身であることを保証する。
+- 振る舞い:
+  - セッションが見つかれば `Session` レコードを削除する。
+  - セッションが存在しなくても成功扱い (冪等性維持)。
+- レスポンス: `204 No Content`。
+- エラー: 入力バリデーション失敗のみ `400 INVALID_BODY`。それ以外は常に 204 を返し、存在しないセッションでも攻撃者が推測できないようにする。
 
 ### 1.2 Two-Factor Auth
 | Method | Path | Auth | Description |

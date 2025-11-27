@@ -17,6 +17,7 @@
 - `/api/users` 検索エンドポイントを Fastify + Prisma で実装し、ページング・フィルタ・除外 ID をサポートする統合テストを追加。mutualFriends は `Friendship` から算出し、暫定的に `X-User-Id` ヘッダーを viewer ID として扱う仕様を確立。
 - `/auth/register` を実装し、Zod バリデーション・Argon2id ハッシュ化・UUID ベース仮トークンを返す Fastify ルートと統合テストを追加。API設計書に検証ルールを反映。
 - `/auth/login` を実装し、Argon2id 検証・`Session` テーブルへのリフレッシュトークン保存・ユーザーステータス更新・統合テストを追加。MFA フローは後続タスクとして `MFA_REQUIRED` エラーを返す。
+- `/auth/refresh` と `/auth/logout` を実装し、セッションローテーション/失効の仕様を API 設計と統合テストへ反映。リフレッシュトークンの UUID プレースホルダーでも将来の JWT へ移行できる構造を整えた。
 - `/api/tournaments` (POST/GET) を追加し、トーナメント作成・一覧 API と Prisma モデル/マイグレーション、統合テストを整備。
 - `/api/tournaments/:id` で参加者・試合詳細を返すエンドポイントと統合テストを追加し、UI 設計書のコンポーネント要件と整合させた。
 - HealthCheck ページに Vitest + React Testing Library でローディング/成功/失敗/導線を検証する UI テストを追加した。
@@ -51,7 +52,7 @@
 | 状態 | タスク | メモ |
 | :---: | --- | --- |
 | ✅ | `/api/health` 実装 & テスト | 疎通確認用 |
-| 🔄 | **認証・ユーザー管理機能** | `/auth/register` `/auth/login` を実装。残課題: セッション失効/更新・2FA・OAuth。 |
+| 🔄 | **認証・ユーザー管理機能** | `/auth/register` `/auth/login` `/auth/refresh` `/auth/logout` を実装済み。残課題: JWT アクセストークンの正式発行、`/auth/mfa/*` と OAuth コールバック、セッション一覧/失効 UI。 |
 | 🔄 | **ユーザー検索 API** | `/api/users` 実装済み。mutualFriends 算出完了。残課題: 認証実装とトークン連携。 |
 | 🔄 | **トーナメント API** | `/api/tournaments` (POST/GET) 実装済み。残課題: 認証・参加者編集・マッチ生成ロジック。 |
 |
