@@ -14,7 +14,9 @@ const searchQuerySchema = z.object({
   status: z.enum(STATUS_VALUES).optional(),
   page: z.coerce.number().int().min(1).default(1),
   limit: z.coerce.number().int().min(1).default(20),
-  excludeFriendIds: z.string().optional()
+  excludeFriendIds: z.string().optional(),
+  sortBy: z.enum(['displayName', 'createdAt', 'mmr']).default('displayName'),
+  order: z.enum(['asc', 'desc']).default('asc')
 })
 
 type SearchQuery = z.infer<typeof searchQuerySchema>
@@ -315,7 +317,7 @@ const usersRoutes: FastifyPluginAsync = async (fastify) => {
       }
     }
 
-    const { q, status, page, limit: rawLimit, excludeFriendIds } = parsed.data
+    const { q, status, page, limit: rawLimit, excludeFriendIds, sortBy, order } = parsed.data
     const limit = Math.min(rawLimit, 50)
     const excludeIds = parseExcludeIds(excludeFriendIds)
     const skip = (page - 1) * limit
@@ -341,6 +343,21 @@ const usersRoutes: FastifyPluginAsync = async (fastify) => {
       where.id = { notIn: excludeIds }
     }
 
+    let orderBy: Prisma.UserOrderByWithRelationInput | Prisma.UserOrderByWithRelationInput[] = []
+
+    if (sortBy === 'mmr') {
+      orderBy = { ladderProfile: { mmr: order } }
+    } else {
+      orderBy = { [sortBy]: order }
+    }
+
+    // Secondary sort to ensure stable pagination
+    if (Array.isArray(orderBy)) {
+      orderBy.push({ id: 'asc' })
+    } else {
+      orderBy = [orderBy, { id: 'asc' }]
+    }
+
     const [total, users] = await fastify.prisma.$transaction([
       fastify.prisma.user.count({ where }),
       fastify.prisma.user.findMany({
@@ -351,9 +368,12 @@ const usersRoutes: FastifyPluginAsync = async (fastify) => {
           login: true,
           status: true,
           avatarUrl: true,
-          country: true
+          country: true,
+          ladderProfile: {
+            select: { mmr: true }
+          }
         },
-        orderBy: [{ displayName: 'asc' }, { id: 'asc' }],
+        orderBy,
         skip,
         take: limit
       })
