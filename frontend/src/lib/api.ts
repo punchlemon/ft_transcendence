@@ -282,6 +282,41 @@ export const revokeSession = async (sessionId: number) => {
   await apiClient.delete(`/auth/sessions/${sessionId}`)
 }
 
+export type UserSearchResponse = {
+  data: Array<{
+    id: number
+    displayName: string
+    status: string
+    avatarUrl: string | null
+    ladderProfile: {
+      mmr: number
+      tier: string
+      division: number
+    } | null
+    _count: {
+      mutualFriends: number
+    }
+  }>
+  meta: {
+    page: number
+    limit: number
+    total: number
+  }
+}
+
+export type UserSearchParams = {
+  page?: number
+  limit?: number
+  query?: string
+  sortBy?: 'displayName' | 'createdAt' | 'mmr'
+  order?: 'asc' | 'desc'
+}
+
+export const fetchUsers = async (params: UserSearchParams = {}) => {
+  const response = await apiClient.get('/users', { params })
+  return response.data as UserSearchResponse
+}
+
 /*
 解説:
 
@@ -308,4 +343,7 @@ export const revokeSession = async (sessionId: number) => {
 
 8) セッション関連の型と API 関数
   - セッションの取得と無効化を行うための型定義と API 関数を追加した。
+
+9) ユーザー検索関連の型と API 関数
+  - ユーザーの検索、ソート、フィルタリングを行うための型定義と API 関数を追加した。
 */
