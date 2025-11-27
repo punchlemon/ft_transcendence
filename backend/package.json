@@ -11,8 +11,8 @@
     "lint:fix": "npm run lint -- --fix",
     "format": "prettier --check \"src/**/*.{ts,json}\"",
     "format:fix": "prettier --write \"src/**/*.{ts,json}\"",
-    "test": "vitest run",
-    "test:watch": "vitest"
+    "test": "vitest run --maxWorkers=1 --no-file-parallelism",
+    "test:watch": "vitest --maxWorkers=1 --no-file-parallelism"
   },
   "dependencies": {
     "@fastify/cors": "^8.4.1",

@@ -33,7 +33,7 @@
 	- `main.tsx`: React エントリポイント。`App` を `#root` にマウント。
 	- `App.tsx`: ルーターと共通レイアウトを定義。
 	- `pages/`: 画面単位のコンポーネント (`Home`, `HealthCheck`, `Tournament` など)。`Tournament.tsx` はエイリアス登録やマッチ進行を管理するSPAの中核画面。
-	- `components/`: 再利用コンポーネント群 (今後増加予定)。
+	- `components/`: 再利用コンポーネント群 (今後増加予定)。`tournament/__tests__/` 配下に TournamentAliasPanel / EntryPanel / ProgressPanel の UI 単体テストを配置し、画面分割コンポーネントごとに挙動を検証する。
 	- `lib/`: API クライアントなどのユーティリティ。`tournament.ts` はトーナメントのマッチキュー生成や重複チェックなどの純粋関数を集約する。
 	- `index.css`: Tailwind ベーススタイル。
 - `vite.config.ts`, `tailwind.config.js`, `postcss.config.js`: ビルド/スタイル設定。
@@ -41,6 +41,7 @@
 
 ## docs/
 - `subject.md`: 公式課題全文。モジュールや要件の参照に必須。
+- `ui/ui_design.md`: SPA 各画面のUI/状態遷移を定義する設計ドキュメント。実装前の合意形成とテスト観点の共有に使用。
 - 必要に応じて追加ドキュメント (設計資料・仕様書) をここへ配置する。
 
 ## 作業ルール

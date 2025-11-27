@@ -1,6 +1,5 @@
 generator client {
-  provider      = "prisma-client-js"
-  binaryTargets = ["native", "linux-musl-arm64-openssl-1.1.x"]
+  provider = "prisma-client-js"
 }
 
 datasource db {
@@ -9,7 +8,513 @@ datasource db {
 }
 
 model User {
-  id        Int      @id @default(autoincrement())
-  username  String   @unique
+  id                    Int                 @id @default(autoincrement())
+  login                 String              @unique
+  intraId               String?             @unique
+  email                 String              @unique
+  displayName           String              @unique
+  passwordHash          String?
+  avatarUrl             String?
+  bio                   String?
+  country               String?
+  locale                String              @default("en-US")
+  timezone              String              @default("UTC")
+  profileVisibility     String              @default("PUBLIC")
+  status                String              @default("OFFLINE")
+  onboardingStep        String              @default("PROFILE")
+  twoFAEnabled          Boolean             @default(false)
+  twoFASecret           String?
+  emailVerifiedAt       DateTime?
+  lastLoginAt           DateTime?
+  lastSeenAt            DateTime?
+  mutedUntil            DateTime?
+  deletedAt             DateTime?
+  createdAt             DateTime            @default(now())
+  updatedAt             DateTime            @updatedAt
+
+  inventory             InventoryItem[]
+  wallet                Wallet?
+  ladderProfile         LadderProfile?
+  stats                 UserStats?
+  achievements          UserAchievement[]
+  friendshipsA          Friendship[]        @relation("FriendshipA")
+  friendshipsB          Friendship[]        @relation("FriendshipB")
+  blocklistA            Blocklist[]         @relation("Blocker")
+  blocklistB            Blocklist[]         @relation("Blocked")
+  friendRequests        FriendRequest[]     @relation("Sender")
+  receivedRequests      FriendRequest[]     @relation("Receiver")
+  parties               PartyMember[]
+  partyInvites          PartyInvite[]       @relation("Invitee")
+  sentPartyInvites      PartyInvite[]       @relation("Inviter")
+  hostedParties         Party[]             @relation("PartyHost")
+  matchesA              Match[]             @relation("PlayerA")
+  matchesB              Match[]             @relation("PlayerB")
+  matchesWon            Match[]             @relation("MatchWinner")
+  matchResults          MatchResult[]
+  ladders               LadderEnrollment[]
+  penalties             Penalty[]
+  messages              Message[]
+  channels              ChannelMember[]
+  channelInvitesSent    ChannelInvite[]     @relation("ChannelInviter")
+  channelInvitesReceived ChannelInvite[]    @relation("ChannelInvitee")
+  channelBans           ChannelBan[]        @relation("ChannelBanUser")
+  ownedChannels         Channel[]           @relation("ChannelOwner")
+  tournamentParticipants TournamentParticipant[]
+  tournamentsCreated     Tournament[]        @relation("TournamentCreator")
+  notifications         Notification[]
+  auditLogs             AuditLog[]
+  sessions              Session[]
+}
+
+model Tournament {
+  id          Int       @id @default(autoincrement())
+  name        String
+  status      String    @default("DRAFT")
+  bracketType String    @default("SINGLE_ELIMINATION")
+  createdById Int
+  startsAt    DateTime?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  createdBy   User      @relation("TournamentCreator", fields: [createdById], references: [id])
+  participants TournamentParticipant[]
+  matches      TournamentMatch[]
+}
+
+model TournamentParticipant {
+  id            Int        @id @default(autoincrement())
+  tournamentId  Int
+  userId        Int?
+  alias         String
+  inviteState   String     @default("LOCAL")
+  seed          Int?
+  joinedAt      DateTime   @default(now())
+
+  tournament    Tournament @relation(fields: [tournamentId], references: [id])
+  user          User?      @relation(fields: [userId], references: [id])
+  matchesAsPlayerA TournamentMatch[] @relation("MatchPlayerA")
+  matchesAsPlayerB TournamentMatch[] @relation("MatchPlayerB")
+  matchesWon        TournamentMatch[] @relation("MatchWinner")
+
+  @@unique([tournamentId, userId])
+}
+
+model TournamentMatch {
+  id           Int        @id @default(autoincrement())
+  tournamentId Int
+  round        Int
+  playerAId    Int
+  playerBId    Int
+  winnerId     Int?
+  status       String     @default("PENDING")
+  scheduledAt  DateTime?
+  createdAt    DateTime   @default(now())
+
+  tournament   Tournament @relation(fields: [tournamentId], references: [id])
+  playerA      TournamentParticipant @relation("MatchPlayerA", fields: [playerAId], references: [id])
+  playerB      TournamentParticipant @relation("MatchPlayerB", fields: [playerBId], references: [id])
+  winner       TournamentParticipant? @relation("MatchWinner", fields: [winnerId], references: [id])
+}
+
+model Session {
+  id           Int      @id @default(autoincrement())
+  userId       Int
+  token        String   @unique
+  expiresAt    DateTime
+  createdAt    DateTime @default(now())
+
+  user         User     @relation(fields: [userId], references: [id])
+}
+
+model Wallet {
+  id        Int       @id @default(autoincrement())
+  userId    Int       @unique
+  balance   Int       @default(0)
+  lastEarningAt DateTime?
+  lastSpendAt   DateTime?
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+
+  user      User      @relation(fields: [userId], references: [id])
+  transactions Transaction[]
+}
+
+model Transaction {
+  id           Int       @id @default(autoincrement())
+  walletId     Int
+  type         String    @default("EARNING")
+  amount       Int
+  description  String?
+  metadata     String?
+  createdAt    DateTime  @default(now())
+
+  wallet       Wallet    @relation(fields: [walletId], references: [id])
+}
+
+model InventoryItem {
+  id        Int       @id @default(autoincrement())
+  userId    Int
+  sku       String
+  quantity  Int       @default(1)
+  acquiredAt DateTime @default(now())
+  expiresAt DateTime?
+
+  user      User      @relation(fields: [userId], references: [id])
+}
+
+model LadderProfile {
+  id             Int       @id @default(autoincrement())
+  userId         Int       @unique
+  mmr            Int       @default(1200)
+  tier           String    @default("BRONZE")
+  division       Int       @default(1)
+  placementGames Int       @default(0)
+  streak         Int       @default(0)
+  decayWarning   Boolean   @default(false)
+  lastMatchAt    DateTime?
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+
+  user           User      @relation(fields: [userId], references: [id])
+}
+
+model UserStats {
+  id              Int       @id @default(autoincrement())
+  userId          Int       @unique
+  matchesPlayed   Int       @default(0)
+  wins            Int       @default(0)
+  losses          Int       @default(0)
+  pointsScored    Int       @default(0)
+  pointsAgainst   Int       @default(0)
+  longestStreak   Int       @default(0)
+  forfeits        Int       @default(0)
+  disconnects     Int       @default(0)
+  updatedAt       DateTime   @updatedAt
+
+  user            User       @relation(fields: [userId], references: [id])
+}
+
+model Achievement {
+  id          Int       @id @default(autoincrement())
+  code        String    @unique
+  title       String
+  description String
+  rarity      String    @default("COMMON")
+  icon        String?
+  points      Int       @default(10)
+  createdAt   DateTime  @default(now())
+
+  userAchievements UserAchievement[]
+}
+
+model UserAchievement {
+  id             Int          @id @default(autoincrement())
+  userId         Int
+  achievementId  Int
+  earnedAt       DateTime     @default(now())
+  progress       Int          @default(0)
+
+  user           User         @relation(fields: [userId], references: [id])
+  achievement    Achievement  @relation(fields: [achievementId], references: [id])
+
+  @@unique([userId, achievementId])
+}
+
+model Friendship {
+  id          Int       @id @default(autoincrement())
+  requesterId Int
+  addresseeId Int
+  status      String    @default("PENDING")
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  requester   User      @relation("FriendshipA", fields: [requesterId], references: [id])
+  addressee   User      @relation("FriendshipB", fields: [addresseeId], references: [id])
+
+  @@unique([requesterId, addresseeId])
+}
+
+model Blocklist {
+  id        Int       @id @default(autoincrement())
+  blockerId Int
+  blockedId Int
+  reason    String?
   createdAt DateTime @default(now())
+
+  blocker   User      @relation("Blocker", fields: [blockerId], references: [id])
+  blocked   User      @relation("Blocked", fields: [blockedId], references: [id])
+
+  @@unique([blockerId, blockedId])
+}
+
+model FriendRequest {
+  id         Int       @id @default(autoincrement())
+  senderId   Int
+  receiverId Int
+  status     String    @default("PENDING")
+  message    String?
+  createdAt  DateTime  @default(now())
+  expiresAt  DateTime?
+
+  sender     User      @relation("Sender", fields: [senderId], references: [id])
+  receiver   User      @relation("Receiver", fields: [receiverId], references: [id])
+
+  @@unique([senderId, receiverId])
+}
+
+model Party {
+  id        Int       @id @default(autoincrement())
+  hostId    Int
+  size      Int       @default(2)
+  status    String    @default("OPEN")
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+
+  host      User      @relation("PartyHost", fields: [hostId], references: [id])
+  members   PartyMember[]
+  invites   PartyInvite[]
+}
+
+model PartyMember {
+  id        Int       @id @default(autoincrement())
+  partyId   Int
+  userId    Int
+  role      String   @default("MEMBER")
+  joinedAt  DateTime @default(now())
+
+  party     Party    @relation(fields: [partyId], references: [id])
+  user      User     @relation(fields: [userId], references: [id])
+
+  @@unique([partyId, userId])
+}
+
+model PartyInvite {
+  id        Int       @id @default(autoincrement())
+  partyId   Int
+  inviterId Int
+  inviteeId Int
+  status    String    @default("PENDING")
+  expiresAt DateTime?
+  createdAt DateTime  @default(now())
+
+  party     Party     @relation(fields: [partyId], references: [id])
+  inviter   User      @relation("Inviter", fields: [inviterId], references: [id])
+  invitee   User      @relation("Invitee", fields: [inviteeId], references: [id])
+
+  @@unique([partyId, inviteeId])
+}
+
+model Match {
+  id             Int       @id @default(autoincrement())
+  playerAId      Int
+  playerBId      Int
+  winnerId       Int?
+  mode           String
+  status         String    @default("SCHEDULED")
+  scheduledAt    DateTime?
+  startedAt      DateTime?
+  endedAt        DateTime?
+  bestOf         Int       @default(3)
+  arena          String?
+  config         String?
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+
+  playerA        User      @relation("PlayerA", fields: [playerAId], references: [id])
+  playerB        User      @relation("PlayerB", fields: [playerBId], references: [id])
+  winner         User?     @relation("MatchWinner", fields: [winnerId], references: [id])
+  rounds         MatchRound[]
+  results        MatchResult[]
+  penalties      Penalty[]
+}
+
+model MatchRound {
+  id        Int      @id @default(autoincrement())
+  matchId   Int
+  round     Int
+  scoreA    Int
+  scoreB    Int
+  duration  Int      @default(0)
+  telemetry String?
+  createdAt DateTime @default(now())
+
+  match     Match    @relation(fields: [matchId], references: [id])
+
+  @@unique([matchId, round])
+}
+
+model MatchResult {
+  id        Int      @id @default(autoincrement())
+  matchId   Int
+  userId    Int
+  outcome   String
+  score     Int
+  accuracy  Float?
+  rallyMax  Int      @default(0)
+
+  match     Match    @relation(fields: [matchId], references: [id])
+  user      User     @relation(fields: [userId], references: [id])
+}
+
+model Ladder {
+  id          Int        @id @default(autoincrement())
+  code        String     @unique
+  name        String
+  description String?
+  seasonId    Int
+  tierCap     String?
+  isActive    Boolean    @default(true)
+  createdAt   DateTime   @default(now())
+
+  season      Season     @relation(fields: [seasonId], references: [id])
+  enrollments LadderEnrollment[]
+}
+
+model LadderEnrollment {
+  id        Int      @id @default(autoincrement())
+  ladderId  Int
+  userId    Int
+  rank      Int?
+  mmrDelta  Int      @default(0)
+  joinedAt  DateTime @default(now())
+  leftAt    DateTime?
+
+  ladder    Ladder   @relation(fields: [ladderId], references: [id])
+  user      User     @relation(fields: [userId], references: [id])
+
+  @@unique([ladderId, userId])
+}
+
+model Season {
+  id          Int        @id @default(autoincrement())
+  code        String     @unique
+  name        String
+  description String?
+  startsAt    DateTime
+  endsAt      DateTime
+  isActive    Boolean    @default(true)
+  createdAt   DateTime   @default(now())
+
+  ladders     Ladder[]
+}
+
+model Penalty {
+  id        Int       @id @default(autoincrement())
+  userId    Int
+  matchId   Int?
+  reason    String
+  severity  String
+  notes     String?
+  expiresAt DateTime?
+  createdAt DateTime  @default(now())
+
+  user      User      @relation(fields: [userId], references: [id])
+  match     Match?    @relation(fields: [matchId], references: [id])
+}
+
+model Channel {
+  id           Int           @id @default(autoincrement())
+  name         String
+  slug         String        @unique
+  topic        String?
+  type         String        @default("PUBLIC")
+  visibility   String        @default("OPEN")
+  ownerId      Int
+  passwordHash String?
+  messageTtl   Int?
+  slowMode     Int?          @default(0)
+  createdAt    DateTime      @default(now())
+  updatedAt    DateTime      @updatedAt
+
+  owner        User          @relation("ChannelOwner", fields: [ownerId], references: [id])
+  members      ChannelMember[]
+  messages     Message[]
+  bans         ChannelBan[]
+  invites      ChannelInvite[]
+}
+
+model ChannelMember {
+  id         Int       @id @default(autoincrement())
+  channelId  Int
+  userId     Int
+  role       String   @default("MEMBER")
+  joinedAt   DateTime @default(now())
+  mutedUntil DateTime?
+
+  channel    Channel   @relation(fields: [channelId], references: [id])
+  user       User      @relation(fields: [userId], references: [id])
+
+  @@unique([channelId, userId])
+}
+
+model ChannelBan {
+  id         Int       @id @default(autoincrement())
+  channelId  Int
+  userId     Int
+  reason     String?
+  expiresAt  DateTime?
+  createdAt  DateTime @default(now())
+
+  channel    Channel   @relation(fields: [channelId], references: [id])
+  user       User      @relation("ChannelBanUser", fields: [userId], references: [id])
+
+  @@unique([channelId, userId])
+}
+
+model ChannelInvite {
+  id         Int       @id @default(autoincrement())
+  channelId  Int
+  inviterId  Int
+  inviteeId  Int
+  status     String    @default("PENDING")
+  expiresAt  DateTime?
+  createdAt  DateTime  @default(now())
+
+  channel    Channel   @relation(fields: [channelId], references: [id])
+  inviter    User      @relation("ChannelInviter", fields: [inviterId], references: [id])
+  invitee    User      @relation("ChannelInvitee", fields: [inviteeId], references: [id])
+
+  @@unique([channelId, inviteeId])
+}
+
+model Message {
+  id          Int       @id @default(autoincrement())
+  channelId   Int
+  userId      Int
+  content     String
+  attachment  String?
+  metadata    String?
+  type        String     @default("NORMAL")
+  status      String     @default("VISIBLE")
+  sentAt      DateTime   @default(now())
+  editedAt    DateTime?
+  deletedAt   DateTime?
+
+  channel     Channel    @relation(fields: [channelId], references: [id])
+  user        User       @relation(fields: [userId], references: [id])
+}
+
+model Notification {
+  id          Int       @id @default(autoincrement())
+  userId      Int
+  type        String
+  title       String
+  body        String?
+  data        String?
+  readAt      DateTime?
+  expiresAt   DateTime?
+  createdAt   DateTime  @default(now())
+
+  user        User      @relation(fields: [userId], references: [id])
+}
+
+model AuditLog {
+  id        Int      @id @default(autoincrement())
+  actorId   Int?
+  action    String
+  target    String?
+  metadata  String?
+  createdAt DateTime @default(now())
+
+  actor     User?    @relation(fields: [actorId], references: [id])
 }
