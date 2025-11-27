@@ -4,7 +4,8 @@
 
 ## 0. General Conventions
 - **Base URL**: `/api` (served via Fastify). Versioning is handled via `Accept-Version` header (`v1`).
-- **Auth**: JWT-based bearer tokens on all protected routes。リフレッシュトークンは `/auth/refresh` でローテーションし、`Session` テーブルに保存する。JWT 実装まではアクセストークン/リフレッシュトークンともに UUID 文字列のプレースホルダーだが、レスポンス構造は最終仕様と揃えておく。
+- **Auth**: JWT-based bearer tokens on all protected routes。リフレッシュトークンは `/auth/refresh` でローテーションし、`Session` テーブルに保存する。アクセス トークンは HS256 署名の JWT を採用し、`Authorization: Bearer <token>` を必須ヘッダーとする。`401 UNAUTHORIZED` のエンベロープは `{ "error": { "code": "UNAUTHORIZED", "message": "Access token is invalid" } }`。
+- **Access Token Payload**: `{ "userId": number, "sessionId": number, "exp": now + 15min }`。クライアントはトークンの `userId` を viewer として扱わず、必ず API 側で `request.user.userId` を参照する。
 - **Errors**: JSON envelope `{ error: { code, message, details? } }`. HTTP status codes follow RFC 7231.
 - **Pagination**: `?page=1&limit=20`. Responses include `{ data, meta: { page, limit, total } }`.
 - **WebSockets**: `/ws/game` for game state, `/ws/chat` for live chat. REST endpoints focus on configuration/storage.
@@ -15,7 +16,8 @@
 | --- | --- | --- | --- |
 | POST | `/auth/register` | ❌ | Create account. |
 | POST | `/auth/login` | ❌ | Email/password login. Returns access+refresh tokens. |
-| POST | `/auth/oauth/:provider/callback` | ❌ | OAuth exchange (42, Google). |
+| GET | `/auth/oauth/:provider/url` | ❌ | Generate provider authorization URL + PKCE parameters. |
+| POST | `/auth/oauth/:provider/callback` | ❌ | Exchange authorization code for JWT session (42, Google). |
 | POST | `/auth/refresh` | ❌ | Refresh access token. |
 | POST | `/auth/logout` | ✅ | Invalidate current session. |
 
@@ -50,13 +52,14 @@ Response `201`: `{ "user": { ...basic profile... }, "tokens": { "access", "refre
   "mfaRequired": false
 }
 ```
+- `tokens.access` は 15 分有効の JWT。クライアントはヘッダー `Authorization: Bearer <access>` として送信し、期限切れ時は `/auth/refresh` を呼び出す。
 - 認証成功時は以下を実施:
   1. Argon2id でハッシュ比較 (`passwordHash` が `null` の場合は 409 でプロフィール未初期化扱い)。
-  2. `Session` テーブルへ `refresh` UUID と有効期限 (既定 7 日) を保存。`access` も暫定 UUID とするが、JWT 実装後は署名済みトークンに置換。
+  2. `Session` テーブルへ `refresh` UUID と有効期限 (既定 7 日) を保存し、`sessionId` を JWT のペイロードへ含める。
   3. ユーザーの `lastLoginAt` を更新し、`status` を `ONLINE` に遷移。
 - エラーレスポンス:
   - `401 INVALID_CREDENTIALS`: メール/パスワード不一致。
-  - `423 MFA_REQUIRED`: `twoFAEnabled = true` の場合は `mfaRequired: true` とチャレンジ ID を返し、`/auth/mfa/challenge` に誘導。
+  - `423 MFA_REQUIRED`: `twoFAEnabled = true` の場合は `mfaRequired: true` と `challengeId`（UUID v4）を返し、`/auth/mfa/challenge` に誘導。チャレンジは 5 分で失効し、成功/失敗いずれでも破棄される。
   - `400 INVALID_BODY`: バリデーション失敗。
 
 **POST /auth/refresh**
@@ -71,6 +74,7 @@ Response `201`: `{ "user": { ...basic profile... }, "tokens": { "access", "refre
   "tokens": { "access": "...", "refresh": "..." }
 }
 ```
+  - `tokens.access` は常に新しい JWT に更新される（残り寿命にかかわらず 15 分で失効）。クライアントはレスポンス直後にヘッダーを差し替える。
 - エラー:
   - `401 INVALID_REFRESH_TOKEN`: セッションが存在しない / 有効期限切れの場合。期限切れはサーバー側で削除してから返却する。
   - `400 INVALID_BODY`: フォーマット不正。
@@ -83,7 +87,68 @@ Response `201`: `{ "user": { ...basic profile... }, "tokens": { "access", "refre
   - セッションが見つかれば `Session` レコードを削除する。
   - セッションが存在しなくても成功扱い (冪等性維持)。
 - レスポンス: `204 No Content`。
+- 補足: アクセストークンは即時失効しないため、クライアント側で破棄する必要がある。
 - エラー: 入力バリデーション失敗のみ `400 INVALID_BODY`。それ以外は常に 204 を返し、存在しないセッションでも攻撃者が推測できないようにする。
+
+### 1.1.1 OAuth リモート認証
+**対応プロバイダ**: `fortytwo`, `google`。ルートパラメータ `:provider` は小文字。存在しないプロバイダは `404 OAUTH_PROVIDER_NOT_SUPPORTED`。
+
+| Method | Path | Auth | Description |
+| --- | --- | --- | --- |
+| GET | `/auth/oauth/:provider/url` | ❌ | 認可リクエスト URL と `state` / `codeChallenge` を払い出す。 |
+| POST | `/auth/oauth/:provider/callback` | ❌ | 認可コードと `state` を検証し、JWT + refresh を返す。 |
+
+**GET /auth/oauth/:provider/url**
+- クエリ: `redirectUri`（必須、我々のフロントエンドでホワイトリスト登録済みドメインのみ許可）。
+- サーバー処理:
+  1. `OAuthState` テーブルへ `provider`, `state` (UUID v4), `codeVerifier` (43 文字ランダム), `redirectUri`, `expiresAt = now + 10min` を保存。
+  2. PKCE 対応プロバイダでは `codeChallenge = base64url(sha256(codeVerifier))` を計算。42API は PKCE 非対応のため `codeChallenge` は `null` を返す。
+- レスポンス `200`:
+```json
+{
+  "authorizationUrl": "https://api.intra.42.fr/oauth/authorize?...",
+  "state": "uuid",
+  "codeChallenge": "abc123",
+  "expiresIn": 600
+}
+```
+- エラー: `400 INVALID_REDIRECT_URI`（ホワイトリスト外）、`500 OAUTH_STATE_PERSIST_FAILED`（DB 障害）。
+
+**POST /auth/oauth/:provider/callback**
+- リクエスト:
+```json
+{
+  "code": "auth_code",
+  "state": "uuid",
+  "redirectUri": "https://app.ft/api/oauth/callback"
+}
+```
+- バリデーション: `code` は必須 1〜512 文字、`state` は UUID v4、`redirectUri` は `GET /url` と同一である必要がある。
+- サーバー処理:
+  1. `OAuthState` から `state` を検索し、`expiresAt` 未経過か検証。ヒットしなければ `410 OAUTH_STATE_EXPIRED`。
+  2. プロバイダ固有のトークンエンドポイントへ `code`, `redirectUri`, `clientId/secret`, 必要に応じて `codeVerifier` を送信し、アクセストークンを取得。
+  3. プロバイダのユーザープロファイル API を呼び出して `providerUserId`, `email`, `displayName`, `avatarUrl` などを取得。
+  4. `OAuthAccount` を `provider + providerUserId` で検索し、存在しなければ `User` を `email` で探して紐付け or 新規作成。メール重複時は既存ユーザーに OAuthAccount を追加する。新規作成時のパスワードは `null` のまま。
+  5. `Session` と JWT を `/auth/login` と同じ形式で返す。
+- レスポンス `200`:
+```json
+{
+  "user": { "id": 1, "displayName": "Pong Fan", "status": "ONLINE" },
+  "tokens": { "access": "...", "refresh": "..." },
+  "mfaRequired": false,
+  "oauthProvider": "fortytwo"
+}
+```
+- エラー:
+  - `410 OAUTH_STATE_EXPIRED`: state 不整合 or TTL 超過。
+  - `400 INVALID_BODY`: code/state/redirectUri の形式不正。
+  - `502 OAUTH_TOKEN_EXCHANGE_FAILED`: プロバイダからトークン取得に失敗。
+  - `502 OAUTH_PROFILE_FETCH_FAILED`: プロファイル API から email 等が取得できなかった。
+  - `409 EMAIL_IN_USE_MFA_REQUIRED`: 同一メールのユーザーが `twoFAEnabled` の場合は MFA を完了してから OAuth リンクを許可する（別途 `/auth/mfa/challenge` を使用）。
+
+- 備考:
+  - 成功/失敗いずれでも `OAuthState` レコードは削除する。
+  - クライアントはリフレッシュトークンを安全に保存し、通常の `/auth/refresh` を利用する。
 
 ### 1.2 Two-Factor Auth
 | Method | Path | Auth | Description |
@@ -93,6 +158,38 @@ Response `201`: `{ "user": { ...basic profile... }, "tokens": { "access", "refre
 | DELETE | `/auth/mfa` | ✅ | Disable after re-auth. |
 | POST | `/auth/mfa/challenge` | ❌ | Verify OTP during login (when `mfaRequired`). Returns access + refresh tokens just like `/auth/login`. |
 | GET | `/auth/mfa/backup-codes` | ✅ | Fetch/regenerate hashed backup codes. |
+
+**GET /auth/mfa/setup**
+- 認証必須。`twoFAEnabled = false` のユーザーのみ利用可。既に有効な場合は `409 MFA_ALREADY_ENABLED`。
+- サーバーが新しい TOTP シークレット (Base32) を生成し、`twoFASecret` に保存したうえで `secret` と `otpauthUrl`（Google Authenticator 互換）を返す。
+
+**POST /auth/mfa/verify**
+- リクエスト: `{ "code": "123456" }`。
+- サーバーは `request.user.userId` の `twoFASecret` を参照し、`otplib` でトークンを検証。成功時に `twoFAEnabled = true` と `verifiedAt = now` を反映。
+- エラー: `400 INVALID_MFA_CODE`（タイムウィンドウ内で一致しない）、`400 MFA_SETUP_REQUIRED`（秘密鍵未生成）。
+
+**DELETE /auth/mfa**
+- リクエスト: `{ "code": "123456" }`。直近の OTP で本人確認してから `twoFAEnabled = false` と `twoFASecret = null` に戻す。
+- エラー: `409 MFA_NOT_ENABLED`、`400 INVALID_MFA_CODE`。
+
+**GET /auth/mfa/backup-codes**
+- 認証必須。クエリに `regenerate=true` を指定すると既存コードを全削除して 10 個の新しいコードを生成し、プレーンテキストを一度だけ返す。指定しない場合は残数 (`remaining`) のみ返し、平文は送らない。
+- 各コードは 10 文字の英数字 (`XXXX-XXXX` 形式など) で、DB には Argon2id でハッシュ化した `TwoFactorBackupCode` を保存する。再生成時は古いコードをすべて無効化する。
+- レスポンス例 (`regenerate=true`):
+```json
+{ "regenerated": true, "codes": ["ABCD-EFGH", "..."], "remaining": 10 }
+```
+- レスポンス例 (`regenerate` 未指定):
+```json
+{ "regenerated": false, "remaining": 7 }
+```
+- エラー: `409 MFA_NOT_ENABLED` (2FA が無効)、`400 INVALID_QUERY` (ブール以外)。
+
+**POST /auth/mfa/challenge**
+- リクエスト: `{ "challengeId": "uuid", "code": "123456", "backupCode": "ABCD-EFGH" }`。`code` か `backupCode` のどちらかは必須。ログイン時に 423 を受け取ったクライアントは、同じチャレンジ ID と OTP もしくはバックアップコードを提出する。
+- サーバーは `MfaChallenge` テーブルから該当レコードを探し、未使用かつ `expiresAt` 内であることを確認した後、OTP を検証する。成功時はチャレンジを削除し、通常のログインと同じ `user/tokens` 形式を返す。
+- バックアップコードを使う場合は `TwoFactorBackupCode` をハッシュ比較し、ヒットしたレコードの `usedAt` をセットして再利用不可にする。該当コードがすべて使い切られている場合は `409 MFA_BACKUP_CODES_EXHAUSTED`。
+- エラー: `404 MFA_CHALLENGE_NOT_FOUND`、`410 MFA_CHALLENGE_EXPIRED`、`400 INVALID_MFA_CODE`。
 
 ### 1.3 User Profile & Friends
 | Method | Path | Auth | Description |
@@ -128,10 +225,8 @@ Response `201`: `{ "user": { ...basic profile... }, "tokens": { "access", "refre
 ```
 
 **Mutual Friends 仕様**
-- `mutualFriends` は「リクエストしたユーザー (viewer) と結果ユーザーの両方が `status = "ACCEPTED"` な `Friendship` を持つユーザー数」を返す。
+- `mutualFriends` は「認証済みユーザー (JWT の `userId`) と結果ユーザーの両方が `status = "ACCEPTED"` な `Friendship` を持つユーザー数」を返す。
 - viewer 自身や対象ユーザーはカウントに含めない。重複フレンドシップは Prisma 上も一意制約済み。
-- **暫定措置**: JWT 認証が未実装なため、当面は `X-User-Id` ヘッダーの数値を viewer ID として扱う。ヘッダー未指定の場合は `mutualFriends = 0`。
-- 認証モジュール導入後は、ヘッダーではなく `request.user.id` を参照するだけで計算ロジックは据え置き予定。
 
 ## 2. Tournament & Game
 ### 2.1 Tournament CRUD
