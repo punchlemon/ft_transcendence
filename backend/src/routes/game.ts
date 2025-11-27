@@ -8,8 +8,8 @@ export default async function gameRoutes(fastify: FastifyInstance) {
   fastify.get('/ws/game', { websocket: true }, (connection, req) => {
     fastify.log.info('Client connected to game websocket')
     
-    // Handle connection object which might be the socket itself or a wrapper
-    const socket = connection.socket || connection
+    // Connection is the socket itself in @fastify/websocket v10+
+    const socket = connection
     
     if (!socket) {
       fastify.log.error('No socket found in connection')
@@ -37,7 +37,7 @@ export default async function gameRoutes(fastify: FastifyInstance) {
           gameEngine.addPlayer(socket as any, 'p1')
         }
       } catch (err) {
-        fastify.log.error('Failed to parse message', err)
+        fastify.log.error(err, 'Failed to parse message')
       }
     }
 
