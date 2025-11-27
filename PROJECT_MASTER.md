@@ -36,6 +36,9 @@
 - `frontend/src/pages/Profile.tsx` を実装し、ユーザー情報・戦績・対戦履歴・フレンドリストを表示する UI を作成。`useParams` で ID を取得し、モックデータを用いてローディング/エラー/成功状態を表現した。
 - `frontend/src/pages/Profile.test.tsx` を追加し、プロフィールのレンダリング、自身のプロフィールでの「編集」ボタン表示、他人のプロフィールでの非表示、エラーハンドリングをテストした。
 - `App.tsx` に `/profile/:id` ルートを追加し、ナビゲーションを有効化した。
+- `frontend/src/pages/GameLobby.tsx` を実装し、Local/Remote/AI モード選択、Remote 時の Public/Private オプション、マッチング待機画面を作成した。
+- `frontend/src/pages/GameLobby.test.tsx` を追加し、モード選択による UI 変化、Start ボタンの活性制御、マッチング待機・キャンセル動作を検証した。
+- `App.tsx` に `/game/new` ルートとナビゲーションリンクを追加した。
 
 ### Epic A: インフラ・開発基盤
 | 状態 | タスク | メモ |
@@ -68,7 +71,7 @@
 
 ## Next Actions
 - [x] **Profile Page 実装**: `/profile/:id` の UI とテストを作成。アバター、戦績、フレンドリストのモック表示を含む。
-- [ ] **Game Lobby 実装**: `/game/new` の UI とテストを作成。モード選択とマッチング待機画面。
+- [x] **Game Lobby 実装**: `/game/new` の UI とテストを作成。モード選択とマッチング待機画面。
 - [ ] **Game Room 実装**: `/game/:id` の UI とテストを作成。Canvas 描画とサイドパネルの基本構造。
 - [ ] **Chat Overlay 実装**: グローバルチャットドロワーの UI とテストを作成。
 
