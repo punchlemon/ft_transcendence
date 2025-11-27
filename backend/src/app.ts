@@ -6,6 +6,7 @@ import cors from '@fastify/cors'
 import dbPlugin from './plugins/db'
 import usersRoutes from './routes/users'
 import tournamentsRoutes from './routes/tournaments'
+import authRoutes from './routes/auth'
 
 if (!process.env.DATABASE_URL) {
   const sqlitePath = path.resolve(process.cwd(), 'prisma', 'dev.db')
@@ -23,6 +24,7 @@ export const buildServer = async () => {
   })
   await server.register(swaggerUi, { routePrefix: '/docs' })
   await server.register(dbPlugin)
+  await server.register(authRoutes)
   await server.register(usersRoutes)
   await server.register(tournamentsRoutes)
 

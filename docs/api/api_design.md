@@ -30,9 +30,34 @@
 ```
 Response `201`: `{ "user": { ...basic profile... }, "tokens": { "access", "refresh" } }`
 
+**Validation & Security Notes**
+- `email`: 必須。RFC 5322 互換の形式検証を行い、正規化（小文字化）して保存する。
+- `username` (＝ `login`): 3〜32 文字、英数字と `_`/`-` のみ許可。重複時は `409 USER_ALREADY_EXISTS`。
+- `displayName`: 3〜32 文字、絵文字・記号も許容するが DB 制約 (unique) を超えないよう Unicode 長をチェック。
+- `password`: 最低 8 文字、英字・数字を最低 1 文字ずつ含む。サーバー側で [Argon2id](https://github.com/ranisalt/node-argon2) によるハッシュ化を行い、プレーンテキストは保持しない。
+- 登録時には `status = "OFFLINE"`, `profileVisibility = "PUBLIC"`, `twoFAEnabled = false` をデフォルトセットする。
+- `Session` テーブルに `refresh` UUID と有効期限 (7 日) を作成し、レスポンスと同期させる。アクセストークンは JWT 実装まで暫定 UUID を返す。
+
 **POST /auth/login**
 - Request: `{ "email": string, "password": string }`
-- Response `200`: `{ "tokens": {...}, "mfaRequired": boolean }`
+  - `email` は登録時と同様に小文字へ正規化し、`username` ログインは将来の拡張で別パラメータを受け付ける予定。
+  - `password` は 128 文字以下。クライアント送信前のハッシュは禁止。
+- 成功レスポンス `200`:
+```json
+{
+  "user": { "id": 1, "displayName": "Pong Fan", "status": "ONLINE" },
+  "tokens": { "access": "...", "refresh": "..." },
+  "mfaRequired": false
+}
+```
+- 認証成功時は以下を実施:
+  1. Argon2id でハッシュ比較 (`passwordHash` が `null` の場合は 409 でプロフィール未初期化扱い)。
+  2. `Session` テーブルへ `refresh` UUID と有効期限 (既定 7 日) を保存。`access` も暫定 UUID とするが、JWT 実装後は署名済みトークンに置換。
+  3. ユーザーの `lastLoginAt` を更新し、`status` を `ONLINE` に遷移。
+- エラーレスポンス:
+  - `401 INVALID_CREDENTIALS`: メール/パスワード不一致。
+  - `423 MFA_REQUIRED`: `twoFAEnabled = true` の場合は `mfaRequired: true` とチャレンジ ID を返し、`/auth/mfa/challenge` に誘導。
+  - `400 INVALID_BODY`: バリデーション失敗。
 
 ### 1.2 Two-Factor Auth
 | Method | Path | Auth | Description |
@@ -75,6 +100,12 @@ Response `201`: `{ "user": { ...basic profile... }, "tokens": { "access", "refre
   "meta": { "page": 1, "limit": 20, "total": 75 }
 }
 ```
+
+**Mutual Friends 仕様**
+- `mutualFriends` は「リクエストしたユーザー (viewer) と結果ユーザーの両方が `status = "ACCEPTED"` な `Friendship` を持つユーザー数」を返す。
+- viewer 自身や対象ユーザーはカウントに含めない。重複フレンドシップは Prisma 上も一意制約済み。
+- **暫定措置**: JWT 認証が未実装なため、当面は `X-User-Id` ヘッダーの数値を viewer ID として扱う。ヘッダー未指定の場合は `mutualFriends = 0`。
+- 認証モジュール導入後は、ヘッダーではなく `request.user.id` を参照するだけで計算ロジックは据え置き予定。
 
 ## 2. Tournament & Game
 ### 2.1 Tournament CRUD

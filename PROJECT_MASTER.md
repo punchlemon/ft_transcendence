@@ -14,7 +14,9 @@
 - `backend/prisma/schema.prisma` を草案に沿って大幅拡張（SQLite 制約に合わせ enum / JSON は String 保存へ変更）し、Prisma Client を再生成。
 - `docs/api/api_design.md` に REST + WS エンドポイント、リクエスト/レスポンス例、通知フローを整理。
 - `docs/game/pong_logic.md` でサーバ権威の Pong ループ・WebSocket イベント・AI (1 Hz 視界制約) のロジックを設計。
-- `/api/users` 検索エンドポイントを Fastify + Prisma で実装し、ページング・フィルタ・除外 ID をサポートする統合テストを追加。
+- `/api/users` 検索エンドポイントを Fastify + Prisma で実装し、ページング・フィルタ・除外 ID をサポートする統合テストを追加。mutualFriends は `Friendship` から算出し、暫定的に `X-User-Id` ヘッダーを viewer ID として扱う仕様を確立。
+- `/auth/register` を実装し、Zod バリデーション・Argon2id ハッシュ化・UUID ベース仮トークンを返す Fastify ルートと統合テストを追加。API設計書に検証ルールを反映。
+- `/auth/login` を実装し、Argon2id 検証・`Session` テーブルへのリフレッシュトークン保存・ユーザーステータス更新・統合テストを追加。MFA フローは後続タスクとして `MFA_REQUIRED` エラーを返す。
 - `/api/tournaments` (POST/GET) を追加し、トーナメント作成・一覧 API と Prisma モデル/マイグレーション、統合テストを整備。
 - `/api/tournaments/:id` で参加者・試合詳細を返すエンドポイントと統合テストを追加し、UI 設計書のコンポーネント要件と整合させた。
 - HealthCheck ページに Vitest + React Testing Library でローディング/成功/失敗/導線を検証する UI テストを追加した。
@@ -49,7 +51,7 @@
 | 状態 | タスク | メモ |
 | :---: | --- | --- |
 | ✅ | `/api/health` 実装 & テスト | 疎通確認用 |
-| 🔄 | **認証・ユーザー管理機能** | 登録/ログイン/OAuth/2FA。API設計待ち。 |
-| 🔄 | **ユーザー検索 API** | `/api/users` 実装済み。残課題: 認証・mutualFriends算出。 |
+| 🔄 | **認証・ユーザー管理機能** | `/auth/register` `/auth/login` を実装。残課題: セッション失効/更新・2FA・OAuth。 |
+| 🔄 | **ユーザー検索 API** | `/api/users` 実装済み。mutualFriends 算出完了。残課題: 認証実装とトークン連携。 |
 | 🔄 | **トーナメント API** | `/api/tournaments` (POST/GET) 実装済み。残課題: 認証・参加者編集・マッチ生成ロジック。 |
 |
