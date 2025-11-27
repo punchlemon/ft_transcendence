@@ -29,9 +29,12 @@ describe('Tournaments API', () => {
   })
 
   beforeEach(async () => {
+    await server.prisma.session.deleteMany()
     await server.prisma.tournamentMatch.deleteMany()
     await server.prisma.tournamentParticipant.deleteMany()
     await server.prisma.tournament.deleteMany()
+    await server.prisma.twoFactorBackupCode.deleteMany()
+    await server.prisma.mfaChallenge.deleteMany()
     await server.prisma.user.deleteMany()
   })
 
