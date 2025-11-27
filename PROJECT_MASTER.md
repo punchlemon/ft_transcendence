@@ -25,7 +25,14 @@
 - `/auth/mfa/backup-codes` を追加し、Argon2id でハッシュ化した 10 個のワンタイムコードを再生成・残数照会できるようにした。`/auth/mfa/challenge` では TOTP かバックアップコードのどちらかで認証でき、使用済みコードは DB 上で不可逆的に無効化する。
 - `TwoFactorBackupCode` テーブル/リレーションを Prisma スキーマ＆マイグレーションに追加し、Vitest で 2FA + バックアップコードの統合テスト、既存 `/api/users` `/api/tournaments` のクリーンアップを調整して回帰を防止した。
 - OAuth 連携に向けて `OAuthAccount`/`OAuthState` モデルとマイグレーションを追加し、Fastify ルートで PKCE 付き認可 URL 発行とコールバック処理（プロバイダトークン交換、アカウントリンク、自動セッション発行）を実装。`auth.test.ts` で undici モックを用いた統合テストを整備し、`.env.example` に必要な `OAUTH_*` 変数を定義した。
+- フロントエンドに `/login` ページを追加し、メール+パスワードと OAuth (42/Google) の UI/テストを実装。`sessionStorage` へアクセストークンや `state` を保存し、バックエンドの JWT/OAuth ルートと接続した。
+- トーナメント UI コンポーネント (Alias/Entry/Progress) と `TournamentPage` の Vitest を実行し、想定ユースケース (登録・削除・重複検知・マッチ進行) が全てグリーンであることを確認した。新たにボタン活性制御（参加者 2 名未満時の生成禁止）と BYE → リセットフローの UI テストも追加し、画面上の警告/完了メッセージまで検証範囲を拡張した。
+- トーナメント管理ページに `localStorage` 永続化を実装し、ページリロード後も参加者/マッチキュー/進行状況を復元できるようにした。保存・復元の UI テストを追加して、シリアライズ形式の破損検知や info メッセージの一貫性を担保。React StrictMode で副作用が二重実行されてもデータが消えないようハイドレーションフラグを導入し、対応するテスト (StrictMode ダブルレンダー) も追加。
 - **方針変更**: 実装の手戻りを防ぐため、コードを書く前に `docs/` 配下の設計ドキュメント（DBスキーマ、API仕様、UI設計）を確定させる「設計ファースト」プロセスを導入。
+- フロントエンドに Zustand ベースの `authStore` を追加し、ログイン成功時のユーザースナップショット/トークン保存と、アプリ起動時の自動ハイドレーションを実現。`App` ナビゲーションからログアウトできるようにし、`Login` / `App` / `authStore` の各テストを整備した。
+- `/auth/2fa` (MFA チャレンジ) ページを追加し、TOTP/バックアップコード送信で `submitMfaChallenge` → `authStore` を更新するフローと UI テストを実装。`Login` から 2FA 画面への導線も整備した。
+- `/oauth/callback` ページを追加し、`completeOAuthCallback` API / OAuth コンテキストヘルパー (`lib/oauth.ts`) / 画面テストを実装。state/provider を検証し、成功時は `authStore` を更新、`mfaRequired` 時はチャレンジIDを保存して `/auth/2fa` に誘導するフローを確立した。
+- `frontend/src/lib/api.ts` に axios リクエストインターセプタを追加し、Zustand `authStore` または `sessionStorage` からアクセストークンを読み出して全 API 呼び出しへ Authorization ヘッダーを自動付与する仕組みを導入。テスト (`frontend/src/lib/api.test.ts`) でヘッダー注入とトークン欠如時のフォールバックを検証し、`authStore.ts` へ `readAccessTokenFromStorage` ヘルパーを公開した。
 
 ### Epic A: インフラ・開発基盤
 | 状態 | タスク | メモ |
@@ -43,7 +50,7 @@
 | :---: | --- | --- |
 | ✅ | **DBスキーマ設計** | `docs/schema/prisma_draft.md` 作成済み。User, Game, Friend 等のリレーション定義と未決事項を明文化。 |
 | ✅ | **APIインターフェース設計** | `docs/api/api_design.md` 作成済み。エンドポイント、Req/Res 型、通知ポリシーを定義。 |
-| 🔄 | **UIコンポーネント設計** | `docs/ui/ui_design.md` にサイトマップ / Layout / Auth / Profile / Game / Chat を追記済み。今後の画面詳細・テスト観点を継続精緻化。 |
+| 🔄 | **UIコンポーネント設計** | `docs/ui/ui_design.md` にサイトマップ / Layout / Auth / Profile / Game / Chat を追記済み。Auth セクションへ `authStore` とセッション再開フローも追加し、画面詳細・テスト観点を継続精緻化。 |
 | ✅ | **ゲームロジック設計** | `docs/game/pong_logic.md` 作成済み。ステート管理、WebSocket 通信、AI 1Hz 視界制約を設計。 |
 
 ### Epic C: アプリ機能実装 (Implementation Phase)
@@ -52,7 +59,7 @@
 | 状態 | タスク | メモ |
 | :---: | --- | --- |
 | ✅ | `/api/health` 実装 & テスト | 疎通確認用 |
-| 🔄 | **認証・ユーザー管理機能** | `/auth/register` `/auth/login` `/auth/refresh` `/auth/logout` に加え、`/auth/mfa/setup|verify|challenge|delete|backup-codes` と OAuth 認可 URL/コールバックを実装し JWT + TOTP + バックアップコード + OAuth 連携を網羅。残課題: OAuth プロバイダ追加時の設定ガイド整備、セッション一覧/失効 UI、フロントエンド OAuth フロー接続。 |
+| 🔄 | **認証・ユーザー管理機能** | `/auth/register` `/auth/login` `/auth/refresh` `/auth/logout` に加え、`/auth/mfa/setup|verify|challenge|delete|backup-codes` と OAuth 認可 URL/コールバック、およびフロントエンド `/login` `/auth/2fa` `/oauth/callback` ページ (Vitest 付き) を実装。Zustand `authStore` によるセッション復元と `App` ナビバーのログアウトボタンを追加済み。残課題: OAuth プロバイダ追加ガイド、セッション一覧/失効 UI。 |
 | 🔄 | **ユーザー検索 API** | `/api/users` 実装済み。mutualFriends 算出は JWT ビューア ID で動作。残課題: 認可ロール/ソート機能の拡張。 |
 | 🔄 | **トーナメント API** | `/api/tournaments` (POST/GET) 実装済み。残課題: 認証・参加者編集・マッチ生成ロジック。 |
 |

@@ -136,6 +136,7 @@ Response `201`: `{ "user": { ...basic profile... }, "tokens": { "access", "refre
   "user": { "id": 1, "displayName": "Pong Fan", "status": "ONLINE" },
   "tokens": { "access": "...", "refresh": "..." },
   "mfaRequired": false,
+  "challengeId": null,
   "oauthProvider": "fortytwo"
 }
 ```
@@ -149,6 +150,7 @@ Response `201`: `{ "user": { ...basic profile... }, "tokens": { "access", "refre
 - 備考:
   - 成功/失敗いずれでも `OAuthState` レコードは削除する。
   - クライアントはリフレッシュトークンを安全に保存し、通常の `/auth/refresh` を利用する。
+  - ユーザーに 2FA が有効な場合は `mfaRequired: true` と `challengeId` を返し、`tokens` は `null`。クライアントは `/auth/2fa` へ誘導し、チャレンジ完了後に JWT を取得する。
 
 ### 1.2 Two-Factor Auth
 | Method | Path | Auth | Description |

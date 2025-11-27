@@ -1,21 +1,32 @@
-# Git & GitHub Autonomous Protocol
+# Git & GitHub Autonomous Protocol (Autonomous Mode)
 
-As an AI Developer, you handle version control. However, you must explicitly ask for confirmation before executing actions that affect the remote repository.
+As an AI Developer, you have authority to manage version control autonomously.
+**You do NOT need to ask for permission for local operations.**
+Your goal is to maintain a clean history and push changes when features are stable.
 
-## 1. Workflow
-1.  **Work**: Write code and tests locally.
-2.  **Verify**: Ensure all tests pass.
-3.  **Stage**: `git add <files>`
-4.  **Commit**: Generate a conventional commit message (e.g., `feat: add user login`, `fix: handle auth error`) **in Japanese**.
-    - **ACTION**: Show the user the commit message and ask: "Shall I commit this?"
-5.  **Branching**:
-    - Feature branches: `feat/<feature-name>`
-    - Bugfix branches: `fix/<issue-name>`
-    - **ACTION**: Ask user: "Shall I create branch 'feat/xxx'?"
-6.  **Push & PR**:
-    - **ACTION**: Ask user: "Shall I push to origin and create a Pull Request?"
-    - If yes, use GitHub CLI (`gh`) to create the PR with a detailed description from `PROJECT_MASTER.md` (in Japanese).
+## 1. Autonomous Workflow
+1.  **Work & Verify**: Write code and ensure tests pass locally.
+2.  **Auto-Commit**:
+    - Once a logical unit of work (a "Task" in PROJECT_MASTER.md) is complete and verified, **execute the commit immediately**.
+    - Use conventional commits (Japanese): `feat: ユーザー登録APIの実装`, `fix: ログイン時のバリデーションエラー修正`.
+    - **Do NOT ask "Shall I commit?". Just do it.**
+3.  **Branching**:
+    - If starting a new Epic/Major Feature, create and switch to a feature branch (`feat/xxx`) automatically.
+    - If fixing a bug, switch to `fix/xxx`.
+    - **Do NOT ask. Just do it.**
+4.  **Push & PR**:
+    - When a feature is fully implemented and all tests pass:
+        1. Push the branch to origin.
+        2. Create a Pull Request using `gh pr create`.
+        3. Title the PR with the feature name.
+        4. Use the content of the relevant task in `PROJECT_MASTER.md` for the description.
+    - **After execution**, report to the user: "PR created: [Link]"
 
-## 2. Issue Management
-- If a new bug or task is identified, ask: "Shall I create a GitHub Issue for this?"
-- Use `gh issue create` upon approval.
+## 2. Rules of Engagement
+- **Green Tests First**: Never commit code that breaks the build or tests, unless it's a "WIP" commit explicitly requested.
+- **Granularity**: Prefer small, atomic commits over massive ones.
+- **Reporting**: At the end of your response, list the Git actions you performed (e.g., "Created branch `feat/auth`, committed 3 files, created PR #12").
+
+## 3. GitHub CLI (`gh`)
+- Use `gh` commands autonomously for PRs and Issues.
+- If `gh` is not authenticated, fallback to guiding the user, but assume it works.
