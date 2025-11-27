@@ -19,6 +19,7 @@
 - `/api/tournaments/:id` で参加者・試合詳細を返すエンドポイントと統合テストを追加し、UI 設計書のコンポーネント要件と整合させた。
 - HealthCheck ページに Vitest + React Testing Library でローディング/成功/失敗/導線を検証する UI テストを追加した。
 - Tournament ページの `TournamentAliasPanel` / `TournamentEntryPanel` / `TournamentProgressPanel` に対する React Testing Library + Vitest の単体テストを追加し、フォーム/一覧/進行カードの各状態を自動検証できるようにした。
+- GitHub Actions の backend ジョブに Prisma マイグレーション実行と SQLite `DATABASE_URL=file:./prisma/dev.db` 設定を追加し、CI でもテスト用テーブルが確実に生成されるようにした。
 - **方針変更**: 実装の手戻りを防ぐため、コードを書く前に `docs/` 配下の設計ドキュメント（DBスキーマ、API仕様、UI設計）を確定させる「設計ファースト」プロセスを導入。
 
 ## エピックとタスク
