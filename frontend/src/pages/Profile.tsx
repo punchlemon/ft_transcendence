@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { useParams } from 'react-router-dom'
 import useAuthStore from '../stores/authStore'
-import { fetchUserProfile } from '../lib/api'
+import { fetchUserProfile, fetchUserMatches, fetchUserFriends } from '../lib/api'
 
 // Mock types
 interface UserProfile {
@@ -57,24 +57,28 @@ const ProfilePage = () => {
       try {
         if (!id) throw new Error('User ID is required')
 
-        const data = await fetchUserProfile(id)
+        const [profileData, matchesData, friendsData] = await Promise.all([
+          fetchUserProfile(id),
+          fetchUserMatches(id),
+          fetchUserFriends(id)
+        ])
 
         setProfile({
-          id: String(data.id),
-          displayName: data.displayName,
-          tag: `#${data.login}`,
-          avatarUrl: data.avatarUrl || 'https://via.placeholder.com/150',
-          status: (data.status?.toLowerCase() as 'online' | 'offline' | 'in-game') || 'offline',
-          bio: data.bio || 'No bio available',
+          id: String(profileData.id),
+          displayName: profileData.displayName,
+          tag: `#${profileData.login}`,
+          avatarUrl: profileData.avatarUrl || 'https://via.placeholder.com/150',
+          status: (profileData.status?.toLowerCase() as 'online' | 'offline' | 'in-game') || 'offline',
+          bio: profileData.bio || 'No bio available',
         })
 
-        if (data.stats) {
-          const totalMatches = data.stats.matchesPlayed
-          const winRate = totalMatches > 0 ? Math.round((data.stats.wins / totalMatches) * 100) : 0
+        if (profileData.stats) {
+          const totalMatches = profileData.stats.matchesPlayed
+          const winRate = totalMatches > 0 ? Math.round((profileData.stats.wins / totalMatches) * 100) : 0
 
           setStats({
-            wins: data.stats.wins,
-            losses: data.stats.losses,
+            wins: profileData.stats.wins,
+            losses: profileData.stats.losses,
             totalMatches: totalMatches,
             winRate: winRate,
             mvpCount: 0, // Not available in API yet
@@ -84,9 +88,25 @@ const ProfilePage = () => {
           setStats(null)
         }
 
-        // TODO: Fetch match history and friends list from API
-        setHistory([])
-        setFriends([])
+        setHistory(
+          matchesData.data.map((m) => ({
+            id: String(m.id),
+            opponentName: m.opponent.displayName,
+            result: m.result.toLowerCase() as 'win' | 'loss',
+            score: m.score,
+            date: new Date(m.date).toLocaleDateString(),
+            mode: m.mode.toLowerCase() as 'standard' | 'party',
+          }))
+        )
+
+        setFriends(
+          friendsData.data.map((f) => ({
+            id: String(f.id),
+            displayName: f.displayName,
+            status: (f.status.toLowerCase() as 'online' | 'offline' | 'in-game') || 'offline',
+            avatarUrl: f.avatarUrl || 'https://via.placeholder.com/40',
+          }))
+        )
       } catch (err) {
         console.error(err)
         setError('Failed to load profile')

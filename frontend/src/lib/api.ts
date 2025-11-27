@@ -140,6 +140,47 @@ export const fetchUserProfile = async (userId: string) => {
   return response.data as UserProfileResponse
 }
 
+export type MatchHistoryResponse = {
+  data: Array<{
+    id: number
+    opponent: {
+      id: number
+      displayName: string
+      avatarUrl: string | null
+    }
+    result: 'WIN' | 'LOSS' | 'UNKNOWN'
+    score: string
+    date: string
+    mode: string
+  }>
+  meta: {
+    page: number
+    limit: number
+    total: number
+  }
+}
+
+export const fetchUserMatches = async (userId: string, page = 1, limit = 20) => {
+  const response = await apiClient.get(`/users/${userId}/matches`, {
+    params: { page, limit }
+  })
+  return response.data as MatchHistoryResponse
+}
+
+export type FriendResponse = {
+  data: Array<{
+    id: number
+    displayName: string
+    status: string
+    avatarUrl: string | null
+  }>
+}
+
+export const fetchUserFriends = async (userId: string) => {
+  const response = await apiClient.get(`/users/${userId}/friends`)
+  return response.data as FriendResponse
+}
+
 /*
 解説:
 
