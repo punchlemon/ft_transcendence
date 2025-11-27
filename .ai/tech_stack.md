@@ -9,6 +9,7 @@
 - **データベース**: SQLite3 (ローカルファイル、`/app/prisma/dev.db`)
 - **API設計**: REST (JSON)、Swagger(OpenAPI 3)で仕様公開
 - **バリデーション**: Fastify組み込みのJSON Schema (必要に応じて Zod 併用)
+- **認証/MFA**: Argon2id + JWT (`@fastify/jwt`) に加えて、TOTP 生成/検証は `otplib` を使用して 2FA を実装する。
 
 ## Frontend
 - **ビルドツール**: Vite 5系

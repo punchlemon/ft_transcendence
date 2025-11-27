@@ -17,14 +17,15 @@
 - `/api/users` 検索エンドポイントを Fastify + Prisma で実装し、ページング・フィルタ・除外 ID をサポートする統合テストを追加。mutualFriends は `Friendship` から算出し、暫定的に `X-User-Id` ヘッダーを viewer ID として扱う仕様を確立。
 - `/auth/register` を実装し、Zod バリデーション・Argon2id ハッシュ化・UUID ベース仮トークンを返す Fastify ルートと統合テストを追加。API設計書に検証ルールを反映。
 - `/auth/login` を実装し、Argon2id 検証・`Session` テーブルへのリフレッシュトークン保存・ユーザーステータス更新・統合テストを追加。MFA フローは後続タスクとして `MFA_REQUIRED` エラーを返す。
+- `/auth/refresh` と `/auth/logout` を実装し、セッションローテーション/失効の仕様を API 設計と統合テストへ反映。リフレッシュトークンの UUID プレースホルダーでも将来の JWT へ移行できる構造を整えた。
+- `@fastify/jwt` ベースのアクセストークンを導入し、`issueAccessToken` プラグインで `userId`/`sessionId` を含む 15 分 TTL の JWT を発行。`/api/users` は Authorization ヘッダー必須に変更し、mutual friends 算出も JWT 由来の viewer ID へ移行した。
 - `/api/tournaments` (POST/GET) を追加し、トーナメント作成・一覧 API と Prisma モデル/マイグレーション、統合テストを整備。
-- `/api/tournaments/:id` で参加者・試合詳細を返すエンドポイントと統合テストを追加し、UI 設計書のコンポーネント要件と整合させた。
-- HealthCheck ページに Vitest + React Testing Library でローディング/成功/失敗/導線を検証する UI テストを追加した。
-- Tournament ページの `TournamentAliasPanel` / `TournamentEntryPanel` / `TournamentProgressPanel` に対する React Testing Library + Vitest の単体テストを追加し、フォーム/一覧/進行カードの各状態を自動検証できるようにした。
-- GitHub Actions の backend ジョブに Prisma マイグレーション実行と SQLite `DATABASE_URL=file:./prisma/dev.db` 設定を追加し、CI でもテスト用テーブルが確実に生成されるようにした。
+- `MfaChallenge` テーブルと `otplib` を導入し、 `/auth/mfa/setup` `/auth/mfa/verify` `/auth/mfa`(DELETE) `/auth/mfa/challenge` を Fastify ルートとして実装。TOTP による 2FA を本番ワークフローへ組み込み、統合テストでチャレンジ→トークン発行まで網羅した。
+- `/auth/login` は 2FA 有効時に 423 + `challengeId` を返す JWT ベースのチャレンジ・レスポンス方式へ更新。API 設計書と Prisma スキーマ草案もアップデート済み。
+- `/auth/mfa/backup-codes` を追加し、Argon2id でハッシュ化した 10 個のワンタイムコードを再生成・残数照会できるようにした。`/auth/mfa/challenge` では TOTP かバックアップコードのどちらかで認証でき、使用済みコードは DB 上で不可逆的に無効化する。
+- `TwoFactorBackupCode` テーブル/リレーションを Prisma スキーマ＆マイグレーションに追加し、Vitest で 2FA + バックアップコードの統合テスト、既存 `/api/users` `/api/tournaments` のクリーンアップを調整して回帰を防止した。
+- OAuth 連携に向けて `OAuthAccount`/`OAuthState` モデルとマイグレーションを追加し、Fastify ルートで PKCE 付き認可 URL 発行とコールバック処理（プロバイダトークン交換、アカウントリンク、自動セッション発行）を実装。`auth.test.ts` で undici モックを用いた統合テストを整備し、`.env.example` に必要な `OAUTH_*` 変数を定義した。
 - **方針変更**: 実装の手戻りを防ぐため、コードを書く前に `docs/` 配下の設計ドキュメント（DBスキーマ、API仕様、UI設計）を確定させる「設計ファースト」プロセスを導入。
-
-## エピックとタスク
 
 ### Epic A: インフラ・開発基盤
 | 状態 | タスク | メモ |
@@ -51,7 +52,7 @@
 | 状態 | タスク | メモ |
 | :---: | --- | --- |
 | ✅ | `/api/health` 実装 & テスト | 疎通確認用 |
-| 🔄 | **認証・ユーザー管理機能** | `/auth/register` `/auth/login` を実装。残課題: セッション失効/更新・2FA・OAuth。 |
-| 🔄 | **ユーザー検索 API** | `/api/users` 実装済み。mutualFriends 算出完了。残課題: 認証実装とトークン連携。 |
+| 🔄 | **認証・ユーザー管理機能** | `/auth/register` `/auth/login` `/auth/refresh` `/auth/logout` に加え、`/auth/mfa/setup|verify|challenge|delete|backup-codes` と OAuth 認可 URL/コールバックを実装し JWT + TOTP + バックアップコード + OAuth 連携を網羅。残課題: OAuth プロバイダ追加時の設定ガイド整備、セッション一覧/失効 UI、フロントエンド OAuth フロー接続。 |
+| 🔄 | **ユーザー検索 API** | `/api/users` 実装済み。mutualFriends 算出は JWT ビューア ID で動作。残課題: 認可ロール/ソート機能の拡張。 |
 | 🔄 | **トーナメント API** | `/api/tournaments` (POST/GET) 実装済み。残課題: 認証・参加者編集・マッチ生成ロジック。 |
 |

@@ -23,6 +23,7 @@
 - `src/`: TypeScript ソースコード。
 	- `app.ts`: Fastify のエントリポイント。プラグイン登録と `/api/health` を提供。
 	- `plugins/db.ts`: PrismaClient を初期化し Fastify にデコレートするプラグイン。
+	- `plugins/jwt.ts`: `@fastify/jwt` を登録し、JWT 発行 (`issueAccessToken`) と `authenticate` デコレーターを提供する。
 - `dist/`: `tsc` ビルド成果物。コンテナ起動時に参照する。
 
 ## frontend/

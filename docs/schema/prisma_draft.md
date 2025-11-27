@@ -72,10 +72,24 @@ model OAuthAccount {
   @@unique([provider, providerUserId])
 }
 
+model OAuthState {
+  id           Int      @id @default(autoincrement())
+  provider     OAuthProvider
+  state        String   @unique
+  codeVerifier String?
+  redirectUri  String
+  createdAt    DateTime @default(now())
+  expiresAt    DateTime
+
+  @@index([provider, expiresAt])
+}
+
 enum OAuthProvider {
   GOOGLE
   FORTYTWO
 }
+
+- `OAuthState` は OAuth 認証開始時に生成した `state` と PKCE `codeVerifier` を 10 分間保持するワークテーブル。コールバック成功・失敗にかかわらず必ず削除し、`expiresAt < now` の行は cron かログイン処理でガーベジコレクトする。
 
 model UserSession {
   id           Int      @id @default(autoincrement())
@@ -102,10 +116,28 @@ model TwoFactorBackupCode {
   id        Int      @id @default(autoincrement())
   user      User     @relation(fields: [userId], references: [id])
   userId    Int
-  codeHash  String   // store hashed backup codes
+  codeHash  String   // Argon2id hash of the plaintext backup code
   usedAt    DateTime?
   createdAt DateTime @default(now())
+
+  @@unique([userId, codeHash])
+  @@index([userId, usedAt])
 }
+
+model MfaChallenge {
+  id        Int      @id @default(autoincrement())
+  token     String   @unique
+  user      User     @relation(fields: [userId], references: [id])
+  userId    Int
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+  consumedAt DateTime?
+
+  @@index([userId])
+}
+
+- バックアップコードを再生成するたびに、該当ユーザーの `TwoFactorBackupCode` レコードをすべて削除して 10 件の新しい行を挿入する。残数の計算は `usedAt IS NULL` をカウントするだけでよいため、`@@index([userId, usedAt])` が効く。
+
 ```
 
 ### 3.2 Profile & Social Graph

@@ -4,6 +4,7 @@ import swagger from '@fastify/swagger'
 import swaggerUi from '@fastify/swagger-ui'
 import cors from '@fastify/cors'
 import dbPlugin from './plugins/db'
+import jwtPlugin from './plugins/jwt'
 import usersRoutes from './routes/users'
 import tournamentsRoutes from './routes/tournaments'
 import authRoutes from './routes/auth'
@@ -24,6 +25,7 @@ export const buildServer = async () => {
   })
   await server.register(swaggerUi, { routePrefix: '/docs' })
   await server.register(dbPlugin)
+  await server.register(jwtPlugin)
   await server.register(authRoutes)
   await server.register(usersRoutes)
   await server.register(tournamentsRoutes)

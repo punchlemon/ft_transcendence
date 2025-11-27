@@ -1,6 +1,13 @@
+/**
+ * なぜテストが必要か:
+ * - `/api/users` の JWT 認証必須化により、Authorization ヘッダーの有無で 401 が返ることを保証する。
+ * - ビューア ID を JWT ペイロードから導き mutualFriends を算出するロジックを検証する。
+ * - ページング/フィルタ/除外など既存仕様がトークン導入後も回帰しないことを担保する。
+ */
 import { describe, it, expect, beforeAll, afterAll, beforeEach } from 'vitest'
 import type { FastifyInstance } from 'fastify'
 import type { PrismaClient } from '@prisma/client'
+import { randomUUID } from 'node:crypto'
 import { buildServer } from '../app'
 
 const createUser = (prisma: PrismaClient, data: {
@@ -29,6 +36,20 @@ const connectFriends = async (prisma: PrismaClient, userAId: number, userBId: nu
   })
 }
 
+const createSessionToken = async (server: FastifyInstance, prisma: PrismaClient, userId: number) => {
+  const session = await prisma.session.create({
+    data: {
+      userId,
+      token: randomUUID(),
+      expiresAt: new Date(Date.now() + 1000 * 60 * 60)
+    }
+  })
+
+  return server.issueAccessToken({ userId, sessionId: session.id })
+}
+
+const authHeader = (token: string) => ({ authorization: `Bearer ${token}` })
+
 describe('GET /api/users', () => {
   let server: FastifyInstance
   let prisma: PrismaClient
@@ -43,16 +64,25 @@ describe('GET /api/users', () => {
   })
 
   beforeEach(async () => {
+    await prisma.session.deleteMany()
     await prisma.friendship.deleteMany()
+    await prisma.twoFactorBackupCode.deleteMany()
+    await prisma.mfaChallenge.deleteMany()
     await prisma.user.deleteMany()
   })
 
   it('returns paginated users ordered by displayName', async () => {
-    await createUser(prisma, { login: 'carol', email: 'carol@example.com', displayName: 'Carol', status: 'OFFLINE' })
-    await createUser(prisma, { login: 'alice', email: 'alice@example.com', displayName: 'Alice', status: 'ONLINE' })
+    const carol = await createUser(prisma, { login: 'carol', email: 'carol@example.com', displayName: 'Carol', status: 'OFFLINE' })
+    const alice = await createUser(prisma, { login: 'alice', email: 'alice@example.com', displayName: 'Alice', status: 'ONLINE' })
     await createUser(prisma, { login: 'bob', email: 'bob@example.com', displayName: 'Bob', status: 'IN_MATCH' })
+    const token = await createSessionToken(server, prisma, carol.id)
 
-    const response = await server.inject({ method: 'GET', url: '/api/users', query: { page: '1', limit: '2' } })
+    const response = await server.inject({
+      method: 'GET',
+      url: '/api/users',
+      query: { page: '1', limit: '2' },
+      headers: authHeader(token)
+    })
 
     expect(response.statusCode).toBe(200)
     const body = response.json<{ data: Array<{ displayName: string }>; meta: { total: number; page: number; limit: number } }>()
@@ -62,10 +92,16 @@ describe('GET /api/users', () => {
   })
 
   it('filters by query and status', async () => {
-    await createUser(prisma, { login: 'carol', email: 'carol@example.com', displayName: 'Carol', status: 'AWAY' })
+    const carol = await createUser(prisma, { login: 'carol', email: 'carol@example.com', displayName: 'Carol', status: 'AWAY' })
     await createUser(prisma, { login: 'dave', email: 'dave@example.com', displayName: 'Dave', status: 'ONLINE' })
+    const token = await createSessionToken(server, prisma, carol.id)
 
-    const response = await server.inject({ method: 'GET', url: '/api/users', query: { q: 'car', status: 'AWAY' } })
+    const response = await server.inject({
+      method: 'GET',
+      url: '/api/users',
+      query: { q: 'car', status: 'AWAY' },
+      headers: authHeader(token)
+    })
 
     expect(response.statusCode).toBe(200)
     const body = response.json<{ data: Array<{ displayName: string }> }>()
@@ -78,6 +114,7 @@ describe('GET /api/users', () => {
     const alice = await createUser(prisma, { login: 'alice', email: 'alice@example.com', displayName: 'Alice', status: 'ONLINE' })
     await createUser(prisma, { login: 'bob', email: 'bob@example.com', displayName: 'Bob', status: 'ONLINE' })
     await createUser(prisma, { login: 'carol', email: 'carol@example.com', displayName: 'Carol', status: 'ONLINE' })
+    const token = await createSessionToken(server, prisma, alice.id)
 
     const response = await server.inject({
       method: 'GET',
@@ -85,7 +122,8 @@ describe('GET /api/users', () => {
       query: {
         excludeFriendIds: `${alice.id}`,
         limit: '200'
-      }
+      },
+      headers: authHeader(token)
     })
 
     expect(response.statusCode).toBe(200)
@@ -107,11 +145,12 @@ describe('GET /api/users', () => {
     await connectFriends(prisma, target.id, ally.id)
     await connectFriends(prisma, target.id, buddy.id)
     await connectFriends(prisma, target.id, stranger.id)
+    const token = await createSessionToken(server, prisma, viewer.id)
 
     const response = await server.inject({
       method: 'GET',
       url: '/api/users',
-      headers: { 'x-user-id': viewer.id.toString() },
+      headers: authHeader(token),
       query: { q: 'Target' }
     })
 
@@ -120,8 +159,23 @@ describe('GET /api/users', () => {
     expect(body.data[0]).toMatchObject({ id: target.id, mutualFriends: 2 })
   })
 
+  it('rejects requests without Authorization header', async () => {
+    const response = await server.inject({ method: 'GET', url: '/api/users' })
+
+    expect(response.statusCode).toBe(401)
+    const body = response.json<{ error: { code: string } }>()
+    expect(body.error.code).toBe('UNAUTHORIZED')
+  })
+
   it('returns 400 for invalid query params', async () => {
-    const response = await server.inject({ method: 'GET', url: '/api/users', query: { limit: '0' } })
+    const viewer = await createUser(prisma, { login: 'viewer', email: 'viewer@example.com', displayName: 'Viewer', status: 'ONLINE' })
+    const token = await createSessionToken(server, prisma, viewer.id)
+    const response = await server.inject({
+      method: 'GET',
+      url: '/api/users',
+      query: { limit: '0' },
+      headers: authHeader(token)
+    })
 
     expect(response.statusCode).toBe(400)
     const body = response.json<{ error: { code: string } }>()
@@ -131,7 +185,7 @@ describe('GET /api/users', () => {
 
 /*
 解説:
-1) connectFriends ヘルパーを導入し、双方向フレンドシップの生成と `status = ACCEPTED` 固定を簡潔にした。
-2) beforeEach で `friendship` テーブルも掃除することで、テスト間の外部キー汚染を防ぐ。
-3) 新規テストでは `X-User-Id` を用いた viewer コンテキストで相互友人数が期待通り 2 となることを検証し、API 仕様の暫定要件を自動化した。
+1) connectFriends ヘルパーでフレンド関係生成を簡潔化し、JWT 導入後も再利用できる形にした。
+2) セッション・フレンド・ユーザーを毎テスト初期化し、Authorization ヘッダー有無や viewer 計算の副作用を排除している。
+3) JWT で発行したトークンを用いた認可・相互友人数ロジック・既存パラメータ制約の回帰を網羅的に検証している。
 */

@@ -28,20 +28,8 @@ const parseExcludeIds = (excludeFriendIds?: string) => {
     .filter((id) => Number.isInteger(id) && id > 0)
 }
 
-const parseViewerId = (rawHeader?: string | string[]) => {
-  const value = Array.isArray(rawHeader) ? rawHeader[0] : rawHeader
-  if (!value) return undefined
-
-  const parsed = Number(value)
-  if (!Number.isInteger(parsed) || parsed <= 0) {
-    return undefined
-  }
-
-  return parsed
-}
-
 const usersRoutes: FastifyPluginAsync = async (fastify) => {
-  fastify.get('/api/users', async (request, reply) => {
+  fastify.get('/api/users', { preHandler: fastify.authenticate }, async (request, reply) => {
     const parsed = searchQuerySchema.safeParse(request.query)
 
     if (!parsed.success) {
@@ -60,7 +48,7 @@ const usersRoutes: FastifyPluginAsync = async (fastify) => {
     const limit = Math.min(rawLimit, 50)
     const excludeIds = parseExcludeIds(excludeFriendIds)
     const skip = (page - 1) * limit
-    const viewerId = parseViewerId(request.headers['x-user-id'])
+    const viewerId = request.user?.userId
 
     const where: Prisma.UserWhereInput = {
       deletedAt: null
@@ -182,7 +170,7 @@ export default fp(usersRoutes)
 
 /*
 解説:
-1) `parseViewerId` で `X-User-Id` ヘッダーを数値化し、暫定的に viewer 文脈を確立して mutualFriends を算出できるようにした。
+1) Fastify の `authenticate` をプリハンドラーに差し込み、JWT の `userId` を viewer ID として安全に取得できるようにした。
 2) viewer フレンド集合を一度だけ取得し、検索結果ユーザーに紐づく `Friendship` をまとめて読み込むことで N+1 クエリを避けた。
 3) reduce で候補ごとの友人数をマップ化し、レスポンスでは既存フィールドに `mutualFriends` を安全に付与している。
 */
