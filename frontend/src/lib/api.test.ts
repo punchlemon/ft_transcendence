@@ -4,17 +4,25 @@
  * - Zustand ストアや sessionStorage の状態に依存するロジックが意図通りに動くかを自動テストで担保する。
  */
 import { describe, it, expect, beforeEach } from 'vitest'
-import type { InternalAxiosRequestConfig } from 'axios'
+import { AxiosHeaders, type InternalAxiosRequestConfig } from 'axios'
 import { attachAuthorizationHeader } from './api'
 import useAuthStore, { resetAuthStoreForTesting } from '../stores/authStore'
 
-type TestConfig = InternalAxiosRequestConfig & { headers: Record<string, string> }
-
-const createConfig = (): TestConfig => ({
-  headers: {},
+const createConfig = (): InternalAxiosRequestConfig => ({
+  headers: new AxiosHeaders(),
   method: 'get',
   url: '/health'
 })
+
+const readAuthorizationHeader = (config: InternalAxiosRequestConfig) => {
+  if (!config.headers) {
+    return undefined
+  }
+  if (config.headers instanceof AxiosHeaders) {
+    return config.headers.get('Authorization') ?? undefined
+  }
+  return (config.headers as Record<string, string | undefined>).Authorization
+}
 
 describe('attachAuthorizationHeader', () => {
   beforeEach(() => {
@@ -27,7 +35,7 @@ describe('attachAuthorizationHeader', () => {
 
     const updated = attachAuthorizationHeader(createConfig())
 
-    expect(updated.headers.Authorization).toBe('Bearer store-token')
+    expect(readAuthorizationHeader(updated)).toBe('Bearer store-token')
   })
 
   it('falls back to sessionStorage when store is empty', () => {
@@ -35,12 +43,12 @@ describe('attachAuthorizationHeader', () => {
 
     const updated = attachAuthorizationHeader(createConfig())
 
-    expect(updated.headers.Authorization).toBe('Bearer stored-token')
+    expect(readAuthorizationHeader(updated)).toBe('Bearer stored-token')
   })
 
   it('keeps headers untouched when token is missing', () => {
     const updated = attachAuthorizationHeader(createConfig())
 
-    expect(updated.headers.Authorization).toBeUndefined()
+    expect(readAuthorizationHeader(updated)).toBeUndefined()
   })
 })

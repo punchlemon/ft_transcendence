@@ -1,4 +1,4 @@
-import axios, { type InternalAxiosRequestConfig } from 'axios'
+import axios, { AxiosHeaders, type InternalAxiosRequestConfig } from 'axios'
 import useAuthStore, { readAccessTokenFromStorage } from '../stores/authStore'
 
 const rawBaseUrl = import.meta.env.VITE_API_BASE_URL?.trim()
@@ -20,8 +20,14 @@ export const attachAuthorizationHeader = (config: InternalAxiosRequestConfig) =>
   const storeToken = useAuthStore.getState().accessToken
   const token = storeToken ?? readAccessTokenFromStorage()
   if (token) {
-    config.headers = config.headers ?? {}
-    config.headers.Authorization = `Bearer ${token}`
+    if (!config.headers) {
+      config.headers = new AxiosHeaders()
+    }
+    if (config.headers instanceof AxiosHeaders) {
+      config.headers.set('Authorization', `Bearer ${token}`)
+    } else {
+      config.headers.Authorization = `Bearer ${token}`
+    }
   }
   return config
 }
