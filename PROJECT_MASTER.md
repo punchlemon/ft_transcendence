@@ -33,6 +33,9 @@
 - `/auth/2fa` (MFA チャレンジ) ページを追加し、TOTP/バックアップコード送信で `submitMfaChallenge` → `authStore` を更新するフローと UI テストを実装。`Login` から 2FA 画面への導線も整備した。
 - `/oauth/callback` ページを追加し、`completeOAuthCallback` API / OAuth コンテキストヘルパー (`lib/oauth.ts`) / 画面テストを実装。state/provider を検証し、成功時は `authStore` を更新、`mfaRequired` 時はチャレンジIDを保存して `/auth/2fa` に誘導するフローを確立した。
 - `frontend/src/lib/api.ts` に axios リクエストインターセプタを追加し、Zustand `authStore` または `sessionStorage` からアクセストークンを読み出して全 API 呼び出しへ Authorization ヘッダーを自動付与する仕組みを導入。テスト (`frontend/src/lib/api.test.ts`) でヘッダー注入とトークン欠如時のフォールバックを検証し、`authStore.ts` へ `readAccessTokenFromStorage` ヘルパーを公開した。
+- `frontend/src/pages/Profile.tsx` を実装し、ユーザー情報・戦績・対戦履歴・フレンドリストを表示する UI を作成。`useParams` で ID を取得し、モックデータを用いてローディング/エラー/成功状態を表現した。
+- `frontend/src/pages/Profile.test.tsx` を追加し、プロフィールのレンダリング、自身のプロフィールでの「編集」ボタン表示、他人のプロフィールでの非表示、エラーハンドリングをテストした。
+- `App.tsx` に `/profile/:id` ルートを追加し、ナビゲーションを有効化した。
 
 ### Epic A: インフラ・開発基盤
 | 状態 | タスク | メモ |
@@ -43,17 +46,17 @@
 | ✅ | CI (GitHub Actions) で lint/test | `ci.yml` 稼働中 |
 | 🔄 | 主要コードファイルの解説ブロック整備 | `frontend/src/main.tsx`, `pages/*` 等進行中。残りは都度対応 |
 
-### Epic B: 詳細設計 (Design Phase) 🚀 Current Focus
+### Epic B: 詳細設計 (Design Phase)
 *実装前にここを確定させることで、AIの実装精度を最大化する*
 
 | 状態 | タスク | メモ |
 | :---: | --- | --- |
 | ✅ | **DBスキーマ設計** | `docs/schema/prisma_draft.md` 作成済み。User, Game, Friend 等のリレーション定義と未決事項を明文化。 |
 | ✅ | **APIインターフェース設計** | `docs/api/api_design.md` 作成済み。エンドポイント、Req/Res 型、通知ポリシーを定義。 |
-| 🔄 | **UIコンポーネント設計** | `docs/ui/ui_design.md` にサイトマップ / Layout / Auth / Profile / Game / Chat を追記済み。Auth セクションへ `authStore` とセッション再開フローも追加し、画面詳細・テスト観点を継続精緻化。 |
+| ✅ | **UIコンポーネント設計** | `docs/ui/ui_design.md` にサイトマップ / Layout / Auth / Profile / Game / Chat を追記済み。Auth セクションへ `authStore` とセッション再開フローも追加し、画面詳細・テスト観点を継続精緻化。 |
 | ✅ | **ゲームロジック設計** | `docs/game/pong_logic.md` 作成済み。ステート管理、WebSocket 通信、AI 1Hz 視界制約を設計。 |
 
-### Epic C: アプリ機能実装 (Implementation Phase)
+### Epic C: アプリ機能実装 (Implementation Phase) 🚀 Current Focus
 *Epic B の設計承認後に着手*
 
 | 状態 | タスク | メモ |
@@ -62,4 +65,13 @@
 | 🔄 | **認証・ユーザー管理機能** | `/auth/register` `/auth/login` `/auth/refresh` `/auth/logout` に加え、`/auth/mfa/setup|verify|challenge|delete|backup-codes` と OAuth 認可 URL/コールバック、およびフロントエンド `/login` `/auth/2fa` `/oauth/callback` ページ (Vitest 付き) を実装。Zustand `authStore` によるセッション復元と `App` ナビバーのログアウトボタンを追加済み。残課題: OAuth プロバイダ追加ガイド、セッション一覧/失効 UI。 |
 | 🔄 | **ユーザー検索 API** | `/api/users` 実装済み。mutualFriends 算出は JWT ビューア ID で動作。残課題: 認可ロール/ソート機能の拡張。 |
 | 🔄 | **トーナメント API** | `/api/tournaments` (POST/GET) 実装済み。残課題: 認証・参加者編集・マッチ生成ロジック。 |
-|
+
+## Next Actions
+- [x] **Profile Page 実装**: `/profile/:id` の UI とテストを作成。アバター、戦績、フレンドリストのモック表示を含む。
+- [ ] **Game Lobby 実装**: `/game/new` の UI とテストを作成。モード選択とマッチング待機画面。
+- [ ] **Game Room 実装**: `/game/:id` の UI とテストを作成。Canvas 描画とサイドパネルの基本構造。
+- [ ] **Chat Overlay 実装**: グローバルチャットドロワーの UI とテストを作成。
+
+## Current Focus
+**Epic C: アプリ機能実装 (Implementation Phase)**
+*設計に基づき、各画面と機能を実装・テストする*|

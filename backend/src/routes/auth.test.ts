@@ -232,7 +232,10 @@ describe('POST /auth/refresh', () => {
       data: {
         userId: registered.user.id,
         token: expiredToken,
-        expiresAt: new Date(Date.now() - 1000)
+        expiresAt: new Date(Date.now() - 1000),
+        lastUsedAt: new Date(Date.now() - 1000),
+        ipAddress: '127.0.0.1',
+        userAgent: 'vitest'
       }
     })
 
@@ -279,6 +282,83 @@ describe('POST /auth/logout', () => {
     expect(response.statusCode).toBe(400)
     const body = response.json<{ error: { code: string } }>()
     expect(body.error.code).toBe('INVALID_BODY')
+  })
+})
+
+describe('GET /auth/sessions and DELETE /auth/sessions/:sessionId', () => {
+  it('lists every active session for the authenticated user', async () => {
+    await server.inject({ method: 'POST', url: '/auth/register', payload: basePayload })
+    const loginResponse = await server.inject({
+      method: 'POST',
+      url: '/auth/login',
+      payload: { email: basePayload.email, password: basePayload.password }
+    })
+
+    const loginBody = loginResponse.json<{ tokens: { access: string } }>()
+
+    const listResponse = await server.inject({
+      method: 'GET',
+      url: '/auth/sessions',
+      headers: { authorization: `Bearer ${loginBody.tokens.access}` }
+    })
+
+    expect(listResponse.statusCode).toBe(200)
+    const listBody = listResponse.json<{
+      sessions: Array<{ id: number; current: boolean; userAgent: string | null; ipAddress: string | null; lastUsedAt: string }>
+    }>()
+
+    expect(listBody.sessions.length).toBeGreaterThanOrEqual(2)
+    expect(listBody.sessions.some((session) => session.current)).toBe(true)
+    expect(listBody.sessions.some((session) => !session.current)).toBe(true)
+    const currentSession = listBody.sessions.find((session) => session.current)
+    expect(currentSession?.userAgent).toBeTruthy()
+    expect(new Date(currentSession?.lastUsedAt ?? '').getTime()).toBeGreaterThan(0)
+  })
+
+  it('revokes a specific session by id', async () => {
+    await server.inject({ method: 'POST', url: '/auth/register', payload: basePayload })
+    const loginResponse = await server.inject({
+      method: 'POST',
+      url: '/auth/login',
+      payload: { email: basePayload.email, password: basePayload.password }
+    })
+    const loginBody = loginResponse.json<{ tokens: { access: string } }>()
+
+    const listBefore = await server.inject({
+      method: 'GET',
+      url: '/auth/sessions',
+      headers: { authorization: `Bearer ${loginBody.tokens.access}` }
+    })
+    const beforeBody = listBefore.json<{
+      sessions: Array<{ id: number; current: boolean }>
+    }>()
+
+    expect(beforeBody.sessions.length).toBeGreaterThan(1)
+    const target = beforeBody.sessions.find((session) => session.current === false)
+    expect(target).toBeTruthy()
+
+    const deleteResponse = await server.inject({
+      method: 'DELETE',
+      url: `/auth/sessions/${target!.id}`,
+      headers: { authorization: `Bearer ${loginBody.tokens.access}` }
+    })
+
+    expect(deleteResponse.statusCode).toBe(204)
+
+    const deleteAgain = await server.inject({
+      method: 'DELETE',
+      url: `/auth/sessions/${target!.id}`,
+      headers: { authorization: `Bearer ${loginBody.tokens.access}` }
+    })
+    expect(deleteAgain.statusCode).toBe(404)
+
+    const listAfter = await server.inject({
+      method: 'GET',
+      url: '/auth/sessions',
+      headers: { authorization: `Bearer ${loginBody.tokens.access}` }
+    })
+    const afterBody = listAfter.json<{ sessions: Array<{ id: number }> }>()
+    expect(afterBody.sessions.find((session) => session.id === target!.id)).toBeUndefined()
   })
 })
 

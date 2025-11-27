@@ -41,7 +41,10 @@ const createSessionToken = async (server: FastifyInstance, prisma: PrismaClient,
     data: {
       userId,
       token: randomUUID(),
-      expiresAt: new Date(Date.now() + 1000 * 60 * 60)
+      expiresAt: new Date(Date.now() + 1000 * 60 * 60),
+      lastUsedAt: new Date(),
+      ipAddress: '127.0.0.1',
+      userAgent: 'vitest'
     }
   })
 

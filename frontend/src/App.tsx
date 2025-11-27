@@ -6,6 +6,7 @@ import TournamentPage from './pages/Tournament'
 import LoginPage from './pages/Login'
 import MfaChallengePage from './pages/MfaChallenge'
 import OAuthCallbackPage from './pages/OAuthCallback'
+import ProfilePage from './pages/Profile'
 import useAuthStore from './stores/authStore'
 
 const App = () => {
@@ -61,6 +62,7 @@ const App = () => {
             <Route path="/login" element={<LoginPage />} />
             <Route path="/auth/2fa" element={<MfaChallengePage />} />
             <Route path="/oauth/callback" element={<OAuthCallbackPage />} />
+            <Route path="/profile/:id" element={<ProfilePage />} />
           </Routes>
         </main>
       </div>

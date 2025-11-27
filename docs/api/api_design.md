@@ -20,6 +20,8 @@
 | POST | `/auth/oauth/:provider/callback` | ❌ | Exchange authorization code for JWT session (42, Google). |
 | POST | `/auth/refresh` | ❌ | Refresh access token. |
 | POST | `/auth/logout` | ✅ | Invalidate current session. |
+| GET | `/auth/sessions` | ✅ | List active sessions + metadata for current user. |
+| DELETE | `/auth/sessions/:sessionId` | ✅ | Revoke a specific session/device. |
 
 **POST /auth/register**
 ```json
@@ -89,6 +91,32 @@ Response `201`: `{ "user": { ...basic profile... }, "tokens": { "access", "refre
 - レスポンス: `204 No Content`。
 - 補足: アクセストークンは即時失効しないため、クライアント側で破棄する必要がある。
 - エラー: 入力バリデーション失敗のみ `400 INVALID_BODY`。それ以外は常に 204 を返し、存在しないセッションでも攻撃者が推測できないようにする。
+
+**GET /auth/sessions**
+- 認証必須。JWT ペイロードの `sessionId` と `Session` テーブルを突き合わせ、レスポンスに `current` フラグを含める。
+- レスポンス `200`:
+```json
+{
+  "sessions": [
+    {
+      "id": 42,
+      "createdAt": "2025-11-27T02:30:00.000Z",
+      "expiresAt": "2025-12-04T02:30:00.000Z",
+      "lastUsedAt": "2025-11-27T03:12:00.000Z",
+      "ipAddress": "203.0.113.10",
+      "userAgent": "Mac OS X; Safari/17",
+      "current": true
+    }
+  ]
+}
+```
+- 並び順は `createdAt desc`。`ipAddress`/`userAgent` は Fastify が受信した値を 128/512 文字にトリムして保存する。
+- 空配列時は「他の端末なし」表示を想定。フロントは `current` フラグで「このデバイス」バッジを描画し、他デバイスには Terminate ボタンを出す。
+
+**DELETE /auth/sessions/:sessionId**
+- 認証必須。パラメータ `sessionId` は正の整数。自身に紐づくセッションのみ削除できる。
+- 成功時 `204 No Content`。対象が存在しない/権限がない場合は `404 SESSION_NOT_FOUND`。
+- 現在のセッションを削除すると、以後の `/auth/refresh` が `INVALID_REFRESH_TOKEN` になるため、クライアントは `authStore.clearSession()` を呼んで即時ログアウトする必要がある。
 
 ### 1.1.1 OAuth リモート認証
 **対応プロバイダ**: `fortytwo`, `google`。ルートパラメータ `:provider` は小文字。存在しないプロバイダは `404 OAUTH_PROVIDER_NOT_SUPPORTED`。
