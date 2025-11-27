@@ -42,6 +42,9 @@
 - `frontend/src/pages/GameRoom.tsx` を実装し、Canvas による Pong ゲーム描画、スコア表示、Pause/Resume/Surrender 機能を実装した。
 - `frontend/src/pages/GameRoom.test.tsx` を追加し、Canvas レンダリング、接続ステータス遷移、Pause トグル、Surrender 遷移を検証した。
 - `App.tsx` に `/game/:id` ルートを追加した。
+- `frontend/src/components/chat/ChatDrawer.tsx` を実装し、折りたたみ可能なチャットドロワー、スレッド一覧、メッセージ送受信（モック）、タブ切り替えを作成した。
+- `frontend/src/components/chat/ChatDrawer.test.tsx` を追加し、開閉動作、メッセージ送信、画面遷移を検証した。
+- `App.tsx` に `ChatDrawer` を追加し、ログイン時のみ表示されるようにした。
 
 ### Epic A: インフラ・開発基盤
 | 状態 | タスク | メモ |
@@ -76,7 +79,7 @@
 - [x] **Profile Page 実装**: `/profile/:id` の UI とテストを作成。アバター、戦績、フレンドリストのモック表示を含む。
 - [x] **Game Lobby 実装**: `/game/new` の UI とテストを作成。モード選択とマッチング待機画面。
 - [x] **Game Room 実装**: `/game/:id` の UI とテストを作成。Canvas 描画とサイドパネルの基本構造。
-- [ ] **Chat Overlay 実装**: グローバルチャットドロワーの UI とテストを作成。
+- [x] **Chat Overlay 実装**: グローバルチャットドロワーの UI とテストを作成。
 
 ## Current Focus
 **Epic C: アプリ機能実装 (Implementation Phase)**

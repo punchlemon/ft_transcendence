@@ -9,6 +9,7 @@ import OAuthCallbackPage from './pages/OAuthCallback'
 import ProfilePage from './pages/Profile'
 import GameLobbyPage from './pages/GameLobby'
 import GameRoomPage from './pages/GameRoom'
+import ChatDrawer from './components/chat/ChatDrawer'
 import useAuthStore from './stores/authStore'
 
 const App = () => {
@@ -70,6 +71,8 @@ const App = () => {
             <Route path="/game/:id" element={<GameRoomPage />} />
           </Routes>
         </main>
+
+        {user && <ChatDrawer />}
       </div>
     </BrowserRouter>
   )
