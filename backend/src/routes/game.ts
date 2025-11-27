@@ -16,7 +16,16 @@ export default async function gameRoutes(fastify: FastifyInstance) {
     // Use GameManager to find/create game
     // In future, extract sessionId from req.query or token
     const manager = GameManager.getInstance();
-    const { game, sessionId } = manager.findOrCreatePublicGame();
+    const query = req.query as { mode?: string; difficulty?: string };
+    
+    let gameResult;
+    if (query.mode === 'ai') {
+      gameResult = manager.createAIGame((query.difficulty as any) || 'NORMAL');
+    } else {
+      gameResult = manager.findOrCreatePublicGame();
+    }
+    
+    const { game, sessionId } = gameResult;
     
     let playerSlot: 'p1' | 'p2' | null = null;
 

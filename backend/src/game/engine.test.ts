@@ -112,4 +112,21 @@ describe('GameEngine', () => {
     // Ball should reset
     expect(state.ball.x).toBe(400);
   });
+
+  it('should support AI player', () => {
+    vi.useFakeTimers();
+    game.addPlayer(mockWs1);
+    game.addAIPlayer('EASY');
+    
+    expect(game.isWaitingForPlayers()).toBe(false);
+    
+    // Should trigger countdown
+    expect(mockWs1.send).toHaveBeenCalledWith(expect.stringContaining('COUNTDOWN'));
+    
+    vi.advanceTimersByTime(3000);
+    // Should start game
+    expect(mockWs1.send).toHaveBeenCalledWith(expect.stringContaining('START'));
+    
+    vi.useRealTimers();
+  });
 });

@@ -1,5 +1,6 @@
 import { WebSocket } from 'ws';
 import { GameState, GameConfig, DEFAULT_CONFIG, PlayerInput } from './types';
+import { AIOpponent, AIDifficulty } from './ai';
 
 export class GameEngine {
   public readonly sessionId: string;
@@ -8,6 +9,10 @@ export class GameEngine {
   private clients: { p1?: WebSocket; p2?: WebSocket } = {};
   private loopId?: NodeJS.Timeout;
   
+  // AI
+  private aiOpponent?: AIOpponent;
+  private isAIEnabled: boolean = false;
+
   // Input buffers
   private inputQueue: { p1: PlayerInput[]; p2: PlayerInput[] } = { p1: [], p2: [] };
 
@@ -32,6 +37,9 @@ export class GameEngine {
   }
 
   isWaitingForPlayers(): boolean {
+    if (this.isAIEnabled) {
+      return this.state.status === 'WAITING' && !this.clients.p1;
+    }
     return this.state.status === 'WAITING' && (!this.clients.p1 || !this.clients.p2);
   }
 
@@ -40,12 +48,19 @@ export class GameEngine {
       this.clients.p1 = socket;
       this.checkStart();
       return 'p1';
-    } else if (!this.clients.p2) {
+    } else if (!this.clients.p2 && !this.isAIEnabled) {
       this.clients.p2 = socket;
       this.checkStart();
       return 'p2';
     }
     return null; // Spectator?
+  }
+
+  addAIPlayer(difficulty: AIDifficulty = 'NORMAL') {
+    if (this.clients.p2) return; // Slot taken
+    this.isAIEnabled = true;
+    this.aiOpponent = new AIOpponent(this.config, difficulty);
+    this.checkStart();
   }
 
   removePlayer(socket: WebSocket) {
@@ -57,13 +72,14 @@ export class GameEngine {
       this.pauseGame('Player 2 disconnected');
     }
     
-    if (!this.clients.p1 && !this.clients.p2) {
+    if (!this.clients.p1 && (!this.clients.p2 && !this.isAIEnabled)) {
       this.stop();
     }
   }
 
   private checkStart() {
-    if (this.clients.p1 && this.clients.p2 && this.state.status === 'WAITING') {
+    const p2Ready = this.clients.p2 || this.isAIEnabled;
+    if (this.clients.p1 && p2Ready && this.state.status === 'WAITING') {
       this.state.status = 'COUNTDOWN';
       this.broadcast({ event: 'match:event', payload: { type: 'COUNTDOWN', duration: 3 } });
       setTimeout(() => this.startGame(), 3000);
@@ -105,6 +121,21 @@ export class GameEngine {
   private tick() {
     this.state.tick++;
     
+    // AI Logic
+    if (this.isAIEnabled && this.aiOpponent) {
+      // 1Hz Snapshot (every 120 ticks)
+      // We use modulo 120. If tick is 1, 121, 241...
+      // Or just check if tick % 120 === 0
+      if (this.state.tick % 120 === 0) {
+        this.aiOpponent.processSnapshot(this.state);
+      }
+      
+      const aiInput = this.aiOpponent.getNextInput();
+      if (aiInput) {
+        this.processInput('p2', aiInput);
+      }
+    }
+
     // Process inputs
     this.processPlayerInputs('p1');
     this.processPlayerInputs('p2');

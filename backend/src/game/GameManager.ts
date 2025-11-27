@@ -1,5 +1,6 @@
 import { GameEngine } from './engine';
 import { WebSocket } from 'ws';
+import { AIDifficulty } from './ai';
 
 export class GameManager {
   private static instance: GameManager;
@@ -21,6 +22,13 @@ export class GameManager {
     const game = new GameEngine(sessionId);
     this.games.set(sessionId, game);
     return game;
+  }
+
+  createAIGame(difficulty: AIDifficulty = 'NORMAL'): { game: GameEngine; sessionId: string } {
+    const sessionId = `game_ai_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+    const game = this.createGame(sessionId);
+    game.addAIPlayer(difficulty);
+    return { game, sessionId };
   }
 
   getGame(sessionId: string): GameEngine | undefined {
