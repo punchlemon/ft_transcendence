@@ -20,14 +20,12 @@ export const attachAuthorizationHeader = (config: InternalAxiosRequestConfig) =>
   const storeToken = useAuthStore.getState().accessToken
   const token = storeToken ?? readAccessTokenFromStorage()
   if (token) {
-    if (!config.headers) {
-      config.headers = new AxiosHeaders()
-    }
-    if (config.headers instanceof AxiosHeaders) {
-      config.headers.set('Authorization', `Bearer ${token}`)
-    } else {
-      config.headers.Authorization = `Bearer ${token}`
-    }
+    const headers = config.headers instanceof AxiosHeaders
+      ? config.headers
+      : AxiosHeaders.from(config.headers ?? {})
+
+    headers.set('Authorization', `Bearer ${token}`)
+    config.headers = headers
   }
   return config
 }
