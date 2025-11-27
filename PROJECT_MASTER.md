@@ -79,8 +79,10 @@
 - [x] **Profile Edit API**: Implement `PATCH /api/users/:id` for updating displayName, bio, avatarUrl.
 - [x] **Profile Edit UI**: Implement `EditProfileModal` in frontend and integrate with API.
 - [x] **Session Management UI**: Implement `/settings/account` active sessions list.
-- [ ] **User Search Improvements**: Add sorting/filtering to `/api/users`.
+- [x] **User Search Improvements**: Add sorting/filtering to `/api/users` and create `/users` page.
+- [x] **Game Logic Implementation**: Implement full Pong logic in `GameEngine` and integrate with WebSocket.
+- [ ] **AI Opponent Implementation**: Implement 1Hz vision constraint AI in `GameEngine`.
 
 ## Current Focus
 **Epic C: アプリ機能実装 (Implementation Phase)**
-*User Search Improvements の実装*|
+*AI Opponent Implementation*|

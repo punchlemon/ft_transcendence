@@ -53,6 +53,49 @@ const GameRoomPage = () => {
     }
   }, [token])
 
+  // Input handling
+  useEffect(() => {
+    if (status !== 'playing') return
+
+    const keys = { up: false, down: false }
+    
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'w' || e.key === 'ArrowUp') keys.up = true
+      if (e.key === 's' || e.key === 'ArrowDown') keys.down = true
+    }
+    
+    const handleKeyUp = (e: KeyboardEvent) => {
+      if (e.key === 'w' || e.key === 'ArrowUp') keys.up = false
+      if (e.key === 's' || e.key === 'ArrowDown') keys.down = false
+    }
+
+    window.addEventListener('keydown', handleKeyDown)
+    window.addEventListener('keyup', handleKeyUp)
+
+    const intervalId = setInterval(() => {
+      if (!socketRef.current || socketRef.current.readyState !== WebSocket.OPEN) return
+      
+      let axis = 0
+      if (keys.up) axis -= 1
+      if (keys.down) axis += 1
+      
+      socketRef.current.send(JSON.stringify({
+        event: 'input',
+        payload: {
+          tick: Date.now(), // Using timestamp for now
+          axis,
+          boost: false
+        }
+      }))
+    }, 1000 / 60)
+
+    return () => {
+      window.removeEventListener('keydown', handleKeyDown)
+      window.removeEventListener('keyup', handleKeyUp)
+      clearInterval(intervalId)
+    }
+  }, [status])
+
   // Game loop
   useEffect(() => {
     if (status !== 'playing') return

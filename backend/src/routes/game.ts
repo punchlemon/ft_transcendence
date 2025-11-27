@@ -1,8 +1,5 @@
 import { FastifyInstance } from 'fastify'
-import { GameEngine } from '../game/engine'
-
-// Singleton for now
-const gameEngine = new GameEngine()
+import { GameManager } from '../game/GameManager'
 
 export default async function gameRoutes(fastify: FastifyInstance) {
   fastify.get('/ws/game', { websocket: true }, (connection, req) => {
@@ -16,25 +13,42 @@ export default async function gameRoutes(fastify: FastifyInstance) {
       return
     }
 
+    // Use GameManager to find/create game
+    // In future, extract sessionId from req.query or token
+    const manager = GameManager.getInstance();
+    const { game, sessionId } = manager.findOrCreatePublicGame();
+    
+    let playerSlot: 'p1' | 'p2' | null = null;
+
     const handleMessage = (message: any) => {
       try {
         // Handle both Buffer (ws) and MessageEvent (native)
         const rawData = message.data || message
         const data = JSON.parse(rawData.toString())
-        fastify.log.info({ msg: 'Received message', data })
+        
+        // Log non-input messages
+        if (data.event !== 'input') {
+          fastify.log.info({ msg: 'Received message', data })
+        }
 
         if (data.event === 'ready') {
+          playerSlot = game.addPlayer(socket as any);
+          
           const response = JSON.stringify({
             event: 'match:event',
-            payload: { type: 'CONNECTED', message: 'Successfully connected to game server' }
+            payload: { 
+              type: 'CONNECTED', 
+              message: 'Successfully connected to game server',
+              sessionId,
+              slot: playerSlot
+            }
           })
           
           if (typeof (socket as any).send === 'function') {
             (socket as any).send(response)
           }
-
-          // Add to game engine (force p1 for testing)
-          gameEngine.addPlayer(socket as any, 'p1')
+        } else if (data.event === 'input' && playerSlot) {
+          game.processInput(playerSlot, data.payload);
         }
       } catch (err) {
         fastify.log.error(err, 'Failed to parse message')
@@ -43,7 +57,7 @@ export default async function gameRoutes(fastify: FastifyInstance) {
 
     const handleClose = () => {
       fastify.log.info('Client disconnected from game websocket')
-      gameEngine.removePlayer(socket as any)
+      game.removePlayer(socket as any)
     }
 
     if (typeof (socket as any).on === 'function') {
