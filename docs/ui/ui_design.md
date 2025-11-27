@@ -69,6 +69,34 @@ Authenticated Routes (Layout 配下)
 - **ステート**: `authStore` に `user`, `token`, `mfaRequired` を保持。フォーム送信時はローディングボタン + エラー枠。
 - **テスト観点**: 入力バリデーション、エラー復帰、成功時の `useNavigate` 呼び出し。
 
+### 0.1 Login Page の詳細
+| 状態 | 説明 | UI 表現 |
+| --- | --- | --- |
+| Idle | 初期表示 | 入力フィールド + 無効化された送信ボタン (必須項目が空の場合) |
+| Submitting | 認証 API 呼び出し中 | 送信ボタンをスピナー付き非活性化し、OAuth ボタンもロック |
+| Success | JWT 取得完了 | 成功アラートカードを表示し、後続画面 (`/`) への CTA を提示 |
+| Invalid Credentials | 401 応答 | エラーアラートにバックエンドの `error.message` を表示 |
+| MFA Required | 423 応答 | `challengeId` を `sessionStorage` へ保存し、「2FA を完了してください」メッセージと遷移ボタンを表示 |
+
+- **フォーム構成**: ラベル付きテキストフィールド (メール / パスワード)、ログインボタン、サブテキストでパスワード忘れリンク (未実装は `disabled` 表記)。
+- **バリデーション**: クライアント側で `trim().toLowerCase()` 済みメール形式と 8 文字以上のパスワードをチェックし、失敗時は即座にエラーメッセージを表示。
+- **ステート管理**: `email`, `password`, `statusMessage`, `errorMessage`, `mfaChallengeId`, `isSubmitting`。
+- **トークン保存**: 成功時は `sessionStorage` の `ft_access_token` / `ft_refresh_token` に保存し、将来の `authStore` 実装に備える。
+
+### 0.2 OAuth ボタン挙動
+- プロバイダは `fortytwo`, `google` の 2 種。環境変数 `VITE_OAUTH_REDIRECT_URI` (未指定時は `window.location.origin + /oauth/callback`) をクエリ `redirectUri` に添付。
+- `/auth/oauth/:provider/url` から取得した `authorizationUrl`, `state`, `codeChallenge` を sessionStorage に保存 (`ft_oauth_state`, `ft_oauth_code_challenge`) し、`window.location.assign()` でプロバイダへ遷移。
+- 失敗時は詳細エラーを画面上部のアラートに表示し、利用者には「数秒後に再試行してください」と案内。
+- コールバックページ (`/oauth/callback`) は別途実装し、`state`/`codeVerifier` を読み込んで `/auth/oauth/:provider/callback` を叩く。
+
+### 0.3 テスト観点 (Auth UI)
+- `LoginPage`
+  - フォーム入力/送信で `login()` API を呼び、成功時にセッションストレージへトークン保存 & 成功メッセージを表示する。
+  - 401 エラーでバックエンドの文言を表示し、フィールド入力は維持される。
+  - 423 エラーでは `challengeId` の保存と 2FA 案内を表示する。
+  - OAuth ボタン押下で `fetchOAuthAuthorizationUrl()` を呼び出し、返却 URL へ `window.location.assign` が実行される。
+  - バリデーション失敗時はネットワークリクエストが発生しないことを `vi.mock` で確認する。
+
 ## 1. Home Page
 - **目的**: プロジェクト名・概要の提示と主要導線 (Health / Tournament) の提供。
 - **要素**:

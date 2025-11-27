@@ -11,7 +11,7 @@
 - `README_ARCHITECTURE.md`: 本ファイル。構造説明の単一情報源。
 - `README.md`: 起動方法や Docker Compose コマンド、ローカル開発手順をまとめたクイックスタートガイド。
 - `PROJECT_MASTER.md`: エピック/タスク/進捗サマリを日本語で管理するマスタードキュメント。
-- `.env` / `.env.example`: Docker Compose から共有される環境変数ファイル。本番用秘密は `.env` のみに保持し git ignore する。
+- `.env` / `.env.example`: Docker Compose から共有される環境変数ファイル。本番用秘密は `.env` のみに保持し git ignore する。`VITE_API_BASE_URL` や OAuth 用の `VITE_OAUTH_REDIRECT_URI` など、フロント/バックで共有する値もここで管理する。
 - `docker-compose.yml`: backend / frontend コンテナをまとめて起動する設定。環境変数マッピングとビルド手順を記述。
 - `makefile`: AI 支援ループの実行 (`make ai`, `make ai-init`) に使うツール。必要なコンテキストをクリップボードにまとめる。
 
@@ -33,7 +33,7 @@
 - `src/`: フロントエンドの TypeScript/TSX コード。
 	- `main.tsx`: React エントリポイント。`App` を `#root` にマウント。
 	- `App.tsx`: ルーターと共通レイアウトを定義。
-	- `pages/`: 画面単位のコンポーネント (`Home`, `HealthCheck`, `Tournament` など)。`Tournament.tsx` はエイリアス登録やマッチ進行を管理するSPAの中核画面。
+	- `pages/`: 画面単位のコンポーネント (`Home`, `HealthCheck`, `Tournament`, `Login` など)。`Tournament.tsx` はエイリアス登録やマッチ進行を管理するSPAの中核画面、`Login.tsx` はメール+OAuth ログイン UI を提供する。
 	- `components/`: 再利用コンポーネント群 (今後増加予定)。`tournament/__tests__/` 配下に TournamentAliasPanel / EntryPanel / ProgressPanel の UI 単体テストを配置し、画面分割コンポーネントごとに挙動を検証する。
 	- `lib/`: API クライアントなどのユーティリティ。`tournament.ts` はトーナメントのマッチキュー生成や重複チェックなどの純粋関数を集約する。
 	- `index.css`: Tailwind ベーススタイル。

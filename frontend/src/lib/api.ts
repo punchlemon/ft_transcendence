@@ -20,6 +20,45 @@ export const fetchHealth = async () => {
   return response.data as { status: string; timestamp: string }
 }
 
+export type LoginPayload = {
+  email: string
+  password: string
+}
+
+export type LoginSuccessResponse = {
+  user: {
+    id: number
+    displayName: string
+    status: string
+  }
+  tokens: {
+    access: string
+    refresh: string
+  }
+  mfaRequired: boolean
+}
+
+export const login = async (payload: LoginPayload) => {
+  const response = await apiClient.post('/auth/login', payload)
+  return response.data as LoginSuccessResponse
+}
+
+export type OAuthProvider = 'fortytwo' | 'google'
+
+export type OAuthAuthorizationUrlResponse = {
+  authorizationUrl: string
+  state: string
+  codeChallenge?: string | null
+  expiresIn: number
+}
+
+export const fetchOAuthAuthorizationUrl = async (provider: OAuthProvider, redirectUri: string) => {
+  const response = await apiClient.get(`/auth/oauth/${provider}/url`, {
+    params: { redirectUri }
+  })
+  return response.data as OAuthAuthorizationUrlResponse
+}
+
 /*
 解説:
 
@@ -32,6 +71,6 @@ export const fetchHealth = async () => {
 3) const apiClient = axios.create
   - 計算した `baseURL` で axios インスタンスを生成し、以降の API 呼び出しで URL の重複指定を避ける。
 
-4) export const fetchHealth
-  - `/health` エンドポイントを叩き、型情報 `{ status: string; timestamp: string }` とともにデータを返すユーティリティ。フロントの各画面から使い回せるようエクスポートする。
+4) export const fetchHealth / login / fetchOAuthAuthorizationUrl
+  - `/health` 取得に加えて、`login` ではメール+パスワードのレスポンス (`user` + `tokens`) を返し、`fetchOAuthAuthorizationUrl` はバックエンド側で組み立てた認可 URL 情報を取得する。API 毎に baseURL や axios 設定を複製せず、同一クライアントを共有する狙いがある。
 */
