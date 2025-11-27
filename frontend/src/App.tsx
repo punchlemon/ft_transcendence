@@ -8,6 +8,7 @@ import MfaChallengePage from './pages/MfaChallenge'
 import OAuthCallbackPage from './pages/OAuthCallback'
 import ProfilePage from './pages/Profile'
 import GameLobbyPage from './pages/GameLobby'
+import GameRoomPage from './pages/GameRoom'
 import useAuthStore from './stores/authStore'
 
 const App = () => {
@@ -66,6 +67,7 @@ const App = () => {
             <Route path="/oauth/callback" element={<OAuthCallbackPage />} />
             <Route path="/profile/:id" element={<ProfilePage />} />
             <Route path="/game/new" element={<GameLobbyPage />} />
+            <Route path="/game/:id" element={<GameRoomPage />} />
           </Routes>
         </main>
       </div>

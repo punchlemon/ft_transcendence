@@ -39,6 +39,9 @@
 - `frontend/src/pages/GameLobby.tsx` を実装し、Local/Remote/AI モード選択、Remote 時の Public/Private オプション、マッチング待機画面を作成した。
 - `frontend/src/pages/GameLobby.test.tsx` を追加し、モード選択による UI 変化、Start ボタンの活性制御、マッチング待機・キャンセル動作を検証した。
 - `App.tsx` に `/game/new` ルートとナビゲーションリンクを追加した。
+- `frontend/src/pages/GameRoom.tsx` を実装し、Canvas による Pong ゲーム描画、スコア表示、Pause/Resume/Surrender 機能を実装した。
+- `frontend/src/pages/GameRoom.test.tsx` を追加し、Canvas レンダリング、接続ステータス遷移、Pause トグル、Surrender 遷移を検証した。
+- `App.tsx` に `/game/:id` ルートを追加した。
 
 ### Epic A: インフラ・開発基盤
 | 状態 | タスク | メモ |
@@ -72,7 +75,7 @@
 ## Next Actions
 - [x] **Profile Page 実装**: `/profile/:id` の UI とテストを作成。アバター、戦績、フレンドリストのモック表示を含む。
 - [x] **Game Lobby 実装**: `/game/new` の UI とテストを作成。モード選択とマッチング待機画面。
-- [ ] **Game Room 実装**: `/game/:id` の UI とテストを作成。Canvas 描画とサイドパネルの基本構造。
+- [x] **Game Room 実装**: `/game/:id` の UI とテストを作成。Canvas 描画とサイドパネルの基本構造。
 - [ ] **Chat Overlay 実装**: グローバルチャットドロワーの UI とテストを作成。
 
 ## Current Focus
