@@ -1,4 +1,4 @@
-import { FormEvent, useState } from 'react'
+import { FormEvent, useEffect, useState } from 'react'
 import {
   MatchQueueItem,
   advanceToNextMatch,
@@ -11,6 +11,50 @@ import TournamentAliasPanel from '../components/tournament/TournamentAliasPanel'
 import TournamentEntryPanel from '../components/tournament/TournamentEntryPanel'
 import TournamentProgressPanel from '../components/tournament/TournamentProgressPanel'
 
+export const TOURNAMENT_STATE_STORAGE_KEY = 'ft_tournament_state_v1'
+
+type PersistedTournamentState = {
+  players: string[]
+  matchQueue: MatchQueueItem[]
+  currentMatchIndex: number
+}
+
+const isStringArray = (value: unknown): value is string[] => Array.isArray(value) && value.every((entry) => typeof entry === 'string')
+
+const isMatchQueueItem = (value: unknown): value is MatchQueueItem => {
+  if (!value || typeof value !== 'object') {
+    return false
+  }
+  const candidate = value as MatchQueueItem
+  if (typeof candidate.id !== 'string' || !Array.isArray(candidate.players) || candidate.players.length !== 2) {
+    return false
+  }
+  return typeof candidate.players[0] === 'string' && (typeof candidate.players[1] === 'string' || candidate.players[1] === null)
+}
+
+const parsePersistedState = (raw: string): PersistedTournamentState | null => {
+  try {
+    const parsed = JSON.parse(raw)
+    if (
+      parsed &&
+      isStringArray(parsed.players) &&
+      Array.isArray(parsed.matchQueue) &&
+      parsed.matchQueue.every((entry: unknown) => isMatchQueueItem(entry)) &&
+      typeof parsed.currentMatchIndex === 'number' &&
+      Number.isInteger(parsed.currentMatchIndex)
+    ) {
+      return {
+        players: parsed.players,
+        matchQueue: parsed.matchQueue,
+        currentMatchIndex: parsed.currentMatchIndex
+      }
+    }
+  } catch {
+    return null
+  }
+  return null
+}
+
 const TournamentPage = () => {
   const [aliasInput, setAliasInput] = useState('')
   const [players, setPlayers] = useState<string[]>([])
@@ -18,6 +62,47 @@ const TournamentPage = () => {
   const [currentMatchIndex, setCurrentMatchIndex] = useState(-1)
   const [errorMessage, setErrorMessage] = useState<string | null>(null)
   const [infoMessage, setInfoMessage] = useState<string | null>(null)
+  const [isHydrated, setIsHydrated] = useState(false)
+
+  useEffect(() => {
+    if (typeof window === 'undefined') {
+      return
+    }
+    const rawState = window.localStorage.getItem(TOURNAMENT_STATE_STORAGE_KEY)
+    if (!rawState) {
+      setIsHydrated(true)
+      return
+    }
+    const parsed = parsePersistedState(rawState)
+    if (!parsed) {
+      window.localStorage.removeItem(TOURNAMENT_STATE_STORAGE_KEY)
+      setIsHydrated(true)
+      return
+    }
+    setPlayers(parsed.players)
+    setMatchQueue(parsed.matchQueue)
+    setCurrentMatchIndex(parsed.currentMatchIndex)
+    setIsHydrated(true)
+  }, [])
+
+  useEffect(() => {
+    if (typeof window === 'undefined') {
+      return
+    }
+    if (!isHydrated) {
+      return
+    }
+    const snapshot: PersistedTournamentState = {
+      players,
+      matchQueue,
+      currentMatchIndex
+    }
+    try {
+      window.localStorage.setItem(TOURNAMENT_STATE_STORAGE_KEY, JSON.stringify(snapshot))
+    } catch {
+      // 保存に失敗しても UX を阻害しない
+    }
+  }, [isHydrated, players, matchQueue, currentMatchIndex])
 
   const currentMatch = findNextMatch(matchQueue, currentMatchIndex)
   const isTournamentReady = players.length >= 2
@@ -75,6 +160,9 @@ const TournamentPage = () => {
     setInfoMessage('エントリーを初期化しました。')
     setErrorMessage(null)
     resetMatchProgress()
+    if (typeof window !== 'undefined') {
+      window.localStorage.removeItem(TOURNAMENT_STATE_STORAGE_KEY)
+    }
   }
 
   return (
@@ -127,9 +215,12 @@ export default TournamentPage
 3) handleRegisterPlayer などのイベントハンドラ
   - エイリアスの正規化と重複チェックを行い、参加者の追加・削除・トーナメント生成・進行・リセットを手続き的にまとめている。登録変更時にはマッチキューをリセットして矛盾を防ぐ。
 
-4) JSX レイアウト
+4) ローカルストレージ永続化
+  - `localStorage` へ参加者・マッチキュー・現在の試合インデックスを保存し、リロード後も状態を再構築できるよう `parsePersistedState` と 2 つの `useEffect` で復元・同期を実装している。構造が壊れている場合は削除して安全性を確保する。
+
+5) JSX レイアウト
   - AliasPanel / EntryPanel / ProgressPanel の 3 つを組み合わせ、ページ側ではセクション枠のみを保持。コンポーネント単位でテストしやすくしつつ、レイアウトや文言は従来どおり維持する。
 
-5) export default TournamentPage
+6) export default TournamentPage
   - ルーティングから利用できるようにページコンポーネントを公開し、SPA の主要機能としてトーナメント管理画面を追加する。
 */
