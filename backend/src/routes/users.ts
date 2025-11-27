@@ -29,6 +29,113 @@ const parseExcludeIds = (excludeFriendIds?: string) => {
 }
 
 const usersRoutes: FastifyPluginAsync = async (fastify) => {
+  const paramsSchema = z.object({
+    id: z.coerce.number().int().positive()
+  })
+
+  fastify.get('/api/users/:id', { preHandler: fastify.authenticate }, async (request, reply) => {
+    const parsed = paramsSchema.safeParse(request.params)
+    if (!parsed.success) {
+      reply.code(400)
+      return { error: { code: 'INVALID_PARAMS', message: 'Invalid user ID' } }
+    }
+
+    const { id: targetId } = parsed.data
+    const viewerId = request.user.userId
+
+    const user = await fastify.prisma.user.findUnique({
+      where: { id: targetId, deletedAt: null },
+      select: {
+        id: true,
+        displayName: true,
+        login: true,
+        status: true,
+        avatarUrl: true,
+        country: true,
+        bio: true,
+        createdAt: true,
+        stats: {
+          select: {
+            wins: true,
+            losses: true,
+            matchesPlayed: true,
+            pointsScored: true,
+            pointsAgainst: true
+          }
+        },
+        ladderProfile: {
+          select: {
+            tier: true,
+            division: true,
+            mmr: true
+          }
+        }
+      }
+    })
+
+    if (!user) {
+      reply.code(404)
+      return { error: { code: 'USER_NOT_FOUND', message: 'User not found' } }
+    }
+
+    // Friendship Status
+    let friendshipStatus: 'NONE' | 'FRIEND' | 'PENDING_SENT' | 'PENDING_RECEIVED' = 'NONE'
+    if (viewerId !== targetId) {
+      const friendship = await fastify.prisma.friendship.findFirst({
+        where: {
+          OR: [
+            { requesterId: viewerId, addresseeId: targetId },
+            { requesterId: targetId, addresseeId: viewerId }
+          ]
+        }
+      })
+
+      if (friendship) {
+        if (friendship.status === 'ACCEPTED') {
+          friendshipStatus = 'FRIEND'
+        } else if (friendship.status === 'PENDING') {
+          friendshipStatus = friendship.requesterId === viewerId ? 'PENDING_SENT' : 'PENDING_RECEIVED'
+        }
+      }
+    }
+
+    // Mutual Friends
+    let mutualFriends = 0
+    if (viewerId !== targetId) {
+      // Get viewer's friends
+      const viewerFriendships = await fastify.prisma.friendship.findMany({
+        where: {
+          status: 'ACCEPTED',
+          OR: [{ requesterId: viewerId }, { addresseeId: viewerId }]
+        },
+        select: { requesterId: true, addresseeId: true }
+      })
+      const viewerFriendIds = viewerFriendships.map(f => f.requesterId === viewerId ? f.addresseeId : f.requesterId)
+
+      if (viewerFriendIds.length > 0) {
+        // Count how many of viewer's friends are also friends with target
+        const mutuals = await fastify.prisma.friendship.count({
+          where: {
+            status: 'ACCEPTED',
+            OR: [
+              { requesterId: targetId, addresseeId: { in: viewerFriendIds } },
+              { addresseeId: targetId, requesterId: { in: viewerFriendIds } }
+            ]
+          }
+        })
+        mutualFriends = mutuals
+      }
+    }
+
+    return {
+      ...user,
+      ladder: user.ladderProfile,
+      ladderProfile: undefined,
+      friendshipStatus,
+      mutualFriends
+    }
+  })
+
   fastify.get('/api/users', { preHandler: fastify.authenticate }, async (request, reply) => {
     const parsed = searchQuerySchema.safeParse(request.query)
 

@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { useParams } from 'react-router-dom'
 import useAuthStore from '../stores/authStore'
+import { fetchUserProfile } from '../lib/api'
 
 // Mock types
 interface UserProfile {
@@ -40,7 +41,7 @@ interface Friend {
 const ProfilePage = () => {
   const { id } = useParams<{ id: string }>()
   const currentUser = useAuthStore((state) => state.user)
-  const isOwnProfile = currentUser?.id === id
+  const isOwnProfile = currentUser?.id === (id ? Number(id) : undefined)
 
   const [profile, setProfile] = useState<UserProfile | null>(null)
   const [stats, setStats] = useState<UserStats | null>(null)
@@ -50,72 +51,45 @@ const ProfilePage = () => {
   const [error, setError] = useState<string | null>(null)
 
   useEffect(() => {
-    // Simulate API fetch
     const fetchProfileData = async () => {
       setIsLoading(true)
       setError(null)
       try {
-        // Simulate network delay
-        await new Promise((resolve) => setTimeout(resolve, 500))
+        if (!id) throw new Error('User ID is required')
 
-        // Mock data
-        if (id === 'not-found') {
-          throw new Error('User not found')
-        }
+        const data = await fetchUserProfile(id)
 
         setProfile({
-          id: id || 'unknown',
-          displayName: `User ${id}`,
-          tag: `#${id?.substring(0, 4)}`,
-          avatarUrl: 'https://via.placeholder.com/150',
-          status: 'online',
-          bio: 'Pong enthusiast. Love to play standard mode.',
+          id: String(data.id),
+          displayName: data.displayName,
+          tag: `#${data.login}`,
+          avatarUrl: data.avatarUrl || 'https://via.placeholder.com/150',
+          status: (data.status?.toLowerCase() as 'online' | 'offline' | 'in-game') || 'offline',
+          bio: data.bio || 'No bio available',
         })
 
-        setStats({
-          wins: 42,
-          losses: 10,
-          totalMatches: 52,
-          winRate: 80.7,
-          mvpCount: 5,
-          currentStreak: 3,
-        })
+        if (data.stats) {
+          const totalMatches = data.stats.matchesPlayed
+          const winRate = totalMatches > 0 ? Math.round((data.stats.wins / totalMatches) * 100) : 0
 
-        setHistory([
-          {
-            id: 'm1',
-            opponentName: 'Rival 1',
-            result: 'win',
-            score: '11 - 9',
-            date: '2025-11-26',
-            mode: 'standard',
-          },
-          {
-            id: 'm2',
-            opponentName: 'Rival 2',
-            result: 'loss',
-            score: '5 - 11',
-            date: '2025-11-25',
-            mode: 'party',
-          },
-        ])
+          setStats({
+            wins: data.stats.wins,
+            losses: data.stats.losses,
+            totalMatches: totalMatches,
+            winRate: winRate,
+            mvpCount: 0, // Not available in API yet
+            currentStreak: 0, // Not available in API yet
+          })
+        } else {
+          setStats(null)
+        }
 
-        setFriends([
-          {
-            id: 'f1',
-            displayName: 'Friend 1',
-            status: 'online',
-            avatarUrl: 'https://via.placeholder.com/40',
-          },
-          {
-            id: 'f2',
-            displayName: 'Friend 2',
-            status: 'offline',
-            avatarUrl: 'https://via.placeholder.com/40',
-          },
-        ])
+        // TODO: Fetch match history and friends list from API
+        setHistory([])
+        setFriends([])
       } catch (err) {
-        setError(err instanceof Error ? err.message : 'Failed to load profile')
+        console.error(err)
+        setError('Failed to load profile')
       } finally {
         setIsLoading(false)
       }

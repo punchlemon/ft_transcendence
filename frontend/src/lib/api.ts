@@ -110,6 +110,36 @@ export const submitMfaChallenge = async (payload: MfaChallengePayload) => {
   return response.data as LoginSuccessResponse
 }
 
+export type UserProfileResponse = {
+  id: number
+  displayName: string
+  login: string
+  status: string
+  avatarUrl: string | null
+  country: string | null
+  bio: string | null
+  createdAt: string
+  stats: {
+    wins: number
+    losses: number
+    matchesPlayed: number
+    pointsScored: number
+    pointsAgainst: number
+  } | null
+  ladder: {
+    tier: string
+    division: number
+    mmr: number
+  } | null
+  friendshipStatus: 'NONE' | 'FRIEND' | 'PENDING_SENT' | 'PENDING_RECEIVED'
+  mutualFriends: number
+}
+
+export const fetchUserProfile = async (userId: string) => {
+  const response = await apiClient.get(`/users/${userId}`)
+  return response.data as UserProfileResponse
+}
+
 /*
 解説:
 
