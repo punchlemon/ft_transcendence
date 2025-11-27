@@ -7,6 +7,7 @@ import LoginPage from './pages/Login'
 import MfaChallengePage from './pages/MfaChallenge'
 import OAuthCallbackPage from './pages/OAuthCallback'
 import ProfilePage from './pages/Profile'
+import SettingsPage from './pages/Settings'
 import GameLobbyPage from './pages/GameLobby'
 import GameRoomPage from './pages/GameRoom'
 import ChatDrawer from './components/chat/ChatDrawer'
@@ -35,9 +36,12 @@ const App = () => {
               <Link to="/tournament">Tournament</Link>
               {user ? (
                 <div className="flex items-center gap-3" data-testid="navbar-auth-state">
-                  <span className="text-xs font-semibold text-slate-900 sm:text-sm">
-                    {user.displayName} でログイン中
-                  </span>
+                  <Link to={`/profile/${user.id}`} className="hover:underline">
+                    {user.displayName}
+                  </Link>
+                  <Link to="/settings/account" className="text-xs text-slate-500 hover:text-slate-800">
+                    Settings
+                  </Link>
                   <button
                     type="button"
                     onClick={clearSession}
@@ -67,6 +71,7 @@ const App = () => {
             <Route path="/auth/2fa" element={<MfaChallengePage />} />
             <Route path="/oauth/callback" element={<OAuthCallbackPage />} />
             <Route path="/profile/:id" element={<ProfilePage />} />
+            <Route path="/settings/account" element={<SettingsPage />} />
             <Route path="/game/new" element={<GameLobbyPage />} />
             <Route path="/game/:id" element={<GameRoomPage />} />
           </Routes>

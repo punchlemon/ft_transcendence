@@ -263,6 +263,25 @@ export const updateUserProfile = async (userId: string, payload: UpdateProfilePa
   return response.data as UserProfileResponse
 }
 
+export type Session = {
+  id: number
+  createdAt: string
+  expiresAt: string
+  lastUsedAt: string
+  ipAddress: string | null
+  userAgent: string | null
+  current: boolean
+}
+
+export const fetchSessions = async () => {
+  const response = await apiClient.get('/auth/sessions')
+  return response.data as { sessions: Session[] }
+}
+
+export const revokeSession = async (sessionId: number) => {
+  await apiClient.delete(`/auth/sessions/${sessionId}`)
+}
+
 /*
 解説:
 
@@ -286,4 +305,7 @@ export const updateUserProfile = async (userId: string, payload: UpdateProfilePa
 
 7) updateUserProfile
   - ユーザープロフィールの更新を行うための関数と型定義を追加した。
+
+8) セッション関連の型と API 関数
+  - セッションの取得と無効化を行うための型定義と API 関数を追加した。
 */

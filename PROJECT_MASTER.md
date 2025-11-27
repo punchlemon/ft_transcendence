@@ -78,9 +78,9 @@
 ## Next Actions
 - [x] **Profile Edit API**: Implement `PATCH /api/users/:id` for updating displayName, bio, avatarUrl.
 - [x] **Profile Edit UI**: Implement `EditProfileModal` in frontend and integrate with API.
-- [ ] **Session Management UI**: Implement `/settings/account` active sessions list.
+- [x] **Session Management UI**: Implement `/settings/account` active sessions list.
 - [ ] **User Search Improvements**: Add sorting/filtering to `/api/users`.
 
 ## Current Focus
 **Epic C: アプリ機能実装 (Implementation Phase)**
-*Session Management UI の実装*|
+*User Search Improvements の実装*|
