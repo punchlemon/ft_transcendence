@@ -1,4 +1,4 @@
-import { FormEvent, useEffect, useState } from 'react'
+import { FormEvent, useEffect, useMemo, useState } from 'react'
 import {
   MatchQueueItem,
   advanceToNextMatch,
@@ -56,40 +56,31 @@ const parsePersistedState = (raw: string): PersistedTournamentState | null => {
 }
 
 const TournamentPage = () => {
-  const [aliasInput, setAliasInput] = useState('')
-  const [players, setPlayers] = useState<string[]>([])
-  const [matchQueue, setMatchQueue] = useState<MatchQueueItem[]>([])
-  const [currentMatchIndex, setCurrentMatchIndex] = useState(-1)
-  const [errorMessage, setErrorMessage] = useState<string | null>(null)
-  const [infoMessage, setInfoMessage] = useState<string | null>(null)
-  const [isHydrated, setIsHydrated] = useState(false)
-
-  useEffect(() => {
+  const hydrationSnapshot = useMemo<PersistedTournamentState | null>(() => {
     if (typeof window === 'undefined') {
-      return
+      return null
     }
     const rawState = window.localStorage.getItem(TOURNAMENT_STATE_STORAGE_KEY)
     if (!rawState) {
-      setIsHydrated(true)
-      return
+      return null
     }
     const parsed = parsePersistedState(rawState)
     if (!parsed) {
       window.localStorage.removeItem(TOURNAMENT_STATE_STORAGE_KEY)
-      setIsHydrated(true)
-      return
+      return null
     }
-    setPlayers(parsed.players)
-    setMatchQueue(parsed.matchQueue)
-    setCurrentMatchIndex(parsed.currentMatchIndex)
-    setIsHydrated(true)
+    return parsed
   }, [])
+
+  const [aliasInput, setAliasInput] = useState('')
+  const [players, setPlayers] = useState<string[]>(() => hydrationSnapshot?.players ?? [])
+  const [matchQueue, setMatchQueue] = useState<MatchQueueItem[]>(() => hydrationSnapshot?.matchQueue ?? [])
+  const [currentMatchIndex, setCurrentMatchIndex] = useState(() => hydrationSnapshot?.currentMatchIndex ?? -1)
+  const [errorMessage, setErrorMessage] = useState<string | null>(null)
+  const [infoMessage, setInfoMessage] = useState<string | null>(null)
 
   useEffect(() => {
     if (typeof window === 'undefined') {
-      return
-    }
-    if (!isHydrated) {
       return
     }
     const snapshot: PersistedTournamentState = {
@@ -102,7 +93,7 @@ const TournamentPage = () => {
     } catch {
       // 保存に失敗しても UX を阻害しない
     }
-  }, [isHydrated, players, matchQueue, currentMatchIndex])
+  }, [players, matchQueue, currentMatchIndex])
 
   const currentMatch = findNextMatch(matchQueue, currentMatchIndex)
   const isTournamentReady = players.length >= 2
