@@ -29,12 +29,20 @@ const RegisterPage = () => {
       setErrorMessage('ユーザー名は3文字以上で入力してください。')
       return false
     }
+    if (!/^[a-zA-Z0-9_-]+$/.test(username)) {
+      setErrorMessage('ユーザー名は半角英数字、アンダースコア(_)、ハイフン(-)のみ使用できます。')
+      return false
+    }
     if (!displayName || displayName.length < 3) {
       setErrorMessage('表示名は3文字以上で入力してください。')
       return false
     }
     if (!password || password.length < 8) {
       setErrorMessage('パスワードは8文字以上で入力してください。')
+      return false
+    }
+    if (!/[A-Za-z]/.test(password) || !/\d/.test(password)) {
+      setErrorMessage('パスワードは英字と数字の両方を含める必要があります。')
       return false
     }
     return true
@@ -60,8 +68,16 @@ const RegisterPage = () => {
       navigate('/')
     } catch (error) {
       if (isAxiosError(error) && error.response?.data && 'error' in error.response.data) {
-        const message = (error.response.data as { error?: { message?: string } }).error?.message
-        setErrorMessage(message ?? '登録に失敗しました。')
+        const errorData = error.response.data as { error?: { message?: string; details?: Record<string, string[]> } }
+        let message = errorData.error?.message ?? '登録に失敗しました。'
+
+        if (errorData.error?.details) {
+          const details = Object.values(errorData.error.details).flat().join(' ')
+          if (details) {
+            message += ` (${details})`
+          }
+        }
+        setErrorMessage(message)
       } else {
         setErrorMessage('登録に失敗しました。時間をおいて再試行してください。')
       }

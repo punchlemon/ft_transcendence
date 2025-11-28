@@ -48,7 +48,8 @@ const GameRoomPage = () => {
     if (difficulty) query.append('difficulty', difficulty)
 
     const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:'
-    const wsUrl = `${protocol}//${window.location.hostname}:3000/ws/game?${query.toString()}`
+    const host = window.location.host
+    const wsUrl = `${protocol}//${host}/api/ws/game?${query.toString()}`
     const ws = new WebSocket(wsUrl)
     socketRef.current = ws
 

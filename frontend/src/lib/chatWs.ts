@@ -21,7 +21,7 @@ export const connectChatWs = () => {
     }
   }
 
-  const finalUrl = `${protocol}://${host}/ws/chat?token=${token}`;
+  const finalUrl = `${protocol}://${host}/api/ws/chat?token=${token}`;
   console.log('Connecting to Chat WS:', finalUrl);
 
   socket = new WebSocket(finalUrl);

@@ -3,7 +3,7 @@ import { GameManager } from '../game/GameManager'
 import { notificationService } from '../services/notification'
 
 export default async function gameRoutes(fastify: FastifyInstance) {
-  fastify.post('/api/game/invite', {
+  fastify.post('/game/invite', {
     preValidation: [fastify.authenticate]
   }, async (req, reply) => {
     const { targetUserId } = req.body as { targetUserId: number };

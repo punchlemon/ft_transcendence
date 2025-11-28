@@ -42,6 +42,33 @@ npm run dev
 
 GitHub Actions (`.github/workflows/ci.yml`) でも同じ手順を行うよう構成されています。
 
+## データベース管理 (Docker環境)
+Docker で起動している場合、ホスト側のコマンドではなく、コンテナ内でコマンドを実行する必要があります。
+
+- **データを全消去 (リセット)**:
+  ```bash
+  docker compose exec backend npm run db:reset
+  ```
+
+- **ユーザー一覧確認**:
+  ```bash
+  docker compose exec backend npm run db:users
+  ```
+
+## データベース管理 (ローカル開発環境)
+Docker を使わず `npm run dev` で起動している場合は以下を使用します。
+`backend` ディレクトリで実行してください。
+
+- **データを全消去 (リセット)**:
+  ```bash
+  npm run db:reset
+  ```
+
+- **ユーザー一覧確認**:
+  ```bash
+  npm run db:users
+  ```
+
 ## OAuth 設定
 OAuth 認証（42, Google 等）を利用するには、`.env` に以下の変数を設定してください。
 

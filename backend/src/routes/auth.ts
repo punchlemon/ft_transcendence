@@ -419,7 +419,7 @@ const authRoutes: FastifyPluginAsync = async (fastify) => {
     }
   }
 
-  fastify.post('/auth/register', async (request, reply) => {
+  fastify.post('/register', async (request, reply) => {
     const parsed = registerSchema.safeParse(request.body)
 
     if (!parsed.success) {
@@ -486,7 +486,7 @@ const authRoutes: FastifyPluginAsync = async (fastify) => {
     }
   })
 
-  fastify.get<{ Params: { provider: string }; Querystring: { redirectUri?: string } }>('/auth/oauth/:provider/url', async (request, reply) => {
+  fastify.get<{ Params: { provider: string }; Querystring: { redirectUri?: string } }>('/oauth/:provider/url', async (request, reply) => {
     const providerParam = request.params.provider?.toLowerCase()
 
     if (!isSupportedProvider(providerParam)) {
@@ -573,7 +573,7 @@ const authRoutes: FastifyPluginAsync = async (fastify) => {
     }
   })
 
-  fastify.post<{ Params: { provider: string }; Body: { code?: string; state?: string; redirectUri?: string } }>('/auth/oauth/:provider/callback', async (request, reply) => {
+  fastify.post<{ Params: { provider: string }; Body: { code?: string; state?: string; redirectUri?: string } }>('/oauth/:provider/callback', async (request, reply) => {
     const providerParam = request.params.provider?.toLowerCase()
 
     if (!isSupportedProvider(providerParam)) {
@@ -784,7 +784,7 @@ const authRoutes: FastifyPluginAsync = async (fastify) => {
     }
   })
 
-  fastify.post('/auth/login', async (request, reply) => {
+  fastify.post('/login', async (request, reply) => {
     const parsed = loginSchema.safeParse(request.body)
 
     if (!parsed.success) {
@@ -861,7 +861,7 @@ const authRoutes: FastifyPluginAsync = async (fastify) => {
     }
   })
 
-  fastify.get('/auth/mfa/setup', { preHandler: fastify.authenticate }, async (request, reply) => {
+  fastify.get('/mfa/setup', { preHandler: fastify.authenticate }, async (request, reply) => {
     const userId = request.user?.userId
     if (!userId) {
       reply.code(401)
@@ -908,7 +908,7 @@ const authRoutes: FastifyPluginAsync = async (fastify) => {
     }
   })
 
-  fastify.post('/auth/mfa/verify', { preHandler: fastify.authenticate }, async (request, reply) => {
+  fastify.post('/mfa/verify', { preHandler: fastify.authenticate }, async (request, reply) => {
     const userId = request.user?.userId
     if (!userId) {
       reply.code(401)
@@ -968,7 +968,7 @@ const authRoutes: FastifyPluginAsync = async (fastify) => {
     }
   })
 
-  fastify.get('/auth/mfa/backup-codes', { preHandler: fastify.authenticate }, async (request, reply) => {
+  fastify.get('/mfa/backup-codes', { preHandler: fastify.authenticate }, async (request, reply) => {
     const userId = request.user?.userId
     if (!userId) {
       reply.code(401)
@@ -1033,7 +1033,7 @@ const authRoutes: FastifyPluginAsync = async (fastify) => {
     }
   })
 
-  fastify.delete('/auth/mfa', { preHandler: fastify.authenticate }, async (request, reply) => {
+  fastify.delete('/mfa', { preHandler: fastify.authenticate }, async (request, reply) => {
     const userId = request.user?.userId
     if (!userId) {
       reply.code(401)
@@ -1098,7 +1098,7 @@ const authRoutes: FastifyPluginAsync = async (fastify) => {
     return null
   })
 
-  fastify.post('/auth/mfa/challenge', async (request, reply) => {
+  fastify.post('/mfa/challenge', async (request, reply) => {
     const parsed = challengeSchema.safeParse(request.body)
 
     if (!parsed.success) {
@@ -1264,7 +1264,7 @@ const authRoutes: FastifyPluginAsync = async (fastify) => {
     }
   })
 
-  fastify.post('/auth/refresh', async (request, reply) => {
+  fastify.post('/refresh', async (request, reply) => {
     const parsed = refreshSchema.safeParse(request.body)
 
     if (!parsed.success) {
@@ -1332,7 +1332,7 @@ const authRoutes: FastifyPluginAsync = async (fastify) => {
     }
   })
 
-  fastify.get('/auth/sessions', { preHandler: fastify.authenticate }, async (request, reply) => {
+  fastify.get('/sessions', { preHandler: fastify.authenticate }, async (request, reply) => {
     const userId = request.user?.userId
     if (!userId) {
       reply.code(401)
@@ -1366,7 +1366,7 @@ const authRoutes: FastifyPluginAsync = async (fastify) => {
     }
   })
 
-  fastify.delete('/auth/sessions/:sessionId', { preHandler: fastify.authenticate }, async (request, reply) => {
+  fastify.delete('/sessions/:sessionId', { preHandler: fastify.authenticate }, async (request, reply) => {
     const userId = request.user?.userId
     if (!userId) {
       reply.code(401)
@@ -1412,7 +1412,7 @@ const authRoutes: FastifyPluginAsync = async (fastify) => {
     return null
   })
 
-  fastify.post('/auth/logout', async (request, reply) => {
+  fastify.post('/logout', async (request, reply) => {
     const parsed = refreshSchema.safeParse(request.body)
 
     if (!parsed.success) {
@@ -1432,7 +1432,7 @@ const authRoutes: FastifyPluginAsync = async (fastify) => {
   })
 }
 
-export default fp(authRoutes)
+export default authRoutes
 
 /*
 解説:

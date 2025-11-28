@@ -49,7 +49,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
     set({ isLoading: true });
     try {
       const res = await api.get('/chat/threads');
-      set({ threads: res.data });
+      set({ threads: res.data.data });
     } finally {
       set({ isLoading: false });
     }
@@ -65,7 +65,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
         set((state) => ({
         messages: {
             ...state.messages,
-            [threadId]: res.data,
+            [threadId]: res.data.data,
         },
         }));
     } catch (error) {
@@ -79,7 +79,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
       : { type, name: targetIdOrName };
       
     const res = await api.post('/chat/threads', payload);
-    const newThreadId = res.data.id;
+    const newThreadId = res.data.data.id;
     await get().fetchThreads();
     await get().selectThread(newThreadId);
   },
@@ -89,7 +89,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
     if (!activeThreadId) return;
 
     const res = await api.post(`/chat/threads/${activeThreadId}/messages`, { content });
-    get().addMessage(res.data);
+    get().addMessage(res.data.data);
   },
 
   addMessage: (message) => {

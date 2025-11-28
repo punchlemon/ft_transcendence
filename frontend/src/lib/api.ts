@@ -328,9 +328,7 @@ export type UserSearchResponse = {
       tier: string
       division: number
     } | null
-    _count: {
-      mutualFriends: number
-    }
+    mutualFriends: number
   }>
   meta: {
     page: number

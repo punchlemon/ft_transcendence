@@ -33,14 +33,14 @@ export const buildServer = async () => {
   await server.register(swaggerUi, { routePrefix: '/docs' })
   await server.register(dbPlugin)
   await server.register(jwtPlugin)
-  await server.register(authRoutes)
-  await server.register(usersRoutes)
-  await server.register(tournamentsRoutes)
-  await server.register(gameRoutes)
-  await server.register(chatRoutes)
-  await server.register(chatWsRoutes)
-  await server.register(friendRoutes)
-  await server.register(notificationsRoutes)
+  await server.register(authRoutes, { prefix: '/api/auth' })
+  await server.register(usersRoutes, { prefix: '/api' })
+  await server.register(tournamentsRoutes, { prefix: '/api' })
+  await server.register(gameRoutes, { prefix: '/api' })
+  await server.register(chatRoutes, { prefix: '/api/chat' })
+  await server.register(chatWsRoutes, { prefix: '/api' })
+  await server.register(friendRoutes, { prefix: '/api' })
+  await server.register(notificationsRoutes, { prefix: '/api/notifications' })
 
   server.get('/api/health', async () => {
     return { status: 'ok', timestamp: new Date().toISOString() }

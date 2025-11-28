@@ -4,13 +4,13 @@ import { z } from 'zod';
 import { notificationService } from '../services/notification';
 
 const notificationsRoutes: FastifyPluginAsync = async (fastify) => {
-  fastify.get('/notifications', { preHandler: fastify.authenticate }, async (request, reply) => {
+  fastify.get('/', { preHandler: fastify.authenticate }, async (request, reply) => {
     const userId = request.user.userId;
     const notifications = await notificationService.getNotifications(userId);
     return { data: notifications };
   });
 
-  fastify.patch('/notifications/:id/read', { preHandler: fastify.authenticate }, async (request, reply) => {
+  fastify.patch('/:id/read', { preHandler: fastify.authenticate }, async (request, reply) => {
     const paramsSchema = z.object({
       id: z.coerce.number().int().positive(),
     });
@@ -33,11 +33,11 @@ const notificationsRoutes: FastifyPluginAsync = async (fastify) => {
     }
   });
 
-  fastify.patch('/notifications/read-all', { preHandler: fastify.authenticate }, async (request, reply) => {
+  fastify.patch('/read-all', { preHandler: fastify.authenticate }, async (request, reply) => {
     const userId = request.user.userId;
     await notificationService.markAllAsRead(userId);
     return { success: true };
   });
 };
 
-export default fp(notificationsRoutes);
+export default notificationsRoutes;

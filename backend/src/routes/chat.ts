@@ -4,7 +4,7 @@ import { chatService } from '../services/chat'
 
 export default async function chatRoutes(fastify: FastifyInstance) {
   // List threads (channels)
-  fastify.get('/chat/threads', {
+  fastify.get('/threads', {
     onRequest: [fastify.authenticate]
   }, async (req, reply) => {
     const userId = req.user.userId
@@ -47,7 +47,7 @@ export default async function chatRoutes(fastify: FastifyInstance) {
     password: z.string().optional() // For Protected
   })
 
-  fastify.post('/chat/threads', {
+  fastify.post('/threads', {
     onRequest: [fastify.authenticate]
   }, async (req, reply) => {
     const { type, name, targetUserId, password } = createThreadSchema.parse(req.body)
@@ -69,7 +69,7 @@ export default async function chatRoutes(fastify: FastifyInstance) {
   })
 
   // Get messages
-  fastify.get('/chat/threads/:id/messages', {
+  fastify.get('/threads/:id/messages', {
     onRequest: [fastify.authenticate]
   }, async (req, reply) => {
     const { id } = req.params as { id: string }
@@ -95,7 +95,7 @@ export default async function chatRoutes(fastify: FastifyInstance) {
     content: z.string().min(1)
   })
 
-  fastify.post('/chat/threads/:id/messages', {
+  fastify.post('/threads/:id/messages', {
     onRequest: [fastify.authenticate]
   }, async (req, reply) => {
     const { id } = req.params as { id: string }

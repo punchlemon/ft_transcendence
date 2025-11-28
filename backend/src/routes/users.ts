@@ -41,7 +41,7 @@ const usersRoutes: FastifyPluginAsync = async (fastify) => {
     id: z.coerce.number().int().positive()
   })
 
-  fastify.patch('/api/users/:id', { preHandler: fastify.authenticate }, async (request, reply) => {
+  fastify.patch('/users/:id', { preHandler: fastify.authenticate }, async (request, reply) => {
     const paramsParsed = paramsSchema.safeParse(request.params)
     if (!paramsParsed.success) {
       reply.code(400)
@@ -105,7 +105,7 @@ const usersRoutes: FastifyPluginAsync = async (fastify) => {
     return updatedUser
   })
 
-  fastify.get('/api/users/:id', { preHandler: fastify.authenticate }, async (request, reply) => {
+  fastify.get('/users/:id', { preHandler: fastify.authenticate }, async (request, reply) => {
     const parsed = paramsSchema.safeParse(request.params)
     if (!parsed.success) {
       reply.code(400)
@@ -239,7 +239,7 @@ const usersRoutes: FastifyPluginAsync = async (fastify) => {
     }
   })
 
-  fastify.get('/api/users/:id/matches', { preHandler: fastify.authenticate }, async (request, reply) => {
+  fastify.get('/users/:id/matches', { preHandler: fastify.authenticate }, async (request, reply) => {
     const paramsParsed = paramsSchema.safeParse(request.params)
     if (!paramsParsed.success) {
       reply.code(400)
@@ -306,7 +306,7 @@ const usersRoutes: FastifyPluginAsync = async (fastify) => {
     }
   })
 
-  fastify.get('/api/users/:id/friends', { preHandler: fastify.authenticate }, async (request, reply) => {
+  fastify.get('/users/:id/friends', { preHandler: fastify.authenticate }, async (request, reply) => {
     const parsed = paramsSchema.safeParse(request.params)
     if (!parsed.success) {
       reply.code(400)
@@ -333,7 +333,7 @@ const usersRoutes: FastifyPluginAsync = async (fastify) => {
     return { data: friends }
   })
 
-  fastify.get('/api/users', { preHandler: fastify.authenticate }, async (request, reply) => {
+  fastify.get('/users', { preHandler: fastify.authenticate }, async (request, reply) => {
     const parsed = searchQuerySchema.safeParse(request.query)
 
     if (!parsed.success) {
@@ -488,7 +488,7 @@ const usersRoutes: FastifyPluginAsync = async (fastify) => {
   })
 }
 
-export default fp(usersRoutes)
+export default usersRoutes
 
 /*
 解説:

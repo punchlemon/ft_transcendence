@@ -21,7 +21,7 @@ const UsersPage = () => {
   useEffect(() => {
     if (currentUser) {
       fetchUserFriends(currentUser.id.toString()).then(res => {
-        setMyFriends(res.data.map(f => f.id))
+        setMyFriends(res.data?.map(f => f.id) || [])
       }).catch(console.error)
     }
   }, [currentUser])
@@ -31,8 +31,8 @@ const UsersPage = () => {
       setLoading(true)
       try {
         const response = await fetchUsers(params)
-        setUsers(response.data)
-        setMeta(response.meta)
+        setUsers(response.data || [])
+        setMeta(response.meta || { page: 1, limit: 20, total: 0 })
       } catch (error) {
         console.error('Failed to fetch users:', error)
       } finally {
@@ -116,7 +116,7 @@ const UsersPage = () => {
         <div className="py-12 text-center text-slate-500">読み込み中...</div>
       ) : (
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-          {users.map((user) => (
+          {users?.map((user) => (
             <Link
               key={user.id}
               to={`/profile/${user.id}`}
@@ -137,9 +137,9 @@ const UsersPage = () => {
                 <h3 className="truncate font-medium text-slate-900">{user.displayName}</h3>
                 <div className="flex items-center gap-2 text-xs text-slate-500">
                   <span>MMR: {user.ladderProfile?.mmr ?? 0}</span>
-                  {user._count.mutualFriends > 0 && (
+                  {user.mutualFriends > 0 && (
                     <span className="rounded-full bg-indigo-50 px-2 py-0.5 text-indigo-600">
-                      共通の友達 {user._count.mutualFriends}人
+                      共通の友達 {user.mutualFriends}人
                     </span>
                   )}
                 </div>

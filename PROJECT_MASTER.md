@@ -148,4 +148,11 @@
 - [x] **User Search Implementation**
     - [x] Implement backend sorting/filtering
     - [x] Create `Users` page with search/sort UI
-|
+
+## Development Commands (Docker)
+- **Reset Database**: `docker compose exec backend npm run db:reset` (Clears all data in container)
+- **List Users**: `docker compose exec backend npm run db:users` (Shows current users in container)
+
+## Development Commands (Local)
+- **Reset Database**: `cd backend && npm run db:reset`
+- **List Users**: `cd backend && npm run db:users`
