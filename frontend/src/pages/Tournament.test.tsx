@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
+import { MemoryRouter } from 'react-router-dom'
 import TournamentPage from './Tournament'
 import { api } from '../lib/api'
 
@@ -37,7 +38,11 @@ describe('TournamentPage', () => {
 
   it('allows registering and removing players through the UI', async () => {
     const user = userEvent.setup()
-    render(<TournamentPage />)
+    render(
+      <MemoryRouter>
+        <TournamentPage />
+      </MemoryRouter>
+    )
 
     await registerAlias(user, 'Alpha')
 
@@ -52,7 +57,11 @@ describe('TournamentPage', () => {
 
   it('shows validation errors when duplicate aliases are submitted', async () => {
     const user = userEvent.setup()
-    render(<TournamentPage />)
+    render(
+      <MemoryRouter>
+        <TournamentPage />
+      </MemoryRouter>
+    )
 
     await registerAlias(user, 'Meteor')
 
@@ -66,7 +75,11 @@ describe('TournamentPage', () => {
 
   it('disables generating matches until at least two players join', async () => {
     const user = userEvent.setup()
-    render(<TournamentPage />)
+    render(
+      <MemoryRouter>
+        <TournamentPage />
+      </MemoryRouter>
+    )
 
     const generateButton = screen.getByRole('button', { name: 'トーナメント生成' })
     expect(generateButton).toBeDisabled()
@@ -98,7 +111,11 @@ describe('TournamentPage', () => {
     vi.mocked(createTournament).mockResolvedValue({ data: mockTournament } as any)
     vi.mocked(fetchTournament).mockResolvedValue({ data: mockDetail } as any)
 
-    render(<TournamentPage />)
+    render(
+      <MemoryRouter>
+        <TournamentPage />
+      </MemoryRouter>
+    )
 
     await registerAlias(user, 'Astra')
     await registerAlias(user, 'Borealis')

@@ -1,7 +1,18 @@
 import { useEffect, useState } from 'react'
-import { useParams } from 'react-router-dom'
+import { useParams, useNavigate } from 'react-router-dom'
 import useAuthStore from '../stores/authStore'
-import { fetchUserProfile, fetchUserMatches, fetchUserFriends } from '../lib/api'
+import { 
+  fetchUserProfile, 
+  fetchUserMatches, 
+  fetchUserFriends,
+  sendFriendRequest,
+  removeFriend,
+  acceptFriendRequest,
+  blockUser,
+  unblockUser,
+  inviteToGame
+} from '../lib/api'
+import { EditProfileModal } from '../components/profile/EditProfileModal'
 
 // Mock types
 interface UserProfile {
@@ -11,6 +22,10 @@ interface UserProfile {
   avatarUrl: string
   status: 'online' | 'offline' | 'in-game'
   bio: string
+  friendshipStatus: 'NONE' | 'FRIEND' | 'PENDING_SENT' | 'PENDING_RECEIVED'
+  friendRequestId?: number
+  isBlockedByViewer: boolean
+  isBlockingViewer: boolean
 }
 
 interface UserStats {
@@ -40,6 +55,7 @@ interface Friend {
 
 const ProfilePage = () => {
   const { id } = useParams<{ id: string }>()
+  const navigate = useNavigate()
   const currentUser = useAuthStore((state) => state.user)
   const isOwnProfile = currentUser?.id === (id ? Number(id) : undefined)
 
@@ -48,75 +64,115 @@ const ProfilePage = () => {
   const [history, setHistory] = useState<MatchHistory[]>([])
   const [friends, setFriends] = useState<Friend[]>([])
   const [isLoading, setIsLoading] = useState(true)
+  const [isActionLoading, setIsActionLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [isEditModalOpen, setIsEditModalOpen] = useState(false)
+
+  const fetchProfileData = async () => {
+    if (!id) return
+    // Don't set loading true on refresh to avoid flicker
+    setError(null)
+    try {
+      const [profileData, matchesData, friendsData] = await Promise.all([
+        fetchUserProfile(id),
+        fetchUserMatches(id),
+        fetchUserFriends(id)
+      ])
+
+      setProfile({
+        id: String(profileData.id),
+        displayName: profileData.displayName,
+        tag: `#${profileData.login}`,
+        avatarUrl: profileData.avatarUrl || 'https://via.placeholder.com/150',
+        status: (profileData.status?.toLowerCase() as 'online' | 'offline' | 'in-game') || 'offline',
+        bio: profileData.bio || 'No bio available',
+        friendshipStatus: profileData.friendshipStatus,
+        friendRequestId: profileData.friendRequestId,
+        isBlockedByViewer: profileData.isBlockedByViewer,
+        isBlockingViewer: profileData.isBlockingViewer
+      })
+
+      if (profileData.stats) {
+        const totalMatches = profileData.stats.matchesPlayed
+        const winRate = totalMatches > 0 ? Math.round((profileData.stats.wins / totalMatches) * 100) : 0
+
+        setStats({
+          wins: profileData.stats.wins,
+          losses: profileData.stats.losses,
+          totalMatches: totalMatches,
+          winRate: winRate,
+          mvpCount: 0, // Not available in API yet
+          currentStreak: 0, // Not available in API yet
+        })
+      } else {
+        setStats(null)
+      }
+
+      setHistory(
+        matchesData.data.map((m) => ({
+          id: String(m.id),
+          opponentName: m.opponent.displayName,
+          result: m.result.toLowerCase() as 'win' | 'loss',
+          score: m.score,
+          date: new Date(m.date).toLocaleDateString(),
+          mode: m.mode.toLowerCase() as 'standard' | 'party',
+        }))
+      )
+
+      setFriends(
+        friendsData.data.map((f) => ({
+          id: String(f.id),
+          displayName: f.displayName,
+          status: (f.status.toLowerCase() as 'online' | 'offline' | 'in-game') || 'offline',
+          avatarUrl: f.avatarUrl || 'https://via.placeholder.com/40',
+        }))
+      )
+    } catch (err) {
+      console.error(err)
+      setError('Failed to load profile')
+    } finally {
+      setIsLoading(false)
+    }
+  }
 
   useEffect(() => {
-    const fetchProfileData = async () => {
-      setIsLoading(true)
-      setError(null)
-      try {
-        if (!id) throw new Error('User ID is required')
-
-        const [profileData, matchesData, friendsData] = await Promise.all([
-          fetchUserProfile(id),
-          fetchUserMatches(id),
-          fetchUserFriends(id)
-        ])
-
-        setProfile({
-          id: String(profileData.id),
-          displayName: profileData.displayName,
-          tag: `#${profileData.login}`,
-          avatarUrl: profileData.avatarUrl || 'https://via.placeholder.com/150',
-          status: (profileData.status?.toLowerCase() as 'online' | 'offline' | 'in-game') || 'offline',
-          bio: profileData.bio || 'No bio available',
-        })
-
-        if (profileData.stats) {
-          const totalMatches = profileData.stats.matchesPlayed
-          const winRate = totalMatches > 0 ? Math.round((profileData.stats.wins / totalMatches) * 100) : 0
-
-          setStats({
-            wins: profileData.stats.wins,
-            losses: profileData.stats.losses,
-            totalMatches: totalMatches,
-            winRate: winRate,
-            mvpCount: 0, // Not available in API yet
-            currentStreak: 0, // Not available in API yet
-          })
-        } else {
-          setStats(null)
-        }
-
-        setHistory(
-          matchesData.data.map((m) => ({
-            id: String(m.id),
-            opponentName: m.opponent.displayName,
-            result: m.result.toLowerCase() as 'win' | 'loss',
-            score: m.score,
-            date: new Date(m.date).toLocaleDateString(),
-            mode: m.mode.toLowerCase() as 'standard' | 'party',
-          }))
-        )
-
-        setFriends(
-          friendsData.data.map((f) => ({
-            id: String(f.id),
-            displayName: f.displayName,
-            status: (f.status.toLowerCase() as 'online' | 'offline' | 'in-game') || 'offline',
-            avatarUrl: f.avatarUrl || 'https://via.placeholder.com/40',
-          }))
-        )
-      } catch (err) {
-        console.error(err)
-        setError('Failed to load profile')
-      } finally {
-        setIsLoading(false)
-      }
-    }
-
+    setIsLoading(true)
     fetchProfileData()
   }, [id])
+
+  const handleFriendAction = async (action: 'add' | 'remove' | 'accept' | 'block' | 'unblock') => {
+    if (!profile) return
+    setIsActionLoading(true)
+    try {
+      const userId = Number(profile.id)
+      if (action === 'add') await sendFriendRequest(userId)
+      if (action === 'remove') await removeFriend(userId)
+      if (action === 'accept' && profile.friendRequestId) await acceptFriendRequest(profile.friendRequestId)
+      if (action === 'block') await blockUser(userId)
+      if (action === 'unblock') await unblockUser(userId)
+      
+      await fetchProfileData()
+    } catch (err) {
+      console.error(err)
+      // Ideally show a toast here
+    } finally {
+      setIsActionLoading(false)
+    }
+  }
+
+  const handleInvite = async () => {
+    if (!profile) return
+    setIsActionLoading(true)
+    try {
+      const { sessionId } = await inviteToGame(Number(profile.id))
+      navigate(`/game/${sessionId}`)
+    } catch (err) {
+      console.error(err)
+      setError('Failed to invite user')
+    } finally {
+      setIsActionLoading(false)
+    }
+  }
 
   if (isLoading) {
     return (
@@ -164,11 +220,83 @@ const ProfilePage = () => {
           </div>
           <p className="mt-2 text-slate-600">{profile.bio}</p>
           
-          {isOwnProfile && (
-            <button className="mt-4 rounded-md bg-slate-900 px-4 py-2 text-sm font-medium text-white hover:bg-slate-800">
-              Edit Profile
-            </button>
-          )}
+          <div className="mt-4 flex flex-wrap justify-center gap-2 sm:justify-start">
+            {isOwnProfile ? (
+              <button
+                onClick={() => setIsEditModalOpen(true)}
+                className="rounded-md bg-slate-900 px-4 py-2 text-sm font-medium text-white hover:bg-slate-800"
+              >
+                Edit Profile
+              </button>
+            ) : (
+              <>
+                {!profile.isBlockedByViewer && !profile.isBlockingViewer && (
+                  <>
+                    <button
+                      onClick={handleInvite}
+                      disabled={isActionLoading}
+                      className="rounded-md bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-500 disabled:opacity-50"
+                    >
+                      Invite to Game
+                    </button>
+                    {profile.friendshipStatus === 'NONE' && (
+                      <button
+                        onClick={() => handleFriendAction('add')}
+                        disabled={isActionLoading}
+                        className="rounded-md bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-500 disabled:opacity-50"
+                      >
+                        Add Friend
+                      </button>
+                    )}
+                    {profile.friendshipStatus === 'PENDING_SENT' && (
+                      <button
+                        disabled
+                        className="rounded-md bg-slate-100 px-4 py-2 text-sm font-medium text-slate-500 cursor-not-allowed"
+                      >
+                        Request Sent
+                      </button>
+                    )}
+                    {profile.friendshipStatus === 'PENDING_RECEIVED' && (
+                      <button
+                        onClick={() => handleFriendAction('accept')}
+                        disabled={isActionLoading}
+                        className="rounded-md bg-green-600 px-4 py-2 text-sm font-medium text-white hover:bg-green-500 disabled:opacity-50"
+                      >
+                        Accept Request
+                      </button>
+                    )}
+                    {profile.friendshipStatus === 'FRIEND' && (
+                      <button
+                        onClick={() => handleFriendAction('remove')}
+                        disabled={isActionLoading}
+                        className="rounded-md border border-slate-300 bg-white px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50 disabled:opacity-50"
+                      >
+                        Unfriend
+                      </button>
+                    )}
+                  </>
+                )}
+                
+                {profile.isBlockedByViewer ? (
+                  <button
+                    onClick={() => handleFriendAction('unblock')}
+                    disabled={isActionLoading}
+                    className="rounded-md bg-slate-600 px-4 py-2 text-sm font-medium text-white hover:bg-slate-500 disabled:opacity-50"
+                  >
+                    Unblock
+                  </button>
+                ) : (
+                  <button
+                    onClick={() => handleFriendAction('block')}
+                    disabled={isActionLoading}
+                    className="rounded-md border border-red-200 bg-red-50 px-4 py-2 text-sm font-medium text-red-600 hover:bg-red-100 disabled:opacity-50"
+                  >
+                    Block
+                  </button>
+                )}
+              </>
+            )}
+          </div>
         </div>
       </div>
 
@@ -304,6 +432,31 @@ const ProfilePage = () => {
           </div>
         </div>
       </div>
+
+      {profile && (
+        <EditProfileModal
+          userId={profile.id}
+          initialData={{
+            displayName: profile.displayName,
+            bio: profile.bio,
+            avatarUrl: profile.avatarUrl
+          }}
+          isOpen={isEditModalOpen}
+          onClose={() => setIsEditModalOpen(false)}
+          onSuccess={(updated) => {
+            setProfile((prev) =>
+              prev
+                ? {
+                    ...prev,
+                    displayName: updated.displayName,
+                    bio: updated.bio || '',
+                    avatarUrl: updated.avatarUrl || 'https://via.placeholder.com/150'
+                  }
+                : null
+            )
+          }}
+        />
+      )}
     </div>
   )
 }

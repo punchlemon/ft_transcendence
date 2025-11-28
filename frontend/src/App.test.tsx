@@ -35,7 +35,7 @@ describe('App', () => {
     await waitFor(() => {
       expect(screen.getByTestId('navbar-auth-state')).toBeInTheDocument()
     })
-    expect(screen.getByText('Daisy でログイン中')).toBeInTheDocument()
+    expect(screen.getByText('Daisy')).toBeInTheDocument()
   })
 
   it('renders 2FA route content', () => {

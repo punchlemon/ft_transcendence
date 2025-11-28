@@ -11,6 +11,9 @@ import tournamentsRoutes from './routes/tournaments'
 import authRoutes from './routes/auth'
 import gameRoutes from './routes/game'
 import chatRoutes from './routes/chat'
+import chatWsRoutes from './routes/chatWs'
+import friendRoutes from './routes/friends'
+import notificationsRoutes from './routes/notifications'
 
 if (!process.env.DATABASE_URL) {
   const sqlitePath = path.resolve(process.cwd(), 'prisma', 'dev.db')
@@ -30,11 +33,14 @@ export const buildServer = async () => {
   await server.register(swaggerUi, { routePrefix: '/docs' })
   await server.register(dbPlugin)
   await server.register(jwtPlugin)
-  await server.register(authRoutes)
-  await server.register(usersRoutes)
-  await server.register(tournamentsRoutes)
+  await server.register(authRoutes, { prefix: '/auth' })
+  await server.register(usersRoutes, { prefix: '/api' })
+  await server.register(tournamentsRoutes, { prefix: '/api' })
   await server.register(gameRoutes)
-  await server.register(chatRoutes)
+  await server.register(chatRoutes, { prefix: '/chat' })
+  await server.register(chatWsRoutes)
+  await server.register(friendRoutes)
+  await server.register(notificationsRoutes, { prefix: '/notifications' })
 
   server.get('/api/health', async () => {
     return { status: 'ok', timestamp: new Date().toISOString() }

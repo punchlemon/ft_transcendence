@@ -1,108 +1,63 @@
-import { useState, useEffect, useRef, useCallback } from 'react'
-import { api } from '../../lib/api'
+import { useState, useEffect, useRef, useMemo } from 'react'
+import { useNavigate } from 'react-router-dom'
 import useAuthStore from '../../stores/authStore'
-
-type Message = {
-  id: number
-  channelId: number
-  userId: number
-  content: string
-  sentAt: string
-  user: {
-    id: number
-    displayName: string
-    avatarUrl: string | null
-  }
-}
-
-type Thread = {
-  id: number
-  name: string
-  type: string
-  updatedAt: string
-  lastMessage: Message | null
-  members: {
-    id: number
-    displayName: string
-    status: string
-    avatarUrl: string | null
-  }[]
-}
+import { useChatStore } from '../../stores/chatStore'
+import { connectChatWs, disconnectChatWs } from '../../lib/chatWs'
+import { inviteToGame } from '../../lib/api'
 
 const ChatDrawer = () => {
   const [isOpen, setIsOpen] = useState(false)
   const [activeTab, setActiveTab] = useState<'dm' | 'system'>('dm')
-  const [selectedThreadId, setSelectedThreadId] = useState<number | null>(null)
   const [messageInput, setMessageInput] = useState('')
+  const [showMenu, setShowMenu] = useState(false)
   const messagesEndRef = useRef<HTMLDivElement>(null)
+  const navigate = useNavigate()
   
   const { user } = useAuthStore()
-  const [threads, setThreads] = useState<Thread[]>([])
-  const [messages, setMessages] = useState<Message[]>([])
+  const { 
+    threads,
+    activeThreadId, 
+    messages, 
+    fetchThreads, 
+    selectThread, 
+    sendMessage 
+  } = useChatStore()
 
-  const fetchThreads = useCallback(async () => {
-    try {
-      const res = await api.get<{ data: Thread[] }>('/chat/threads')
-      setThreads(res.data.data)
-    } catch (err) {
-      console.error('Failed to fetch threads', err)
-    }
-  }, [])
+  // Ensure threads is always an array to avoid test/runtime errors when store is uninitialized
+  const threadsArr = threads ?? []
 
-  const fetchMessages = useCallback(async (threadId: number) => {
-    try {
-      const res = await api.get<{ data: Message[] }>(`/chat/threads/${threadId}/messages`)
-      setMessages(res.data.data)
-    } catch (err) {
-      console.error('Failed to fetch messages', err)
-    }
-  }, [])
-
+  // Connect WS on mount if user is logged in
   useEffect(() => {
-    if (isOpen) {
-      const t = setTimeout(fetchThreads, 0)
-      // Poll for threads every 10s
-      const interval = setInterval(fetchThreads, 10000)
-      return () => {
-        clearTimeout(t)
-        clearInterval(interval)
-      }
+    if (user) {
+      connectChatWs()
+      fetchThreads()
     }
-  }, [isOpen, fetchThreads])
+    return () => {
+      disconnectChatWs()
+    }
+  }, [user, fetchThreads])
 
-  useEffect(() => {
-    if (selectedThreadId) {
-      const t = setTimeout(() => fetchMessages(selectedThreadId), 0)
-      // Poll for messages every 3s
-      const interval = setInterval(() => fetchMessages(selectedThreadId), 3000)
-      return () => {
-        clearTimeout(t)
-        clearInterval(interval)
-      }
-    }
-  }, [selectedThreadId, fetchMessages])
+  const activeMessages = useMemo(() => {
+    return activeThreadId ? (messages?.[activeThreadId] || []) : []
+  }, [activeThreadId, messages])
 
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
   }
 
   useEffect(() => {
-    if (isOpen && selectedThreadId) {
+    if (isOpen && activeThreadId) {
       scrollToBottom()
     }
-  }, [isOpen, selectedThreadId, messages])
+  }, [isOpen, activeThreadId, activeMessages])
 
   const handleSendMessage = async (e: React.FormEvent) => {
     e.preventDefault()
-    if (!messageInput.trim() || !selectedThreadId) return
+    if (!messageInput.trim() || !activeThreadId) return
 
     try {
-      await api.post(`/chat/threads/${selectedThreadId}/messages`, {
-        content: messageInput
-      })
+      await sendMessage(messageInput)
       setMessageInput('')
-      fetchMessages(selectedThreadId)
-      fetchThreads() // Update last message in list
     } catch (err) {
       console.error('Failed to send message', err)
     }
@@ -110,12 +65,29 @@ const ChatDrawer = () => {
 
   const toggleDrawer = () => setIsOpen(!isOpen)
 
-  const getThreadStatus = (thread: Thread) => {
+  const getThreadStatus = (thread: any) => {
     if (thread.type === 'DM') {
-      const other = thread.members.find(m => m.id !== user?.id)
+      const other = thread.members.find((m: any) => m.id !== user?.id)
       return other?.status === 'ONLINE' ? 'online' : 'offline'
     }
-    return 'online' // Groups always online?
+    return 'online'
+  }
+
+  const activeThread = threadsArr.find(t => t.id === activeThreadId)
+
+  const handleInvite = async () => {
+    if (!activeThread || activeThread.type !== 'DM') return
+    
+    const otherMember = activeThread.members.find((m: any) => m.id !== user?.id)
+    if (!otherMember) return
+
+    try {
+      const { sessionId } = await inviteToGame(otherMember.id)
+      navigate(`/game/${sessionId}`)
+      setIsOpen(false)
+    } catch (err) {
+      console.error('Failed to invite user', err)
+    }
   }
 
   return (
@@ -131,7 +103,6 @@ const ChatDrawer = () => {
       >
         <div className="flex items-center gap-2">
           <span className="font-semibold">Chat</span>
-          {/* Unread count logic would go here */}
         </div>
         <button className="text-slate-300 hover:text-white">
           {isOpen ? '▼' : '▲'}
@@ -141,23 +112,49 @@ const ChatDrawer = () => {
       {/* Content */}
       {isOpen && (
         <div className="flex flex-1 flex-col overflow-hidden">
-          {selectedThreadId ? (
+          {activeThreadId ? (
             // Chat Room View
             <>
-              <div className="flex items-center border-b border-slate-100 px-4 py-2">
-                <button 
-                  onClick={() => setSelectedThreadId(null)}
-                  className="mr-2 text-slate-400 hover:text-slate-600"
-                >
-                  ←
-                </button>
-                <span className="font-medium text-slate-900">
-                  {threads.find(t => t.id === selectedThreadId)?.name}
-                </span>
+              <div className="flex items-center justify-between border-b border-slate-100 px-4 py-2">
+                <div className="flex items-center">
+                  <button 
+                    onClick={() => selectThread(null)}
+                    className="mr-2 text-slate-400 hover:text-slate-600"
+                  >
+                    ←
+                  </button>
+                  <span className="font-medium text-slate-900">
+                    {activeThread?.name}
+                  </span>
+                </div>
+
+                {activeThread?.type === 'DM' && (
+                  <div className="relative">
+                    <button 
+                      onClick={() => setShowMenu(!showMenu)}
+                      className="text-slate-400 hover:text-slate-600 px-2"
+                    >
+                      ⋮
+                    </button>
+                    {showMenu && (
+                      <div className="absolute right-0 top-full mt-1 w-48 rounded-md bg-white py-1 shadow-lg ring-1 ring-black ring-opacity-5 z-50">
+                        <button
+                          onClick={() => {
+                            handleInvite()
+                            setShowMenu(false)
+                          }}
+                          className="block w-full px-4 py-2 text-left text-sm text-slate-700 hover:bg-slate-100"
+                        >
+                          Invite to Game
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                )}
               </div>
 
               <div className="flex-1 overflow-y-auto bg-slate-50 p-4 space-y-4">
-                {messages.map((msg) => (
+                {activeMessages.slice().reverse().map((msg) => (
                   <div key={msg.id} className={`flex ${msg.userId === user?.id ? 'justify-end' : 'justify-start'}`}>
                     <div className={`max-w-[80%] rounded-lg px-3 py-2 text-sm ${
                       msg.userId === user?.id 
@@ -213,11 +210,11 @@ const ChatDrawer = () => {
 
               <div className="flex-1 overflow-y-auto">
                 {activeTab === 'dm' ? (
-                  threads.length > 0 ? (
-                    threads.map((thread) => (
+                  threadsArr.length > 0 ? (
+                    threadsArr.map((thread) => (
                       <div
                         key={thread.id}
-                        onClick={() => setSelectedThreadId(thread.id)}
+                        onClick={() => selectThread(thread.id)}
                         className="flex cursor-pointer items-center gap-3 border-b border-slate-50 p-3 hover:bg-slate-50"
                       >
                         <div className="relative">

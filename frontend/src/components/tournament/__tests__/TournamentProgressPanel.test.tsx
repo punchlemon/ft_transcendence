@@ -24,6 +24,7 @@ describe('TournamentProgressPanel', () => {
         matchQueue={[currentMatch]}
         currentMatchIndex={0}
         onAdvance={onAdvance}
+        onPlayMatch={vi.fn()}
       />
     )
 
@@ -34,8 +35,34 @@ describe('TournamentProgressPanel', () => {
     expect(onAdvance).toHaveBeenCalledTimes(1)
   })
 
+  it('対戦相手がいる場合は試合開始ボタンを表示する', async () => {
+    const user = userEvent.setup()
+    const onPlayMatch = vi.fn()
+    const currentMatch: MatchQueueItem = {
+      id: 'match-1',
+      players: ['Alpha', 'Beta']
+    }
+
+    render(
+      <TournamentProgressPanel
+        currentMatch={currentMatch}
+        matchQueue={[currentMatch]}
+        currentMatchIndex={0}
+        onAdvance={vi.fn()}
+        onPlayMatch={onPlayMatch}
+      />
+    )
+
+    expect(screen.getByText('Alpha vs Beta', { selector: 'p' })).toBeInTheDocument()
+    const playButton = screen.getByRole('button', { name: '試合を開始する' })
+    expect(playButton).toBeInTheDocument()
+    
+    await user.click(playButton)
+    expect(onPlayMatch).toHaveBeenCalledTimes(1)
+  })
+
   it('マッチキューが空の場合は開始案内を表示する', () => {
-    render(<TournamentProgressPanel currentMatch={null} matchQueue={[]} currentMatchIndex={-1} onAdvance={vi.fn()} />)
+    render(<TournamentProgressPanel currentMatch={null} matchQueue={[]} currentMatchIndex={-1} onAdvance={vi.fn()} onPlayMatch={vi.fn()} />)
 
     expect(screen.getByText('トーナメント生成ボタンでマッチメイクを開始してください。')).toBeInTheDocument()
   })
@@ -52,6 +79,7 @@ describe('TournamentProgressPanel', () => {
         matchQueue={matchQueue}
         currentMatchIndex={1}
         onAdvance={vi.fn()}
+        onPlayMatch={vi.fn()}
       />
     )
 

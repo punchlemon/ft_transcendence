@@ -14,7 +14,9 @@ const searchQuerySchema = z.object({
   status: z.enum(STATUS_VALUES).optional(),
   page: z.coerce.number().int().min(1).default(1),
   limit: z.coerce.number().int().min(1).default(20),
-  excludeFriendIds: z.string().optional()
+  excludeFriendIds: z.string().optional(),
+  sortBy: z.enum(['displayName', 'createdAt', 'mmr']).default('displayName'),
+  order: z.enum(['asc', 'desc']).default('asc')
 })
 
 type SearchQuery = z.infer<typeof searchQuerySchema>
@@ -28,12 +30,82 @@ const parseExcludeIds = (excludeFriendIds?: string) => {
     .filter((id) => Number.isInteger(id) && id > 0)
 }
 
+const updateProfileSchema = z.object({
+  displayName: z.string().trim().min(1).max(32).optional(),
+  bio: z.string().trim().max(255).optional(),
+  avatarUrl: z.string().trim().url().optional()
+})
+
 const usersRoutes: FastifyPluginAsync = async (fastify) => {
   const paramsSchema = z.object({
     id: z.coerce.number().int().positive()
   })
 
-  fastify.get('/api/users/:id', { preHandler: fastify.authenticate }, async (request, reply) => {
+  fastify.patch('/users/:id', { preHandler: fastify.authenticate }, async (request, reply) => {
+    const paramsParsed = paramsSchema.safeParse(request.params)
+    if (!paramsParsed.success) {
+      reply.code(400)
+      return { error: { code: 'INVALID_PARAMS', message: 'Invalid user ID' } }
+    }
+
+    const { id: targetId } = paramsParsed.data
+    const viewerId = request.user.userId
+
+    if (targetId !== viewerId) {
+      reply.code(403)
+      return { error: { code: 'FORBIDDEN', message: 'You can only edit your own profile' } }
+    }
+
+    const bodyParsed = updateProfileSchema.safeParse(request.body)
+    if (!bodyParsed.success) {
+      reply.code(400)
+      return {
+        error: {
+          code: 'INVALID_BODY',
+          message: 'Invalid request body',
+          details: bodyParsed.error.flatten().fieldErrors
+        }
+      }
+    }
+
+    const { displayName, bio, avatarUrl } = bodyParsed.data
+
+    // Check if displayName is taken (if changed)
+    if (displayName) {
+      const existing = await fastify.prisma.user.findFirst({
+        where: {
+          displayName,
+          id: { not: viewerId }
+        }
+      })
+      if (existing) {
+        reply.code(409)
+        return { error: { code: 'DISPLAY_NAME_TAKEN', message: 'Display name is already taken' } }
+      }
+    }
+
+    const updatedUser = await fastify.prisma.user.update({
+      where: { id: viewerId },
+      data: {
+        displayName,
+        bio,
+        avatarUrl
+      },
+      select: {
+        id: true,
+        displayName: true,
+        login: true,
+        status: true,
+        avatarUrl: true,
+        bio: true,
+        country: true
+      }
+    })
+
+    return updatedUser
+  })
+
+  fastify.get('/users/:id', { preHandler: fastify.authenticate }, async (request, reply) => {
     const parsed = paramsSchema.safeParse(request.params)
     if (!parsed.success) {
       reply.code(400)
@@ -80,28 +152,56 @@ const usersRoutes: FastifyPluginAsync = async (fastify) => {
 
     // Friendship Status
     let friendshipStatus: 'NONE' | 'FRIEND' | 'PENDING_SENT' | 'PENDING_RECEIVED' = 'NONE'
-    if (viewerId !== targetId) {
-      const friendship = await fastify.prisma.friendship.findFirst({
-        where: {
-          OR: [
-            { requesterId: viewerId, addresseeId: targetId },
-            { requesterId: targetId, addresseeId: viewerId }
-          ]
-        }
-      })
+    let isBlockedByViewer = false
+    let isBlockingViewer = false
+    let friendRequestId: number | undefined
 
-      if (friendship) {
-        if (friendship.status === 'ACCEPTED') {
-          friendshipStatus = 'FRIEND'
-        } else if (friendship.status === 'PENDING') {
-          friendshipStatus = friendship.requesterId === viewerId ? 'PENDING_SENT' : 'PENDING_RECEIVED'
+    if (viewerId !== targetId) {
+      const [friendship, block, friendRequest] = await Promise.all([
+        fastify.prisma.friendship.findFirst({
+          where: {
+            OR: [
+              { requesterId: viewerId, addresseeId: targetId },
+              { requesterId: targetId, addresseeId: viewerId }
+            ]
+          }
+        }),
+        fastify.prisma.blocklist.findFirst({
+          where: {
+            OR: [
+              { blockerId: viewerId, blockedId: targetId },
+              { blockerId: targetId, blockedId: viewerId }
+            ]
+          }
+        }),
+        fastify.prisma.friendRequest.findFirst({
+          where: {
+            OR: [
+              { senderId: viewerId, receiverId: targetId, status: 'PENDING' },
+              { senderId: targetId, receiverId: viewerId, status: 'PENDING' }
+            ]
+          }
+        })
+      ])
+
+      if (friendship && friendship.status === 'ACCEPTED') {
+        friendshipStatus = 'FRIEND'
+      } else if (friendRequest) {
+        friendshipStatus = friendRequest.senderId === viewerId ? 'PENDING_SENT' : 'PENDING_RECEIVED'
+        if (friendshipStatus === 'PENDING_RECEIVED') {
+          friendRequestId = friendRequest.id
         }
+      }
+
+      if (block) {
+        if (block.blockerId === viewerId) isBlockedByViewer = true
+        if (block.blockerId === targetId) isBlockingViewer = true
       }
     }
 
     // Mutual Friends
     let mutualFriends = 0
-    if (viewerId !== targetId) {
+    if (viewerId !== targetId && !isBlockedByViewer && !isBlockingViewer) {
       // Get viewer's friends
       const viewerFriendships = await fastify.prisma.friendship.findMany({
         where: {
@@ -132,11 +232,14 @@ const usersRoutes: FastifyPluginAsync = async (fastify) => {
       ladder: user.ladderProfile,
       ladderProfile: undefined,
       friendshipStatus,
+      friendRequestId,
+      isBlockedByViewer,
+      isBlockingViewer,
       mutualFriends
     }
   })
 
-  fastify.get('/api/users/:id/matches', { preHandler: fastify.authenticate }, async (request, reply) => {
+  fastify.get('/users/:id/matches', { preHandler: fastify.authenticate }, async (request, reply) => {
     const paramsParsed = paramsSchema.safeParse(request.params)
     if (!paramsParsed.success) {
       reply.code(400)
@@ -203,7 +306,7 @@ const usersRoutes: FastifyPluginAsync = async (fastify) => {
     }
   })
 
-  fastify.get('/api/users/:id/friends', { preHandler: fastify.authenticate }, async (request, reply) => {
+  fastify.get('/users/:id/friends', { preHandler: fastify.authenticate }, async (request, reply) => {
     const parsed = paramsSchema.safeParse(request.params)
     if (!parsed.success) {
       reply.code(400)
@@ -230,7 +333,7 @@ const usersRoutes: FastifyPluginAsync = async (fastify) => {
     return { data: friends }
   })
 
-  fastify.get('/api/users', { preHandler: fastify.authenticate }, async (request, reply) => {
+  fastify.get('/users', { preHandler: fastify.authenticate }, async (request, reply) => {
     const parsed = searchQuerySchema.safeParse(request.query)
 
     if (!parsed.success) {
@@ -245,7 +348,7 @@ const usersRoutes: FastifyPluginAsync = async (fastify) => {
       }
     }
 
-    const { q, status, page, limit: rawLimit, excludeFriendIds } = parsed.data
+    const { q, status, page, limit: rawLimit, excludeFriendIds, sortBy, order } = parsed.data
     const limit = Math.min(rawLimit, 50)
     const excludeIds = parseExcludeIds(excludeFriendIds)
     const skip = (page - 1) * limit
@@ -271,6 +374,21 @@ const usersRoutes: FastifyPluginAsync = async (fastify) => {
       where.id = { notIn: excludeIds }
     }
 
+    let orderBy: Prisma.UserOrderByWithRelationInput | Prisma.UserOrderByWithRelationInput[] = []
+
+    if (sortBy === 'mmr') {
+      orderBy = { ladderProfile: { mmr: order } }
+    } else {
+      orderBy = { [sortBy]: order }
+    }
+
+    // Secondary sort to ensure stable pagination
+    if (Array.isArray(orderBy)) {
+      orderBy.push({ id: 'asc' })
+    } else {
+      orderBy = [orderBy, { id: 'asc' }]
+    }
+
     const [total, users] = await fastify.prisma.$transaction([
       fastify.prisma.user.count({ where }),
       fastify.prisma.user.findMany({
@@ -281,9 +399,12 @@ const usersRoutes: FastifyPluginAsync = async (fastify) => {
           login: true,
           status: true,
           avatarUrl: true,
-          country: true
+          country: true,
+          ladderProfile: {
+            select: { mmr: true }
+          }
         },
-        orderBy: [{ displayName: 'asc' }, { id: 'asc' }],
+        orderBy,
         skip,
         take: limit
       })
@@ -367,7 +488,7 @@ const usersRoutes: FastifyPluginAsync = async (fastify) => {
   })
 }
 
-export default fp(usersRoutes)
+export default usersRoutes
 
 /*
 解説:

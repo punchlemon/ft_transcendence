@@ -12,7 +12,9 @@
     "format": "prettier --check \"src/**/*.{ts,json}\"",
     "format:fix": "prettier --write \"src/**/*.{ts,json}\"",
     "test": "vitest run --maxWorkers=1 --no-file-parallelism",
-    "test:watch": "vitest --maxWorkers=1 --no-file-parallelism"
+    "test:watch": "vitest --maxWorkers=1 --no-file-parallelism",
+    "db:reset": "prisma migrate reset --force",
+    "db:users": "ts-node scripts/list_users.ts"
   },
   "dependencies": {
     "@fastify/cors": "^8.4.1",
@@ -35,6 +37,7 @@
     "@typescript-eslint/parser": "^8.48.0",
     "eslint": "^9.39.1",
     "eslint-config-prettier": "^10.1.8",
+    "fastify-tsconfig": "^3.0.0",
     "prettier": "^3.6.2",
     "prisma": "^5.8.1",
     "ts-node-dev": "^2.0.0",

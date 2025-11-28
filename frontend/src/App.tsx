@@ -4,12 +4,16 @@ import HomePage from './pages/Home'
 import HealthCheckPage from './pages/HealthCheck'
 import TournamentPage from './pages/Tournament'
 import LoginPage from './pages/Login'
+import RegisterPage from './pages/Register'
 import MfaChallengePage from './pages/MfaChallenge'
 import OAuthCallbackPage from './pages/OAuthCallback'
 import ProfilePage from './pages/Profile'
+import SettingsPage from './pages/Settings'
+import UsersPage from './pages/Users'
 import GameLobbyPage from './pages/GameLobby'
 import GameRoomPage from './pages/GameRoom'
 import ChatDrawer from './components/chat/ChatDrawer'
+import NotificationBell from './components/ui/NotificationBell'
 import useAuthStore from './stores/authStore'
 
 const App = () => {
@@ -30,14 +34,19 @@ const App = () => {
             </Link>
             <nav className="flex flex-wrap items-center gap-4 text-sm text-slate-600">
               <Link to="/">Home</Link>
+              <Link to="/users">Users</Link>
               <Link to="/game/new">Game</Link>
               <Link to="/health">Health</Link>
               <Link to="/tournament">Tournament</Link>
               {user ? (
                 <div className="flex items-center gap-3" data-testid="navbar-auth-state">
-                  <span className="text-xs font-semibold text-slate-900 sm:text-sm">
-                    {user.displayName} でログイン中
-                  </span>
+                  <NotificationBell />
+                  <Link to={`/profile/${user.id}`} className="hover:underline">
+                    {user.displayName}
+                  </Link>
+                  <Link to="/settings/account" className="text-xs text-slate-500 hover:text-slate-800">
+                    Settings
+                  </Link>
                   <button
                     type="button"
                     onClick={clearSession}
@@ -47,12 +56,20 @@ const App = () => {
                   </button>
                 </div>
               ) : (
-                <Link
-                  to="/login"
-                  className="rounded-md border border-slate-300 px-3 py-1 text-xs font-medium text-slate-700 hover:bg-slate-50"
-                >
-                  ログイン
-                </Link>
+                <div className="flex items-center gap-2">
+                  <Link
+                    to="/login"
+                    className="rounded-md border border-slate-300 px-3 py-1 text-xs font-medium text-slate-700 hover:bg-slate-50"
+                  >
+                    ログイン
+                  </Link>
+                  <Link
+                    to="/register"
+                    className="rounded-md bg-indigo-600 px-3 py-1 text-xs font-medium text-white hover:bg-indigo-500"
+                  >
+                    新規登録
+                  </Link>
+                </div>
               )}
             </nav>
           </div>
@@ -64,9 +81,12 @@ const App = () => {
             <Route path="/health" element={<HealthCheckPage />} />
             <Route path="/tournament" element={<TournamentPage />} />
             <Route path="/login" element={<LoginPage />} />
+            <Route path="/register" element={<RegisterPage />} />
             <Route path="/auth/2fa" element={<MfaChallengePage />} />
             <Route path="/oauth/callback" element={<OAuthCallbackPage />} />
             <Route path="/profile/:id" element={<ProfilePage />} />
+            <Route path="/users" element={<UsersPage />} />
+            <Route path="/settings/account" element={<SettingsPage />} />
             <Route path="/game/new" element={<GameLobbyPage />} />
             <Route path="/game/:id" element={<GameRoomPage />} />
           </Routes>

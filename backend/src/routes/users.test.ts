@@ -67,6 +67,7 @@ describe('GET /api/users', () => {
   })
 
   beforeEach(async () => {
+    await prisma.notification.deleteMany()
     await prisma.message.deleteMany()
     await prisma.channelMember.deleteMany()
     await prisma.channelInvite.deleteMany()
@@ -79,13 +80,24 @@ describe('GET /api/users', () => {
     await prisma.tournamentParticipant.deleteMany()
     await prisma.tournament.deleteMany()
     await prisma.matchResult.deleteMany()
+    await prisma.matchRound.deleteMany()
+    await prisma.penalty.deleteMany()
     await prisma.match.deleteMany()
+    await prisma.friendship.deleteMany()
+    await prisma.blocklist.deleteMany()
+    await prisma.friendRequest.deleteMany()
     await prisma.userStats.deleteMany()
     await prisma.ladderProfile.deleteMany()
-    await prisma.session.deleteMany()
-    await prisma.friendship.deleteMany()
-    await prisma.twoFactorBackupCode.deleteMany()
+    await prisma.ladderEnrollment.deleteMany()
+    await prisma.wallet.deleteMany()
+    await prisma.inventoryItem.deleteMany()
+    await prisma.userAchievement.deleteMany()
+    await prisma.auditLog.deleteMany()
+    await prisma.oAuthState.deleteMany()
+    await prisma.oAuthAccount.deleteMany()
     await prisma.mfaChallenge.deleteMany()
+    await prisma.session.deleteMany()
+    await prisma.twoFactorBackupCode.deleteMany()
     await prisma.user.deleteMany()
   })
 
@@ -198,6 +210,158 @@ describe('GET /api/users', () => {
     expect(response.statusCode).toBe(400)
     const body = response.json<{ error: { code: string } }>()
     expect(body.error.code).toBe('INVALID_QUERY')
+  })
+
+  it('sorts users by createdAt desc', async () => {
+    const viewer = await createUser(prisma, { login: 'viewer', email: 'viewer@example.com', displayName: 'Viewer' })
+    const token = await createSessionToken(server, prisma, viewer.id)
+
+    const user1 = await createUser(prisma, { login: 'a', email: 'a@example.com', displayName: 'A' })
+    // Ensure timestamp difference
+    await new Promise(resolve => setTimeout(resolve, 10))
+    const user2 = await createUser(prisma, { login: 'b', email: 'b@example.com', displayName: 'B' })
+
+    const response = await server.inject({
+      method: 'GET',
+      url: '/api/users',
+      query: { sortBy: 'createdAt', order: 'desc' },
+      headers: authHeader(token)
+    })
+
+    expect(response.statusCode).toBe(200)
+    const body = response.json<{ data: Array<{ id: number }> }>()
+    
+    // user2 created last, so it should be first
+    expect(body.data[0].id).toBe(user2.id)
+    expect(body.data[1].id).toBe(user1.id)
+  })
+
+  it('sorts users by mmr desc', async () => {
+    const viewer = await createUser(prisma, { login: 'viewer', email: 'viewer@example.com', displayName: 'Viewer' })
+    const token = await createSessionToken(server, prisma, viewer.id)
+
+    const weak = await createUser(prisma, { login: 'weak', email: 'weak@example.com', displayName: 'Weak' })
+    await prisma.ladderProfile.create({ data: { userId: weak.id, mmr: 1000, tier: 'BRONZE', division: 4 } })
+
+    const strong = await createUser(prisma, { login: 'strong', email: 'strong@example.com', displayName: 'Strong' })
+    await prisma.ladderProfile.create({ data: { userId: strong.id, mmr: 2000, tier: 'GOLD', division: 1 } })
+
+    const response = await server.inject({
+      method: 'GET',
+      url: '/api/users',
+      query: { sortBy: 'mmr', order: 'desc' },
+      headers: authHeader(token)
+    })
+
+    expect(response.statusCode).toBe(200)
+    const body = response.json<{ data: Array<{ id: number }> }>()
+    
+    expect(body.data[0].id).toBe(strong.id)
+    expect(body.data[1].id).toBe(weak.id)
+  })
+})
+
+describe('PATCH /api/users/:id', () => {
+  let server: FastifyInstance
+  let prisma: PrismaClient
+
+  beforeAll(async () => {
+    server = await buildServer()
+    prisma = server.prisma
+  })
+
+  afterAll(async () => {
+    await server.close()
+  })
+
+  beforeEach(async () => {
+    await prisma.notification.deleteMany()
+    await prisma.message.deleteMany()
+    await prisma.channelMember.deleteMany()
+    await prisma.channelInvite.deleteMany()
+    await prisma.channelBan.deleteMany()
+    await prisma.channel.deleteMany()
+    await prisma.partyMember.deleteMany()
+    await prisma.partyInvite.deleteMany()
+    await prisma.party.deleteMany()
+    await prisma.tournamentMatch.deleteMany()
+    await prisma.tournamentParticipant.deleteMany()
+    await prisma.tournament.deleteMany()
+    await prisma.matchResult.deleteMany()
+    await prisma.matchRound.deleteMany()
+    await prisma.penalty.deleteMany()
+    await prisma.match.deleteMany()
+    await prisma.friendship.deleteMany()
+    await prisma.blocklist.deleteMany()
+    await prisma.friendRequest.deleteMany()
+    await prisma.userStats.deleteMany()
+    await prisma.ladderProfile.deleteMany()
+    await prisma.ladderEnrollment.deleteMany()
+    await prisma.wallet.deleteMany()
+    await prisma.inventoryItem.deleteMany()
+    await prisma.userAchievement.deleteMany()
+    await prisma.auditLog.deleteMany()
+    await prisma.oAuthState.deleteMany()
+    await prisma.oAuthAccount.deleteMany()
+    await prisma.mfaChallenge.deleteMany()
+    await prisma.session.deleteMany()
+    await prisma.twoFactorBackupCode.deleteMany()
+    await prisma.user.deleteMany()
+  })
+
+  it('updates user profile successfully', async () => {
+    const user = await createUser(prisma, { login: 'alice', email: 'alice@example.com', displayName: 'Alice' })
+    const token = await createSessionToken(server, prisma, user.id)
+
+    const response = await server.inject({
+      method: 'PATCH',
+      url: `/api/users/${user.id}`,
+      headers: authHeader(token),
+      payload: {
+        displayName: 'AliceWonderland',
+        bio: 'I love coding',
+        avatarUrl: 'https://example.com/avatar.png'
+      }
+    })
+
+    expect(response.statusCode).toBe(200)
+    const body = response.json<{ displayName: string; bio: string; avatarUrl: string }>()
+    expect(body.displayName).toBe('AliceWonderland')
+    expect(body.bio).toBe('I love coding')
+    expect(body.avatarUrl).toBe('https://example.com/avatar.png')
+
+    const dbUser = await prisma.user.findUnique({ where: { id: user.id } })
+    expect(dbUser?.displayName).toBe('AliceWonderland')
+  })
+
+  it('forbids updating other users profile', async () => {
+    const alice = await createUser(prisma, { login: 'alice', email: 'alice@example.com', displayName: 'Alice' })
+    const bob = await createUser(prisma, { login: 'bob', email: 'bob@example.com', displayName: 'Bob' })
+    const token = await createSessionToken(server, prisma, alice.id)
+
+    const response = await server.inject({
+      method: 'PATCH',
+      url: `/api/users/${bob.id}`,
+      headers: authHeader(token),
+      payload: { bio: 'Hacked' }
+    })
+
+    expect(response.statusCode).toBe(403)
+  })
+
+  it('rejects duplicate display name', async () => {
+    const alice = await createUser(prisma, { login: 'alice', email: 'alice@example.com', displayName: 'Alice' })
+    await createUser(prisma, { login: 'bob', email: 'bob@example.com', displayName: 'Bob' })
+    const token = await createSessionToken(server, prisma, alice.id)
+
+    const response = await server.inject({
+      method: 'PATCH',
+      url: `/api/users/${alice.id}`,
+      headers: authHeader(token),
+      payload: { displayName: 'Bob' }
+    })
+
+    expect(response.statusCode).toBe(409)
   })
 })
 

@@ -10,7 +10,7 @@ const shouldUseRelativeBase =
   rawBaseUrl.startsWith('https://backend')
 
 const resolvedBaseUrl = shouldUseRelativeBase ? '/api' : rawBaseUrl
-const baseURL = resolvedBaseUrl?.endsWith('/') ? resolvedBaseUrl.slice(0, -1) : resolvedBaseUrl
+export const baseURL = resolvedBaseUrl?.endsWith('/') ? resolvedBaseUrl.slice(0, -1) : resolvedBaseUrl
 
 const apiClient = axios.create({
   baseURL
@@ -60,6 +60,18 @@ export type LoginSuccessResponse = {
 
 export const login = async (payload: LoginPayload) => {
   const response = await apiClient.post('/auth/login', payload)
+  return response.data as LoginSuccessResponse
+}
+
+export type RegisterPayload = {
+  email: string
+  username: string
+  displayName: string
+  password: string
+}
+
+export const register = async (payload: RegisterPayload) => {
+  const response = await apiClient.post('/auth/register', payload)
   return response.data as LoginSuccessResponse
 }
 
@@ -134,12 +146,35 @@ export type UserProfileResponse = {
     mmr: number
   } | null
   friendshipStatus: 'NONE' | 'FRIEND' | 'PENDING_SENT' | 'PENDING_RECEIVED'
+  friendRequestId?: number
+  isBlockedByViewer: boolean
+  isBlockingViewer: boolean
   mutualFriends: number
 }
 
 export const fetchUserProfile = async (userId: string) => {
   const response = await apiClient.get(`/users/${userId}`)
   return response.data as UserProfileResponse
+}
+
+export const sendFriendRequest = async (userId: number) => {
+  await apiClient.post(`/friends/${userId}`)
+}
+
+export const removeFriend = async (userId: number) => {
+  await apiClient.delete(`/friends/${userId}`)
+}
+
+export const acceptFriendRequest = async (requestId: number) => {
+  await apiClient.patch(`/friends/requests/${requestId}/accept`)
+}
+
+export const blockUser = async (userId: number) => {
+  await apiClient.post(`/friends/${userId}/block`)
+}
+
+export const unblockUser = async (userId: number) => {
+  await apiClient.delete(`/friends/${userId}/block`)
 }
 
 export type MatchHistoryResponse = {
@@ -252,6 +287,74 @@ export const createTournament = async (payload: CreateTournamentPayload) => {
   return response.data as { data: Tournament }
 }
 
+export type UpdateProfilePayload = {
+  displayName?: string
+  bio?: string
+  avatarUrl?: string
+}
+
+export const updateUserProfile = async (userId: string, payload: UpdateProfilePayload) => {
+  const response = await apiClient.patch(`/users/${userId}`, payload)
+  return response.data as UserProfileResponse
+}
+
+export type Session = {
+  id: number
+  createdAt: string
+  expiresAt: string
+  lastUsedAt: string
+  ipAddress: string | null
+  userAgent: string | null
+  current: boolean
+}
+
+export const fetchSessions = async () => {
+  const response = await apiClient.get('/auth/sessions')
+  return response.data as { sessions: Session[] }
+}
+
+export const revokeSession = async (sessionId: number) => {
+  await apiClient.delete(`/auth/sessions/${sessionId}`)
+}
+
+export type UserSearchResponse = {
+  data: Array<{
+    id: number
+    displayName: string
+    status: string
+    avatarUrl: string | null
+    ladderProfile: {
+      mmr: number
+      tier: string
+      division: number
+    } | null
+    mutualFriends: number
+  }>
+  meta: {
+    page: number
+    limit: number
+    total: number
+  }
+}
+
+export type UserSearchParams = {
+  page?: number
+  limit?: number
+  query?: string
+  sortBy?: 'displayName' | 'createdAt' | 'mmr'
+  order?: 'asc' | 'desc'
+}
+
+export const fetchUsers = async (params: UserSearchParams = {}) => {
+  const response = await apiClient.get('/users', { params })
+  return response.data as UserSearchResponse
+}
+
+export const inviteToGame = async (targetUserId: number) => {
+  const response = await apiClient.post('/game/invite', { targetUserId })
+  return response.data as { sessionId: string }
+}
+
 /*
 解説:
 
@@ -272,4 +375,13 @@ export const createTournament = async (payload: CreateTournamentPayload) => {
 
 6) トーナメント関連の型と API 関数
   - トーナメントの一覧取得、詳細取得、作成を行うための型定義と API 関数を追加した。
+
+7) updateUserProfile
+  - ユーザープロフィールの更新を行うための関数と型定義を追加した。
+
+8) セッション関連の型と API 関数
+  - セッションの取得と無効化を行うための型定義と API 関数を追加した。
+
+9) ユーザー検索関連の型と API 関数
+  - ユーザーの検索、ソート、フィルタリングを行うための型定義と API 関数を追加した。
 */

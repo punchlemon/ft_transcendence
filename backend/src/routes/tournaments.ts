@@ -39,7 +39,7 @@ const detailParamSchema = z.object({
 })
 
 const tournamentsRoutes: FastifyPluginAsync = async (fastify) => {
-  fastify.post('/api/tournaments', async (request, reply) => {
+  fastify.post('/tournaments', async (request, reply) => {
     const parsed = createTournamentSchema.safeParse(request.body)
 
     if (!parsed.success) {
@@ -131,7 +131,7 @@ const tournamentsRoutes: FastifyPluginAsync = async (fastify) => {
     }
   })
 
-  fastify.get('/api/tournaments', async (request, reply) => {
+  fastify.get('/tournaments', async (request, reply) => {
     const parsed = listQuerySchema.safeParse(request.query)
 
     if (!parsed.success) {
@@ -192,7 +192,7 @@ const tournamentsRoutes: FastifyPluginAsync = async (fastify) => {
     }
   })
 
-  fastify.get('/api/tournaments/:id', async (request, reply) => {
+  fastify.get('/tournaments/:id', async (request, reply) => {
     const parsed = detailParamSchema.safeParse(request.params)
 
     if (!parsed.success) {
@@ -280,7 +280,7 @@ const tournamentsRoutes: FastifyPluginAsync = async (fastify) => {
   })
 }
 
-export default fp(tournamentsRoutes)
+export default tournamentsRoutes
 
 /*
 解説:

@@ -76,12 +76,83 @@
 | ✅ | **トーナメント API** | `/api/tournaments` (POST/GET) 実装済み。バックエンドでのマッチ生成ロジックを追加し、フロントエンドと統合完了。 |
 
 ## Next Actions
-- [x] **Profile API 統合 (Basic)**: `ProfilePage` を `/api/users/:id` と接続し、基本情報と統計を表示する。
-- [x] **Profile API 統合 (History/Friends)**: 対戦履歴とフレンドリストの API を実装し、`ProfilePage` に統合する。
-- [x] **Game WebSocket 統合**: `GameRoom` で WebSocket 接続を確立し、サーバーからの状態更新を受け取る。
-- [x] **Chat API 統合**: `ChatDrawer` でメッセージの送受信を API 経由で行う。
-- [x] **Tournament API 統合**: `TournamentPage` から API 経由でトーナメントを作成し、バックエンドでマッチ生成を行うように変更。
+- [x] **Profile Edit API**: Implement `PATCH /api/users/:id` for updating displayName, bio, avatarUrl.
+- [x] **Profile Edit UI**: Implement `EditProfileModal` in frontend and integrate with API.
+- [x] **Session Management UI**: Implement `/settings/account` active sessions list.
+- [x] **User Search Improvements**: Add sorting/filtering to `/api/users` and create `/users` page.
+- [x] **Game Logic Implementation**: Implement full Pong logic in `GameEngine` and integrate with WebSocket.
+- [x] **AI Opponent Implementation**: Implement 1Hz vision constraint AI in `GameEngine`.
+- [x] **Game UI Polish**: Improve `GameRoom` UI, handle game over state, and add sound effects/animations.
 
-## Current Focus
-**Epic C: アプリ機能実装 (Implementation Phase)**
-*主要機能の統合が完了。E2Eテストや細かいUX改善へ移行*|
+## Current Focus: Completion
+
+### Next Actions
+- [ ] **Final Cleanup**
+    - [ ] Verify Docker build.
+- [ ] **Release**
+    - [ ] Deploy to production environment (if applicable).
+    - [ ] Final presentation preparation.
+
+### Completed Tasks
+- [x] **Final Cleanup**
+    - [x] Commit `fastify-tsconfig` dependency.
+- [x] **Fix Dependencies**
+    - [x] Add `fastify-tsconfig` to backend devDependencies to fix TS error.
+- [x] **Final Polish**
+    - [x] Verify all "Remaining" items in Epic C are actually covered.
+    - [x] Ensure no critical bugs in main flows (Login -> Game -> Stats).
+    - [x] Add OAuth configuration guide to README.
+- [x] **Verification**
+    - [x] Backend Tests: 100% Passing (68/68)
+    - [x] Frontend Tests: 100% Passing (74/74)
+    - [x] Fix `users_id.test.ts` (FriendRequest model usage)
+    - [x] Fix `App.test.tsx` (Navbar text update)
+    - [x] Fix `Tournament.test.tsx` (Router context)
+- [x] **Fix TODOs**
+    - [x] Backend: Fix `startedAt` timestamp in `GameManager` (currently uses end time).
+    - [x] Backend: Optimize channel membership check in `chatRoutes`.
+- [x] **Chat Game Invite**
+    - [x] Frontend: Add "Invite" action in Chat user menu
+- [x] **Game Polish**
+    - [x] Add sound effects (optional)
+    - [x] Improve "Game Over" screen with "Rematch" option?
+- [x] **Documentation**
+    - [x] Update API docs with new endpoints
+    - [x] Update UI docs with new screens
+- [x] **Game Invitation System**
+    - [x] Backend: Implement `POST /api/game/invite` (Create session + Send Notification)
+    - [x] Frontend: Add "Invite to Game" button in Profile
+    - [x] Frontend: Handle `GAME_INVITE` notification click (Join session)
+- [x] **Tournament Game Integration**
+    - [x] Backend: Support `mode=local` for single-socket multiplayer
+    - [x] Frontend: Add "Play Match" button in Tournament Page
+    - [x] Frontend: `GameRoom` supports local 2-player input (WASD + Arrows)
+- [x] **Notification System**
+    - [x] Backend: `NotificationService` & WebSocket integration
+    - [x] Frontend: `NotificationStore` & `NotificationBell` component
+    - [x] REST endpoints for listing/marking read
+- [x] **Game Engine & Logic**
+    - [x] Core Loop (120Hz), Physics, Collision
+    - [x] WebSocket State Sync (`/ws/game`)
+    - [x] Database Integration (Save Match/Stats)
+    - [x] AI Opponent (1Hz vision)
+- [x] **Game Frontend**
+    - [x] `GameRoom` with Canvas rendering
+    - [x] Player Slot identification (You vs Opponent)
+    - [x] Game Over / Score UI
+- [x] **Chat & Social Features**
+    - [x] Real-time Chat (Backend & Frontend)
+    - [x] Friend System (Backend & Frontend)
+    - [x] User Status (Online/Offline)
+    - [x] Friend/Block UI in Profile
+- [x] **User Search Implementation**
+    - [x] Implement backend sorting/filtering
+    - [x] Create `Users` page with search/sort UI
+
+## Development Commands (Docker)
+- **Reset Database**: `docker compose exec backend npm run db:reset` (Clears all data in container)
+- **List Users**: `docker compose exec backend npm run db:users` (Shows current users in container)
+
+## Development Commands (Local)
+- **Reset Database**: `cd backend && npm run db:reset`
+- **List Users**: `cd backend && npm run db:users`
