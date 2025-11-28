@@ -76,13 +76,9 @@ export default async function chatRoutes(fastify: FastifyInstance) {
     const channelId = parseInt(id)
     const { limit, beforeId } = req.query as { limit?: string, beforeId?: string }
     
-    // TODO: Check membership in service or here?
-    // For now, assuming service will be enhanced or we trust the ID.
-    // Ideally we should check membership.
-    // Let's add a quick check.
     const userId = req.user.userId
-    const channels = await chatService.getUserChannels(userId)
-    if (!channels.find(c => c.id === channelId)) {
+    const isMember = await chatService.isMember(channelId, userId)
+    if (!isMember) {
         return reply.status(403).send({ error: { code: 'FORBIDDEN', message: 'Not a member of this thread' } })
     }
 

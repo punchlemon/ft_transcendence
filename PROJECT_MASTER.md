@@ -84,12 +84,23 @@
 - [x] **AI Opponent Implementation**: Implement 1Hz vision constraint AI in `GameEngine`.
 - [x] **Game UI Polish**: Improve `GameRoom` UI, handle game over state, and add sound effects/animations.
 
-## Current Focus: Completed
+## Current Focus: Final Verification & Polish
 
 ### Next Actions
-- [ ] **Waiting for next instructions**
+- [ ] **Final Polish**
+    - [ ] Verify all "Remaining" items in Epic C are actually covered.
+    - [ ] Ensure no critical bugs in main flows (Login -> Game -> Stats).
 
 ### Completed Tasks
+- [x] **Verification**
+    - [x] Backend Tests: 100% Passing (68/68)
+    - [x] Frontend Tests: 100% Passing (74/74)
+    - [x] Fix `users_id.test.ts` (FriendRequest model usage)
+    - [x] Fix `App.test.tsx` (Navbar text update)
+    - [x] Fix `Tournament.test.tsx` (Router context)
+- [x] **Fix TODOs**
+    - [x] Backend: Fix `startedAt` timestamp in `GameManager` (currently uses end time).
+    - [x] Backend: Optimize channel membership check in `chatRoutes`.
 - [x] **Chat Game Invite**
     - [x] Frontend: Add "Invite" action in Chat user menu
 - [x] **Game Polish**

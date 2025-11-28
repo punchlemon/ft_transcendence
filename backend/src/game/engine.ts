@@ -9,6 +9,7 @@ export class GameEngine {
   private clients: { p1?: WebSocket; p2?: WebSocket } = {};
   private players: { p1?: number; p2?: number } = {};
   private loopId?: NodeJS.Timeout;
+  public startedAt?: Date;
   
   // AI
   private aiOpponent?: AIOpponent;
@@ -17,9 +18,9 @@ export class GameEngine {
   // Input buffers
   private inputQueue: { p1: PlayerInput[]; p2: PlayerInput[] } = { p1: [], p2: [] };
 
-  private onGameEnd?: (result: { winner: 'p1' | 'p2'; score: { p1: number; p2: number }; p1Id?: number; p2Id?: number }) => void;
+  private onGameEnd?: (result: { winner: 'p1' | 'p2'; score: { p1: number; p2: number }; p1Id?: number; p2Id?: number; startedAt?: Date }) => void;
 
-  constructor(sessionId: string, config: GameConfig = DEFAULT_CONFIG, onGameEnd?: (result: { winner: 'p1' | 'p2'; score: { p1: number; p2: number }; p1Id?: number; p2Id?: number }) => void) {
+  constructor(sessionId: string, config: GameConfig = DEFAULT_CONFIG, onGameEnd?: (result: { winner: 'p1' | 'p2'; score: { p1: number; p2: number }; p1Id?: number; p2Id?: number; startedAt?: Date }) => void) {
     this.sessionId = sessionId;
     this.config = config;
     this.onGameEnd = onGameEnd;
@@ -95,6 +96,7 @@ export class GameEngine {
   startGame() {
     if (this.state.status === 'PLAYING') return;
     this.state.status = 'PLAYING';
+    this.startedAt = new Date();
     
     // 120Hz loop
     this.loopId = setInterval(() => this.tick(), 1000 / 120);
@@ -250,7 +252,8 @@ export class GameEngine {
         winner, 
         score: this.state.score,
         p1Id: this.players.p1,
-        p2Id: this.players.p2
+        p2Id: this.players.p2,
+        startedAt: this.startedAt
       });
     }
   }

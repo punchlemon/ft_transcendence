@@ -155,6 +155,16 @@ export class ChatService extends EventEmitter {
       },
     });
   }
+
+  async isMember(channelId: number, userId: number): Promise<boolean> {
+    const count = await prisma.channelMember.count({
+      where: {
+        channelId,
+        userId,
+      },
+    });
+    return count > 0;
+  }
   
   async joinChannel(channelId: number, userId: number, password?: string) {
       const channel = await prisma.channel.findUnique({ where: { id: channelId } });

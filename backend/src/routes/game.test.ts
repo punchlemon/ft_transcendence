@@ -38,10 +38,15 @@ describe('Game WebSocket', () => {
     ws.send(JSON.stringify({ event: 'ready', payload: { token: 'test-token' } }))
 
     const response = await waitForMessage
-    expect(response).toEqual({
+    expect(response).toMatchObject({
       event: 'match:event',
-      payload: { type: 'CONNECTED', message: 'Successfully connected to game server' }
+      payload: { 
+        type: 'CONNECTED', 
+        message: 'Successfully connected to game server',
+        slot: 'p1'
+      }
     })
+    expect(response.payload.sessionId).toBeDefined()
 
     ws.close()
   })

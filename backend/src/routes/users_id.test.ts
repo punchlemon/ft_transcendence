@@ -91,6 +91,7 @@ describe('GET /api/users/:id', () => {
     await prisma.twoFactorBackupCode.deleteMany()
     await prisma.mfaChallenge.deleteMany()
     await prisma.session.deleteMany()
+    await prisma.friendRequest.deleteMany()
     await prisma.friendship.deleteMany()
     await prisma.userStats.deleteMany()
     await prisma.ladderProfile.deleteMany()
@@ -159,10 +160,10 @@ describe('GET /api/users/:id', () => {
     const target = await createUser(prisma, { login: 'target', email: 'target@example.com', displayName: 'Target' })
     
     // Viewer sent request to Target
-    await prisma.friendship.create({
+    await prisma.friendRequest.create({
       data: {
-        requesterId: viewer.id,
-        addresseeId: target.id,
+        senderId: viewer.id,
+        receiverId: target.id,
         status: 'PENDING'
       }
     })
@@ -183,10 +184,10 @@ describe('GET /api/users/:id', () => {
     const target = await createUser(prisma, { login: 'target', email: 'target@example.com', displayName: 'Target' })
     
     // Target sent request to Viewer
-    await prisma.friendship.create({
+    await prisma.friendRequest.create({
       data: {
-        requesterId: target.id,
-        addresseeId: viewer.id,
+        senderId: target.id,
+        receiverId: viewer.id,
         status: 'PENDING'
       }
     })

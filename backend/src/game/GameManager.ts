@@ -27,7 +27,7 @@ export class GameManager {
     return game;
   }
 
-  private async handleGameEnd(sessionId: string, result: { winner: 'p1' | 'p2'; score: { p1: number; p2: number }; p1Id?: number; p2Id?: number }) {
+  private async handleGameEnd(sessionId: string, result: { winner: 'p1' | 'p2'; score: { p1: number; p2: number }; p1Id?: number; p2Id?: number; startedAt?: Date }) {
     this.games.delete(sessionId);
 
     if (!result.p1Id) {
@@ -58,7 +58,7 @@ export class GameManager {
             winnerId,
             mode: 'STANDARD',
             status: 'FINISHED',
-            startedAt: new Date(), // TODO: Track start time
+            startedAt: result.startedAt || new Date(),
             endedAt: new Date(),
             results: {
               create: [
