@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { useParams } from 'react-router-dom'
+import { useParams, useNavigate } from 'react-router-dom'
 import useAuthStore from '../stores/authStore'
 import { 
   fetchUserProfile, 
@@ -9,7 +9,8 @@ import {
   removeFriend,
   acceptFriendRequest,
   blockUser,
-  unblockUser
+  unblockUser,
+  inviteToGame
 } from '../lib/api'
 import { EditProfileModal } from '../components/profile/EditProfileModal'
 
@@ -54,6 +55,7 @@ interface Friend {
 
 const ProfilePage = () => {
   const { id } = useParams<{ id: string }>()
+  const navigate = useNavigate()
   const currentUser = useAuthStore((state) => state.user)
   const isOwnProfile = currentUser?.id === (id ? Number(id) : undefined)
 
@@ -158,6 +160,20 @@ const ProfilePage = () => {
     }
   }
 
+  const handleInvite = async () => {
+    if (!profile) return
+    setIsActionLoading(true)
+    try {
+      const { sessionId } = await inviteToGame(Number(profile.id))
+      navigate(`/game/${sessionId}`)
+    } catch (err) {
+      console.error(err)
+      setError('Failed to invite user')
+    } finally {
+      setIsActionLoading(false)
+    }
+  }
+
   if (isLoading) {
     return (
       <div className="flex min-h-[50vh] items-center justify-center">
@@ -216,6 +232,13 @@ const ProfilePage = () => {
               <>
                 {!profile.isBlockedByViewer && !profile.isBlockingViewer && (
                   <>
+                    <button
+                      onClick={handleInvite}
+                      disabled={isActionLoading}
+                      className="rounded-md bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-500 disabled:opacity-50"
+                    >
+                      Invite to Game
+                    </button>
                     {profile.friendshipStatus === 'NONE' && (
                       <button
                         onClick={() => handleFriendAction('add')}
