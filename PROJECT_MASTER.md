@@ -84,41 +84,46 @@
 - [x] **AI Opponent Implementation**: Implement 1Hz vision constraint AI in `GameEngine`.
 - [x] **Game UI Polish**: Improve `GameRoom` UI, handle game over state, and add sound effects/animations.
 
-## Current Focus: Notifications & Game Invites
+## Current Focus: Completed
 
 ### Next Actions
-- [x] **Notification System Backend**
-    - [x] Create `NotificationService` (Create, Mark Read, List)
-    - [x] Integrate with WebSocket for real-time alerts
-    - [x] Implement REST endpoints (`GET /notifications`, `PATCH /notifications/:id/read`)
-- [ ] **Notification System Frontend**
-    - [ ] Create `NotificationStore`
-    - [ ] Implement `NotificationBell` component
-    - [ ] Add Toast notifications for high-priority events
-- [ ] **Game Invitation System**
-    - [ ] Backend: Create `GameInvite` logic (using `NotificationService`)
-    - [ ] Frontend: Add "Invite to Game" button in Profile/Chat
-    - [ ] Frontend: Handle "Accept Invite" action (redirect to Game Room)
+- [ ] **Waiting for next instructions**
 
 ### Completed Tasks
+- [x] **Chat Game Invite**
+    - [x] Frontend: Add "Invite" action in Chat user menu
+- [x] **Game Polish**
+    - [x] Add sound effects (optional)
+    - [x] Improve "Game Over" screen with "Rematch" option?
+- [x] **Documentation**
+    - [x] Update API docs with new endpoints
+    - [x] Update UI docs with new screens
+- [x] **Game Invitation System**
+    - [x] Backend: Implement `POST /api/game/invite` (Create session + Send Notification)
+    - [x] Frontend: Add "Invite to Game" button in Profile
+    - [x] Frontend: Handle `GAME_INVITE` notification click (Join session)
+- [x] **Tournament Game Integration**
+    - [x] Backend: Support `mode=local` for single-socket multiplayer
+    - [x] Frontend: Add "Play Match" button in Tournament Page
+    - [x] Frontend: `GameRoom` supports local 2-player input (WASD + Arrows)
+- [x] **Notification System**
+    - [x] Backend: `NotificationService` & WebSocket integration
+    - [x] Frontend: `NotificationStore` & `NotificationBell` component
+    - [x] REST endpoints for listing/marking read
+- [x] **Game Engine & Logic**
+    - [x] Core Loop (120Hz), Physics, Collision
+    - [x] WebSocket State Sync (`/ws/game`)
+    - [x] Database Integration (Save Match/Stats)
+    - [x] AI Opponent (1Hz vision)
+- [x] **Game Frontend**
+    - [x] `GameRoom` with Canvas rendering
+    - [x] Player Slot identification (You vs Opponent)
+    - [x] Game Over / Score UI
 - [x] **Chat & Social Features**
     - [x] Real-time Chat (Backend & Frontend)
     - [x] Friend System (Backend & Frontend)
     - [x] User Status (Online/Offline)
     - [x] Friend/Block UI in Profile
-- [x] **Game UI Polish**
-    - [x] Add "Game Over" overlay with score and restart button
-    - [x] Add visual effects (glow) to paddle/ball
-    - [x] Add difficulty selection to Game Lobby
-- [x] **AI Opponent Implementation**
-    - [x] Create `AIOpponent` class
-    - [x] Implement 1Hz vision constraint
-    - [x] Integrate AI into `GameEngine`
-- [x] **Game Logic Implementation**
-    - [x] Create `GameEngine` (120Hz loop)
-    - [x] Create `GameManager` (Session management)
-    - [x] Implement WebSocket `/ws/game`
-    - [x] Create `GameRoom` frontend component
 - [x] **User Search Implementation**
     - [x] Implement backend sorting/filtering
     - [x] Create `Users` page with search/sort UI
