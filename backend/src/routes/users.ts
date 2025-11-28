@@ -152,28 +152,56 @@ const usersRoutes: FastifyPluginAsync = async (fastify) => {
 
     // Friendship Status
     let friendshipStatus: 'NONE' | 'FRIEND' | 'PENDING_SENT' | 'PENDING_RECEIVED' = 'NONE'
-    if (viewerId !== targetId) {
-      const friendship = await fastify.prisma.friendship.findFirst({
-        where: {
-          OR: [
-            { requesterId: viewerId, addresseeId: targetId },
-            { requesterId: targetId, addresseeId: viewerId }
-          ]
-        }
-      })
+    let isBlockedByViewer = false
+    let isBlockingViewer = false
+    let friendRequestId: number | undefined
 
-      if (friendship) {
-        if (friendship.status === 'ACCEPTED') {
-          friendshipStatus = 'FRIEND'
-        } else if (friendship.status === 'PENDING') {
-          friendshipStatus = friendship.requesterId === viewerId ? 'PENDING_SENT' : 'PENDING_RECEIVED'
+    if (viewerId !== targetId) {
+      const [friendship, block, friendRequest] = await Promise.all([
+        fastify.prisma.friendship.findFirst({
+          where: {
+            OR: [
+              { requesterId: viewerId, addresseeId: targetId },
+              { requesterId: targetId, addresseeId: viewerId }
+            ]
+          }
+        }),
+        fastify.prisma.blocklist.findFirst({
+          where: {
+            OR: [
+              { blockerId: viewerId, blockedId: targetId },
+              { blockerId: targetId, blockedId: viewerId }
+            ]
+          }
+        }),
+        fastify.prisma.friendRequest.findFirst({
+          where: {
+            OR: [
+              { senderId: viewerId, receiverId: targetId, status: 'PENDING' },
+              { senderId: targetId, receiverId: viewerId, status: 'PENDING' }
+            ]
+          }
+        })
+      ])
+
+      if (friendship && friendship.status === 'ACCEPTED') {
+        friendshipStatus = 'FRIEND'
+      } else if (friendRequest) {
+        friendshipStatus = friendRequest.senderId === viewerId ? 'PENDING_SENT' : 'PENDING_RECEIVED'
+        if (friendshipStatus === 'PENDING_RECEIVED') {
+          friendRequestId = friendRequest.id
         }
+      }
+
+      if (block) {
+        if (block.blockerId === viewerId) isBlockedByViewer = true
+        if (block.blockerId === targetId) isBlockingViewer = true
       }
     }
 
     // Mutual Friends
     let mutualFriends = 0
-    if (viewerId !== targetId) {
+    if (viewerId !== targetId && !isBlockedByViewer && !isBlockingViewer) {
       // Get viewer's friends
       const viewerFriendships = await fastify.prisma.friendship.findMany({
         where: {
@@ -204,6 +232,9 @@ const usersRoutes: FastifyPluginAsync = async (fastify) => {
       ladder: user.ladderProfile,
       ladderProfile: undefined,
       friendshipStatus,
+      friendRequestId,
+      isBlockedByViewer,
+      isBlockingViewer,
       mutualFriends
     }
   })

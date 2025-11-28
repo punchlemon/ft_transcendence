@@ -1,11 +1,12 @@
 import { useEffect, useRef, useState } from 'react'
-import { useParams, useNavigate } from 'react-router-dom'
+import { useParams, useNavigate, useSearchParams } from 'react-router-dom'
 import useAuthStore from '../stores/authStore'
 
 type GameStatus = 'connecting' | 'playing' | 'paused' | 'finished'
 
 const GameRoomPage = () => {
   const { id } = useParams<{ id: string }>()
+  const [searchParams] = useSearchParams()
   const navigate = useNavigate()
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const socketRef = useRef<WebSocket | null>(null)
@@ -15,12 +16,19 @@ const GameRoomPage = () => {
   const [status, setStatus] = useState<GameStatus>('connecting')
   const [scores, setScores] = useState({ p1: 0, p2: 0 })
   const [players, setPlayers] = useState({ p1: 'Player 1', p2: 'Player 2' })
+  const [winner, setWinner] = useState<string | null>(null)
 
   // WebSocket connection
   useEffect(() => {
     if (!token) return
 
-    const wsUrl = `ws://localhost:3000/ws/game`
+    const mode = searchParams.get('mode')
+    const difficulty = searchParams.get('difficulty')
+    const query = new URLSearchParams()
+    if (mode) query.append('mode', mode)
+    if (difficulty) query.append('difficulty', difficulty)
+
+    const wsUrl = `ws://localhost:3000/ws/game?${query.toString()}`
     const ws = new WebSocket(wsUrl)
     socketRef.current = ws
 
@@ -33,10 +41,24 @@ const GameRoomPage = () => {
       try {
         const data = JSON.parse(event.data)
         
-        if (data.event === 'match:event' && data.payload.type === 'CONNECTED') {
-          setStatus('playing')
+        if (data.event === 'match:event') {
+          if (data.payload.type === 'CONNECTED') {
+            // Wait for START
+          } else if (data.payload.type === 'START') {
+            setStatus('playing')
+          } else if (data.payload.type === 'PAUSE') {
+            setStatus('paused')
+          }
         } else if (data.event === 'state:update') {
           gameStateRef.current = data.payload
+          if (data.payload.status === 'FINISHED') {
+            setStatus('finished')
+            // Determine winner based on score
+            const s = data.payload.score
+            setWinner(s.p1 > s.p2 ? 'Player 1' : 'Player 2')
+          }
+        } else if (data.event === 'score:update') {
+          setScores(data.payload)
         }
       } catch (err) {
         console.error('Failed to parse message', err)
@@ -51,7 +73,7 @@ const GameRoomPage = () => {
     return () => {
       ws.close()
     }
-  }, [token])
+  }, [token, searchParams])
 
   // Input handling
   useEffect(() => {
@@ -112,7 +134,7 @@ const GameRoomPage = () => {
 
     const render = () => {
       // Clear canvas
-      ctx.fillStyle = '#1e293b' // slate-800
+      ctx.fillStyle = '#0f172a' // slate-900
       ctx.fillRect(0, 0, canvas.width, canvas.height)
 
       // Draw center line
@@ -120,27 +142,39 @@ const GameRoomPage = () => {
       ctx.beginPath()
       ctx.moveTo(canvas.width / 2, 0)
       ctx.lineTo(canvas.width / 2, canvas.height)
-      ctx.strokeStyle = '#475569' // slate-600
+      ctx.strokeStyle = '#334155' // slate-700
+      ctx.lineWidth = 2
       ctx.stroke()
       ctx.setLineDash([])
 
       const state = gameStateRef.current
       if (state) {
-        // Draw paddles
-        ctx.fillStyle = '#f8fafc' // slate-50
+        // Draw paddles with glow
+        ctx.shadowBlur = 15
+        ctx.shadowColor = '#6366f1' // indigo-500
+        ctx.fillStyle = '#818cf8' // indigo-400
+        
         // Use server state for paddles if available, otherwise default
         const p1Pos = state.paddles?.p1 ?? p1Y
         const p2Pos = state.paddles?.p2 ?? p2Y
         
         ctx.fillRect(10, p1Pos, paddleWidth, paddleHeight)
+        
+        ctx.shadowColor = '#f43f5e' // rose-500
+        ctx.fillStyle = '#fb7185' // rose-400
         ctx.fillRect(canvas.width - 20, p2Pos, paddleWidth, paddleHeight)
 
-        // Draw ball
+        // Draw ball with glow
+        ctx.shadowBlur = 10
+        ctx.shadowColor = '#f8fafc' // slate-50
         ctx.beginPath()
         ctx.arc(state.ball.x, state.ball.y, 8, 0, Math.PI * 2)
         ctx.fillStyle = '#f8fafc'
         ctx.fill()
         ctx.closePath()
+        
+        // Reset shadow
+        ctx.shadowBlur = 0
       }
 
       animationFrameId = requestAnimationFrame(render)
@@ -219,6 +253,25 @@ const GameRoomPage = () => {
                 >
                   Resume
                 </button>
+              </div>
+            </div>
+          )}
+
+          {status === 'finished' && (
+            <div className="absolute inset-0 flex items-center justify-center bg-slate-900/80 backdrop-blur-sm">
+              <div className="text-center text-white">
+                <h3 className="mb-2 text-4xl font-bold">GAME OVER</h3>
+                <div className="mb-8 text-2xl text-indigo-400">
+                  Winner: {winner}
+                </div>
+                <div className="flex gap-4 justify-center">
+                  <button 
+                    onClick={() => navigate('/game/new')}
+                    className="rounded-full bg-white px-6 py-2 font-semibold text-slate-900 hover:bg-slate-200"
+                  >
+                    Back to Lobby
+                  </button>
+                </div>
               </div>
             </div>
           )}

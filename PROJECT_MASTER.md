@@ -81,8 +81,45 @@
 - [x] **Session Management UI**: Implement `/settings/account` active sessions list.
 - [x] **User Search Improvements**: Add sorting/filtering to `/api/users` and create `/users` page.
 - [x] **Game Logic Implementation**: Implement full Pong logic in `GameEngine` and integrate with WebSocket.
-- [ ] **AI Opponent Implementation**: Implement 1Hz vision constraint AI in `GameEngine`.
+- [x] **AI Opponent Implementation**: Implement 1Hz vision constraint AI in `GameEngine`.
+- [x] **Game UI Polish**: Improve `GameRoom` UI, handle game over state, and add sound effects/animations.
 
-## Current Focus
-**Epic C: アプリ機能実装 (Implementation Phase)**
-*AI Opponent Implementation*|
+## Current Focus: Notifications & Game Invites
+
+### Next Actions
+- [x] **Notification System Backend**
+    - [x] Create `NotificationService` (Create, Mark Read, List)
+    - [x] Integrate with WebSocket for real-time alerts
+    - [x] Implement REST endpoints (`GET /notifications`, `PATCH /notifications/:id/read`)
+- [ ] **Notification System Frontend**
+    - [ ] Create `NotificationStore`
+    - [ ] Implement `NotificationBell` component
+    - [ ] Add Toast notifications for high-priority events
+- [ ] **Game Invitation System**
+    - [ ] Backend: Create `GameInvite` logic (using `NotificationService`)
+    - [ ] Frontend: Add "Invite to Game" button in Profile/Chat
+    - [ ] Frontend: Handle "Accept Invite" action (redirect to Game Room)
+
+### Completed Tasks
+- [x] **Chat & Social Features**
+    - [x] Real-time Chat (Backend & Frontend)
+    - [x] Friend System (Backend & Frontend)
+    - [x] User Status (Online/Offline)
+    - [x] Friend/Block UI in Profile
+- [x] **Game UI Polish**
+    - [x] Add "Game Over" overlay with score and restart button
+    - [x] Add visual effects (glow) to paddle/ball
+    - [x] Add difficulty selection to Game Lobby
+- [x] **AI Opponent Implementation**
+    - [x] Create `AIOpponent` class
+    - [x] Implement 1Hz vision constraint
+    - [x] Integrate AI into `GameEngine`
+- [x] **Game Logic Implementation**
+    - [x] Create `GameEngine` (120Hz loop)
+    - [x] Create `GameManager` (Session management)
+    - [x] Implement WebSocket `/ws/game`
+    - [x] Create `GameRoom` frontend component
+- [x] **User Search Implementation**
+    - [x] Implement backend sorting/filtering
+    - [x] Create `Users` page with search/sort UI
+|

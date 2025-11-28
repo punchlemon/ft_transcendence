@@ -1,7 +1,8 @@
 import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
-import { fetchUsers, type UserSearchResponse, type UserSearchParams } from '../lib/api'
+import { fetchUsers, fetchUserFriends, type UserSearchResponse, type UserSearchParams, api } from '../lib/api'
 import Button from '../components/ui/Button'
+import useAuthStore from '../stores/authStore'
 
 const UsersPage = () => {
   const [users, setUsers] = useState<UserSearchResponse['data']>([])
@@ -14,6 +15,16 @@ const UsersPage = () => {
     order: 'asc',
     query: ''
   })
+  const { user: currentUser } = useAuthStore()
+  const [myFriends, setMyFriends] = useState<number[]>([])
+
+  useEffect(() => {
+    if (currentUser) {
+      fetchUserFriends(currentUser.id.toString()).then(res => {
+        setMyFriends(res.data.map(f => f.id))
+      }).catch(console.error)
+    }
+  }, [currentUser])
 
   useEffect(() => {
     const loadUsers = async () => {
@@ -47,6 +58,18 @@ const UsersPage = () => {
 
   const handlePageChange = (newPage: number) => {
     setParams((prev) => ({ ...prev, page: newPage }))
+  }
+
+  const handleAddFriend = async (e: React.MouseEvent, userId: number) => {
+    e.preventDefault()
+    e.stopPropagation()
+    try {
+      await api.post(`/friends/${userId}`)
+      alert('Friend request sent!')
+    } catch (err) {
+      console.error(err)
+      alert('Failed to send request')
+    }
   }
 
   return (
@@ -121,6 +144,15 @@ const UsersPage = () => {
                   )}
                 </div>
               </div>
+              {currentUser && currentUser.id !== user.id && !myFriends.includes(user.id) && (
+                <Button 
+                  variant="secondary" 
+                  className="text-xs ml-2"
+                  onClick={(e) => handleAddFriend(e, user.id)}
+                >
+                  Add
+                </Button>
+              )}
             </Link>
           ))}
         </div>

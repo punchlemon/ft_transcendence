@@ -3,11 +3,13 @@ import { useNavigate } from 'react-router-dom'
 
 type GameMode = 'local' | 'remote' | 'ai'
 type MatchType = 'public' | 'private'
+type AIDifficulty = 'EASY' | 'NORMAL' | 'HARD'
 
 const GameLobbyPage = () => {
   const navigate = useNavigate()
   const [selectedMode, setSelectedMode] = useState<GameMode | null>(null)
   const [matchType, setMatchType] = useState<MatchType | null>(null)
+  const [aiDifficulty, setAiDifficulty] = useState<AIDifficulty>('NORMAL')
   const [isMatching, setIsMatching] = useState(false)
   const [roomCode, setRoomCode] = useState('')
 
@@ -18,17 +20,20 @@ const GameLobbyPage = () => {
   }
 
   const handleStartMatch = () => {
-    if (selectedMode === 'local' || selectedMode === 'ai') {
+    if (selectedMode === 'local') {
       // 即座にゲーム開始（モックIDへ遷移）
       const mockGameId = `game-${selectedMode}-${Date.now()}`
-      navigate(`/game/${mockGameId}`)
+      navigate(`/game/${mockGameId}?mode=local`)
+    } else if (selectedMode === 'ai') {
+      const mockGameId = `game-${selectedMode}-${Date.now()}`
+      navigate(`/game/${mockGameId}?mode=ai&difficulty=${aiDifficulty}`)
     } else if (selectedMode === 'remote') {
       if (matchType === 'public') {
         setIsMatching(true)
         // ここでWebSocket接続＆マッチング待機を開始する想定
         // モックとして3秒後に遷移
         setTimeout(() => {
-          navigate(`/game/remote-${Date.now()}`)
+          navigate(`/game/remote-${Date.now()}?mode=remote`)
         }, 3000)
       } else if (matchType === 'private') {
         // ルーム作成ロジック（未実装）
@@ -150,6 +155,28 @@ const GameLobbyPage = () => {
                   />
                 </div>
               )}
+            </div>
+          )}
+
+          {/* Sub Options for AI */}
+          {selectedMode === 'ai' && (
+            <div className="animate-in fade-in slide-in-from-top-4 rounded-xl border border-slate-200 bg-slate-50 p-6 duration-300">
+              <h3 className="mb-4 text-lg font-medium text-slate-900">Select Difficulty</h3>
+              <div className="flex gap-4">
+                {(['EASY', 'NORMAL', 'HARD'] as const).map((diff) => (
+                  <button
+                    key={diff}
+                    onClick={() => setAiDifficulty(diff)}
+                    className={`flex-1 rounded-lg border p-3 text-center transition-colors ${
+                      aiDifficulty === diff
+                        ? 'border-indigo-600 bg-white ring-1 ring-indigo-600 font-semibold text-indigo-600'
+                        : 'border-slate-200 bg-white text-slate-600 hover:border-indigo-300'
+                    }`}
+                  >
+                    {diff}
+                  </button>
+                ))}
+              </div>
             </div>
           )}
 

@@ -10,7 +10,7 @@ const shouldUseRelativeBase =
   rawBaseUrl.startsWith('https://backend')
 
 const resolvedBaseUrl = shouldUseRelativeBase ? '/api' : rawBaseUrl
-const baseURL = resolvedBaseUrl?.endsWith('/') ? resolvedBaseUrl.slice(0, -1) : resolvedBaseUrl
+export const baseURL = resolvedBaseUrl?.endsWith('/') ? resolvedBaseUrl.slice(0, -1) : resolvedBaseUrl
 
 const apiClient = axios.create({
   baseURL
@@ -134,12 +134,35 @@ export type UserProfileResponse = {
     mmr: number
   } | null
   friendshipStatus: 'NONE' | 'FRIEND' | 'PENDING_SENT' | 'PENDING_RECEIVED'
+  friendRequestId?: number
+  isBlockedByViewer: boolean
+  isBlockingViewer: boolean
   mutualFriends: number
 }
 
 export const fetchUserProfile = async (userId: string) => {
   const response = await apiClient.get(`/users/${userId}`)
   return response.data as UserProfileResponse
+}
+
+export const sendFriendRequest = async (userId: number) => {
+  await apiClient.post(`/friends/${userId}`)
+}
+
+export const removeFriend = async (userId: number) => {
+  await apiClient.delete(`/friends/${userId}`)
+}
+
+export const acceptFriendRequest = async (requestId: number) => {
+  await apiClient.patch(`/friends/requests/${requestId}/accept`)
+}
+
+export const blockUser = async (userId: number) => {
+  await apiClient.post(`/friends/${userId}/block`)
+}
+
+export const unblockUser = async (userId: number) => {
+  await apiClient.delete(`/friends/${userId}/block`)
 }
 
 export type MatchHistoryResponse = {

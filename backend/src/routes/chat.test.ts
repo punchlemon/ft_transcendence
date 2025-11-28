@@ -87,7 +87,7 @@ describe('Chat Routes', () => {
       headers: { authorization: `Bearer ${user1.tokens.access}` },
       payload: {
         type: 'DM',
-        memberIds: [user2.user.id]
+        targetUserId: user2.user.id
       }
     })
 
@@ -112,7 +112,7 @@ describe('Chat Routes', () => {
       method: 'POST',
       url: '/chat/threads',
       headers: { authorization: `Bearer ${user1.tokens.access}` },
-      payload: { type: 'DM', memberIds: [user2.user.id] }
+      payload: { type: 'DM', targetUserId: user2.user.id }
     })
     const id1 = res1.json<{ data: { id: number } }>().data.id
 
@@ -121,7 +121,7 @@ describe('Chat Routes', () => {
       method: 'POST',
       url: '/chat/threads',
       headers: { authorization: `Bearer ${user1.tokens.access}` },
-      payload: { type: 'DM', memberIds: [user2.user.id] }
+      payload: { type: 'DM', targetUserId: user2.user.id }
     })
     const id2 = res2.json<{ data: { id: number } }>().data.id
 
@@ -139,8 +139,7 @@ describe('Chat Routes', () => {
       headers: { authorization: `Bearer ${user1.tokens.access}` },
       payload: {
         type: 'PUBLIC',
-        name: 'General Chat',
-        memberIds: [user2.user.id, user3.user.id]
+        name: 'General Chat'
       }
     })
 
@@ -153,7 +152,7 @@ describe('Chat Routes', () => {
     })
     expect(channel?.type).toBe('PUBLIC')
     expect(channel?.name).toBe('General Chat')
-    expect(channel?.members).toHaveLength(3)
+    expect(channel?.members).toHaveLength(1)
   })
 
   it('should list threads for user', async () => {
@@ -165,7 +164,7 @@ describe('Chat Routes', () => {
       method: 'POST',
       url: '/chat/threads',
       headers: { authorization: `Bearer ${user1.tokens.access}` },
-      payload: { type: 'DM', memberIds: [user2.user.id] }
+      payload: { type: 'DM', targetUserId: user2.user.id }
     })
 
     const res = await server.inject({
@@ -191,7 +190,7 @@ describe('Chat Routes', () => {
       method: 'POST',
       url: '/chat/threads',
       headers: { authorization: `Bearer ${user1.tokens.access}` },
-      payload: { type: 'DM', memberIds: [user2.user.id] }
+      payload: { type: 'DM', targetUserId: user2.user.id }
     })
     const channelId = createRes.json<{ data: { id: number } }>().data.id
 
@@ -227,7 +226,7 @@ describe('Chat Routes', () => {
       method: 'POST',
       url: '/chat/threads',
       headers: { authorization: `Bearer ${user1.tokens.access}` },
-      payload: { type: 'DM', memberIds: [user2.user.id] }
+      payload: { type: 'DM', targetUserId: user2.user.id }
     })
     const channelId = createRes.json<{ data: { id: number } }>().data.id
 

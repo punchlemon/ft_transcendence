@@ -1,5 +1,6 @@
 import { FastifyInstance } from 'fastify'
 import { z } from 'zod'
+import { chatService } from '../services/chat'
 
 export default async function chatRoutes(fastify: FastifyInstance) {
   // List threads (channels)
@@ -7,40 +8,9 @@ export default async function chatRoutes(fastify: FastifyInstance) {
     onRequest: [fastify.authenticate]
   }, async (req, reply) => {
     const userId = req.user.userId
+    const channels = await chatService.getUserChannels(userId)
 
-    const memberships = await fastify.prisma.channelMember.findMany({
-      where: { userId },
-      include: {
-        channel: {
-          include: {
-            members: {
-              include: {
-                user: {
-                  select: {
-                    id: true,
-                    displayName: true,
-                    avatarUrl: true,
-                    status: true
-                  }
-                }
-              }
-            },
-            messages: {
-              orderBy: { sentAt: 'desc' },
-              take: 1
-            }
-          }
-        }
-      },
-      orderBy: {
-        channel: {
-          updatedAt: 'desc'
-        }
-      }
-    })
-
-    const threads = memberships.map(m => {
-      const channel = m.channel
+    const threads = channels.map(channel => {
       // For DMs, we might want to compute a display name based on the other participant
       let name = channel.name
       if (channel.type === 'DM') {
@@ -71,81 +41,31 @@ export default async function chatRoutes(fastify: FastifyInstance) {
 
   // Create thread (DM or Group)
   const createThreadSchema = z.object({
-    type: z.enum(['DM', 'PUBLIC', 'PRIVATE']),
+    type: z.enum(['DM', 'PUBLIC', 'PRIVATE', 'PROTECTED']),
     name: z.string().optional(),
-    memberIds: z.array(z.number())
+    targetUserId: z.number().optional(), // For DM
+    password: z.string().optional() // For Protected
   })
 
   fastify.post('/chat/threads', {
     onRequest: [fastify.authenticate]
   }, async (req, reply) => {
-    const { type, name, memberIds } = createThreadSchema.parse(req.body)
+    const { type, name, targetUserId, password } = createThreadSchema.parse(req.body)
     const userId = req.user.userId
 
-    // For DM, check if exists
     if (type === 'DM') {
-      if (memberIds.length !== 1) {
-        return reply.status(400).send({ error: { code: 'INVALID_DM_MEMBERS', message: 'DM must have exactly one other member' } })
+      if (!targetUserId) {
+        return reply.status(400).send({ error: { code: 'INVALID_BODY', message: 'targetUserId is required for DM' } })
       }
-      const targetId = memberIds[0]
-      
-      // Check existing DM
-      // This is a bit complex query, finding a channel of type DM where both users are members
-      const existingDm = await fastify.prisma.channel.findFirst({
-        where: {
-          type: 'DM',
-          members: {
-            every: {
-              userId: { in: [userId, targetId] }
-            }
-          }
-        },
-        // We need to ensure it has exactly these 2 members, but 'every' with 'in' is loose.
-        // A better way is to find channels where I am a member, then check if the other is also a member.
-        include: { members: true }
-      })
-      
-      // Filter strictly for 2 members
-      if (existingDm && existingDm.members.length === 2 && existingDm.members.some(m => m.userId === targetId)) {
-        return { data: { id: existingDm.id } }
+      const channel = await chatService.getOrCreateDmChannel(userId, targetUserId)
+      return { data: { id: channel.id } }
+    } else {
+      if (!name) {
+        return reply.status(400).send({ error: { code: 'INVALID_BODY', message: 'name is required for Group' } })
       }
-
-      // Create new DM
-      const channel = await fastify.prisma.channel.create({
-        data: {
-          name: `dm-${userId}-${targetId}`, // Internal name
-          slug: `dm-${Date.now()}-${Math.random().toString(36).substring(7)}`,
-          type: 'DM',
-          ownerId: userId,
-          members: {
-            create: [
-              { userId, role: 'OWNER' },
-              { userId: targetId, role: 'MEMBER' }
-            ]
-          }
-        }
-      })
+      const channel = await chatService.createGroupChannel(name, userId, type, password)
       return { data: { id: channel.id } }
     }
-
-    // Group Chat
-    const channelName = name || `Group ${Date.now()}`
-    const channel = await fastify.prisma.channel.create({
-      data: {
-        name: channelName,
-        slug: `group-${Date.now()}-${Math.random().toString(36).substring(7)}`,
-        type: type,
-        ownerId: userId,
-        members: {
-          create: [
-            { userId, role: 'OWNER' },
-            ...memberIds.map(id => ({ userId: id, role: 'MEMBER' }))
-          ]
-        }
-      }
-    })
-
-    return { data: { id: channel.id } }
   })
 
   // Get messages
@@ -154,37 +74,23 @@ export default async function chatRoutes(fastify: FastifyInstance) {
   }, async (req, reply) => {
     const { id } = req.params as { id: string }
     const channelId = parseInt(id)
+    const { limit, beforeId } = req.query as { limit?: string, beforeId?: string }
+    
+    // TODO: Check membership in service or here?
+    // For now, assuming service will be enhanced or we trust the ID.
+    // Ideally we should check membership.
+    // Let's add a quick check.
     const userId = req.user.userId
-
-    // Check membership
-    const membership = await fastify.prisma.channelMember.findUnique({
-      where: {
-        channelId_userId: {
-          channelId,
-          userId
-        }
-      }
-    })
-
-    if (!membership) {
-      return reply.status(403).send({ error: { code: 'FORBIDDEN', message: 'Not a member of this thread' } })
+    const channels = await chatService.getUserChannels(userId)
+    if (!channels.find(c => c.id === channelId)) {
+        return reply.status(403).send({ error: { code: 'FORBIDDEN', message: 'Not a member of this thread' } })
     }
 
-    const messages = await fastify.prisma.message.findMany({
-      where: { channelId },
-      orderBy: { sentAt: 'desc' },
-      take: 50, // Pagination later
-      include: {
-        user: {
-          select: {
-            id: true,
-            displayName: true,
-            avatarUrl: true
-          }
-        }
-      }
-    })
-
+    const messages = await chatService.getMessages(
+        channelId, 
+        limit ? parseInt(limit) : 50, 
+        beforeId ? parseInt(beforeId) : undefined
+    )
     return { data: messages.reverse() }
   })
 
@@ -201,43 +107,11 @@ export default async function chatRoutes(fastify: FastifyInstance) {
     const userId = req.user.userId
     const { content } = sendMessageSchema.parse(req.body)
 
-    // Check membership
-    const membership = await fastify.prisma.channelMember.findUnique({
-      where: {
-        channelId_userId: {
-          channelId,
-          userId
-        }
-      }
-    })
-
-    if (!membership) {
-      return reply.status(403).send({ error: { code: 'FORBIDDEN', message: 'Not a member of this thread' } })
+    try {
+      const message = await chatService.sendMessage(channelId, userId, content)
+      return { data: message }
+    } catch (error: any) {
+      return reply.status(400).send({ error: { code: 'SEND_FAILED', message: error.message } })
     }
-
-    const message = await fastify.prisma.message.create({
-      data: {
-        channelId,
-        userId,
-        content
-      },
-      include: {
-        user: {
-          select: {
-            id: true,
-            displayName: true,
-            avatarUrl: true
-          }
-        }
-      }
-    })
-
-    // Update channel updatedAt
-    await fastify.prisma.channel.update({
-      where: { id: channelId },
-      data: { updatedAt: new Date() }
-    })
-
-    return { data: message }
   })
 }
