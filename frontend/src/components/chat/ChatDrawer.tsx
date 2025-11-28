@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect, useRef, useMemo } from 'react'
 import { useNavigate } from 'react-router-dom'
 import useAuthStore from '../../stores/authStore'
 import { useChatStore } from '../../stores/chatStore'
@@ -15,13 +15,16 @@ const ChatDrawer = () => {
   
   const { user } = useAuthStore()
   const { 
-    threads, 
+    threads,
     activeThreadId, 
     messages, 
     fetchThreads, 
     selectThread, 
     sendMessage 
   } = useChatStore()
+
+  // Ensure threads is always an array to avoid test/runtime errors when store is uninitialized
+  const threadsArr = threads ?? []
 
   // Connect WS on mount if user is logged in
   useEffect(() => {
@@ -34,7 +37,9 @@ const ChatDrawer = () => {
     }
   }, [user, fetchThreads])
 
-  const activeMessages = activeThreadId ? (messages[activeThreadId] || []) : []
+  const activeMessages = useMemo(() => {
+    return activeThreadId ? (messages?.[activeThreadId] || []) : []
+  }, [activeThreadId, messages])
 
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
@@ -68,7 +73,7 @@ const ChatDrawer = () => {
     return 'online'
   }
 
-  const activeThread = threads.find(t => t.id === activeThreadId)
+  const activeThread = threadsArr.find(t => t.id === activeThreadId)
 
   const handleInvite = async () => {
     if (!activeThread || activeThread.type !== 'DM') return
@@ -205,8 +210,8 @@ const ChatDrawer = () => {
 
               <div className="flex-1 overflow-y-auto">
                 {activeTab === 'dm' ? (
-                  threads.length > 0 ? (
-                    threads.map((thread) => (
+                  threadsArr.length > 0 ? (
+                    threadsArr.map((thread) => (
                       <div
                         key={thread.id}
                         onClick={() => selectThread(thread.id)}
