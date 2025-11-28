@@ -1,13 +1,17 @@
 import { useState, useEffect, useRef } from 'react'
+import { useNavigate } from 'react-router-dom'
 import useAuthStore from '../../stores/authStore'
 import { useChatStore } from '../../stores/chatStore'
 import { connectChatWs, disconnectChatWs } from '../../lib/chatWs'
+import { inviteToGame } from '../../lib/api'
 
 const ChatDrawer = () => {
   const [isOpen, setIsOpen] = useState(false)
   const [activeTab, setActiveTab] = useState<'dm' | 'system'>('dm')
   const [messageInput, setMessageInput] = useState('')
+  const [showMenu, setShowMenu] = useState(false)
   const messagesEndRef = useRef<HTMLDivElement>(null)
+  const navigate = useNavigate()
   
   const { user } = useAuthStore()
   const { 
@@ -66,6 +70,21 @@ const ChatDrawer = () => {
 
   const activeThread = threads.find(t => t.id === activeThreadId)
 
+  const handleInvite = async () => {
+    if (!activeThread || activeThread.type !== 'DM') return
+    
+    const otherMember = activeThread.members.find((m: any) => m.id !== user?.id)
+    if (!otherMember) return
+
+    try {
+      const { sessionId } = await inviteToGame(otherMember.id)
+      navigate(`/game/${sessionId}`)
+      setIsOpen(false)
+    } catch (err) {
+      console.error('Failed to invite user', err)
+    }
+  }
+
   return (
     <div className={`fixed bottom-0 right-0 z-50 flex flex-col bg-white shadow-2xl transition-all duration-300 ease-in-out ${
       isOpen ? 'h-[500px] w-full sm:w-96' : 'h-12 w-72'
@@ -91,16 +110,42 @@ const ChatDrawer = () => {
           {activeThreadId ? (
             // Chat Room View
             <>
-              <div className="flex items-center border-b border-slate-100 px-4 py-2">
-                <button 
-                  onClick={() => selectThread(null)}
-                  className="mr-2 text-slate-400 hover:text-slate-600"
-                >
-                  ←
-                </button>
-                <span className="font-medium text-slate-900">
-                  {activeThread?.name}
-                </span>
+              <div className="flex items-center justify-between border-b border-slate-100 px-4 py-2">
+                <div className="flex items-center">
+                  <button 
+                    onClick={() => selectThread(null)}
+                    className="mr-2 text-slate-400 hover:text-slate-600"
+                  >
+                    ←
+                  </button>
+                  <span className="font-medium text-slate-900">
+                    {activeThread?.name}
+                  </span>
+                </div>
+
+                {activeThread?.type === 'DM' && (
+                  <div className="relative">
+                    <button 
+                      onClick={() => setShowMenu(!showMenu)}
+                      className="text-slate-400 hover:text-slate-600 px-2"
+                    >
+                      ⋮
+                    </button>
+                    {showMenu && (
+                      <div className="absolute right-0 top-full mt-1 w-48 rounded-md bg-white py-1 shadow-lg ring-1 ring-black ring-opacity-5 z-50">
+                        <button
+                          onClick={() => {
+                            handleInvite()
+                            setShowMenu(false)
+                          }}
+                          className="block w-full px-4 py-2 text-left text-sm text-slate-700 hover:bg-slate-100"
+                        >
+                          Invite to Game
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                )}
               </div>
 
               <div className="flex-1 overflow-y-auto bg-slate-50 p-4 space-y-4">

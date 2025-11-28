@@ -1,5 +1,6 @@
 import useAuthStore from '../stores/authStore';
 import { useChatStore } from '../stores/chatStore';
+import { useNotificationStore } from '../stores/notificationStore';
 import { baseURL } from './api';
 
 let socket: WebSocket | null = null;
@@ -34,6 +35,8 @@ export const connectChatWs = () => {
       const payload = JSON.parse(event.data);
       if (payload.type === 'message') {
         useChatStore.getState().addMessage(payload.data);
+      } else if (payload.type === 'notification') {
+        useNotificationStore.getState().addNotification(payload.data);
       }
     } catch (e) {
       console.error('Failed to parse WS message', e);

@@ -63,6 +63,18 @@ export const login = async (payload: LoginPayload) => {
   return response.data as LoginSuccessResponse
 }
 
+export type RegisterPayload = {
+  email: string
+  username: string
+  displayName: string
+  password: string
+}
+
+export const register = async (payload: RegisterPayload) => {
+  const response = await apiClient.post('/auth/register', payload)
+  return response.data as LoginSuccessResponse
+}
+
 export type OAuthProvider = 'fortytwo' | 'google'
 
 export type OAuthAuthorizationUrlResponse = {
@@ -338,6 +350,11 @@ export type UserSearchParams = {
 export const fetchUsers = async (params: UserSearchParams = {}) => {
   const response = await apiClient.get('/users', { params })
   return response.data as UserSearchResponse
+}
+
+export const inviteToGame = async (targetUserId: number) => {
+  const response = await apiClient.post('/game/invite', { targetUserId })
+  return response.data as { sessionId: string }
 }
 
 /*
