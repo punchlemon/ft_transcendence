@@ -4,6 +4,16 @@ import { MemoryRouter } from 'react-router-dom'
 import GameRoomPage from './GameRoom'
 import useAuthStore from '../stores/authStore'
 
+// Mock Sound Manager
+vi.mock('../lib/sound', () => ({
+  soundManager: {
+    playPaddleHit: vi.fn(),
+    playWallHit: vi.fn(),
+    playScore: vi.fn(),
+    playGameOver: vi.fn(),
+  }
+}))
+
 const mockNavigate = vi.fn()
 
 vi.mock('react-router-dom', async () => {
@@ -70,16 +80,33 @@ describe('GameRoomPage', () => {
     vi.unstubAllGlobals()
   })
 
-  it('renders game canvas and info', () => {
+  it('renders game canvas and info', async () => {
+    let wsInstance: MockWebSocket | undefined
+    vi.spyOn(global, 'WebSocket').mockImplementation((url) => {
+      wsInstance = new MockWebSocket(url as string)
+      return wsInstance as any
+    })
+
     render(
       <MemoryRouter>
         <GameRoomPage />
       </MemoryRouter>
     )
 
+    await waitFor(() => expect(wsInstance).toBeDefined())
+
+    act(() => {
+      wsInstance?.onmessage?.({
+        data: JSON.stringify({
+          event: 'match:event',
+          payload: { type: 'CONNECTED', slot: 'p1' }
+        })
+      })
+    })
+
     expect(screen.getByTestId('game-canvas')).toBeInTheDocument()
     expect(screen.getByText('Match Info')).toBeInTheDocument()
-    expect(screen.getByText('Player 1 (You)')).toBeInTheDocument()
+    await waitFor(() => expect(screen.getByText('Player 1 (You)')).toBeInTheDocument())
     expect(screen.getAllByText('Player 2').length).toBeGreaterThan(0)
   })
 
@@ -116,7 +143,7 @@ describe('GameRoomPage', () => {
       wsInstance?.onmessage?.({
         data: JSON.stringify({
           event: 'match:event',
-          payload: { type: 'CONNECTED' }
+          payload: { type: 'START' }
         })
       })
     })
@@ -147,7 +174,7 @@ describe('GameRoomPage', () => {
       wsInstance?.onmessage?.({
         data: JSON.stringify({
           event: 'match:event',
-          payload: { type: 'CONNECTED' }
+          payload: { type: 'START' }
         })
       })
     })

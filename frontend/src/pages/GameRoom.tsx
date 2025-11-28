@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { useParams, useNavigate, useSearchParams } from 'react-router-dom'
 import useAuthStore from '../stores/authStore'
+import { soundManager } from '../lib/sound'
 
 type GameStatus = 'connecting' | 'playing' | 'paused' | 'finished'
 
@@ -11,12 +12,30 @@ const GameRoomPage = () => {
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const socketRef = useRef<WebSocket | null>(null)
   const gameStateRef = useRef<any>(null)
+  const prevBallRef = useRef<{ dx: number; dy: number } | null>(null)
   const token = useAuthStore((state) => state.accessToken)
   
   const [status, setStatus] = useState<GameStatus>('connecting')
   const [scores, setScores] = useState({ p1: 0, p2: 0 })
   const [players, setPlayers] = useState({ p1: 'Player 1', p2: 'Player 2' })
   const [winner, setWinner] = useState<string | null>(null)
+  const [playerSlot, setPlayerSlot] = useState<'p1' | 'p2' | null>(null)
+  const playerSlotRef = useRef<'p1' | 'p2' | null>(null)
+
+  useEffect(() => {
+    playerSlotRef.current = playerSlot
+  }, [playerSlot])
+
+  useEffect(() => {
+    const p1Name = searchParams.get('p1Name')
+    const p2Name = searchParams.get('p2Name')
+    if (p1Name || p2Name) {
+      setPlayers({
+        p1: p1Name || 'Player 1',
+        p2: p2Name || 'Player 2'
+      })
+    }
+  }, [searchParams])
 
   // WebSocket connection
   useEffect(() => {
@@ -28,7 +47,8 @@ const GameRoomPage = () => {
     if (mode) query.append('mode', mode)
     if (difficulty) query.append('difficulty', difficulty)
 
-    const wsUrl = `ws://localhost:3000/ws/game?${query.toString()}`
+    const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:'
+    const wsUrl = `${protocol}//${window.location.hostname}:3000/ws/game?${query.toString()}`
     const ws = new WebSocket(wsUrl)
     socketRef.current = ws
 
@@ -43,22 +63,43 @@ const GameRoomPage = () => {
         
         if (data.event === 'match:event') {
           if (data.payload.type === 'CONNECTED') {
-            // Wait for START
+            setPlayerSlot(data.payload.slot)
           } else if (data.payload.type === 'START') {
             setStatus('playing')
           } else if (data.payload.type === 'PAUSE') {
             setStatus('paused')
+          } else if (data.payload.type === 'FINISHED') {
+            setStatus('finished')
+            setWinner(data.payload.winner === playerSlotRef.current ? 'You' : 'Opponent')
+            soundManager.playGameOver()
           }
         } else if (data.event === 'state:update') {
-          gameStateRef.current = data.payload
+          const newState = data.payload
+          gameStateRef.current = newState
+
+          // Sound effects for collisions
+          if (prevBallRef.current) {
+            // Wall hit (dy changed sign)
+            if (Math.sign(newState.ball.dy) !== Math.sign(prevBallRef.current.dy)) {
+              soundManager.playWallHit()
+            }
+            // Paddle hit (dx changed sign)
+            if (Math.sign(newState.ball.dx) !== Math.sign(prevBallRef.current.dx)) {
+              soundManager.playPaddleHit()
+            }
+          }
+          prevBallRef.current = { dx: newState.ball.dx, dy: newState.ball.dy }
+
           if (data.payload.status === 'FINISHED') {
             setStatus('finished')
-            // Determine winner based on score
+            // Fallback if match:event FINISHED wasn't handled or came out of order
             const s = data.payload.score
-            setWinner(s.p1 > s.p2 ? 'Player 1' : 'Player 2')
+            // We might not know who won if we rely on score here without playerSlot, 
+            // but match:event is better.
           }
         } else if (data.event === 'score:update') {
           setScores(data.payload)
+          soundManager.playScore()
         }
       } catch (err) {
         console.error('Failed to parse message', err)
@@ -79,16 +120,23 @@ const GameRoomPage = () => {
   useEffect(() => {
     if (status !== 'playing') return
 
-    const keys = { up: false, down: false }
+    const keys = { 
+      w: false, s: false, 
+      up: false, down: false 
+    }
     
     const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === 'w' || e.key === 'ArrowUp') keys.up = true
-      if (e.key === 's' || e.key === 'ArrowDown') keys.down = true
+      if (e.key === 'w') keys.w = true
+      if (e.key === 's') keys.s = true
+      if (e.key === 'ArrowUp') keys.up = true
+      if (e.key === 'ArrowDown') keys.down = true
     }
     
     const handleKeyUp = (e: KeyboardEvent) => {
-      if (e.key === 'w' || e.key === 'ArrowUp') keys.up = false
-      if (e.key === 's' || e.key === 'ArrowDown') keys.down = false
+      if (e.key === 'w') keys.w = false
+      if (e.key === 's') keys.s = false
+      if (e.key === 'ArrowUp') keys.up = false
+      if (e.key === 'ArrowDown') keys.down = false
     }
 
     window.addEventListener('keydown', handleKeyDown)
@@ -97,18 +145,39 @@ const GameRoomPage = () => {
     const intervalId = setInterval(() => {
       if (!socketRef.current || socketRef.current.readyState !== WebSocket.OPEN) return
       
-      let axis = 0
-      if (keys.up) axis -= 1
-      if (keys.down) axis += 1
+      const mode = searchParams.get('mode')
       
-      socketRef.current.send(JSON.stringify({
-        event: 'input',
-        payload: {
-          tick: Date.now(), // Using timestamp for now
-          axis,
-          boost: false
-        }
-      }))
+      if (mode === 'local') {
+        // P1 Input (WASD)
+        let axisP1 = 0
+        if (keys.w) axisP1 -= 1
+        if (keys.s) axisP1 += 1
+        
+        socketRef.current.send(JSON.stringify({
+          event: 'input',
+          payload: { tick: Date.now(), axis: axisP1, boost: false, player: 'p1' }
+        }))
+
+        // P2 Input (Arrows)
+        let axisP2 = 0
+        if (keys.up) axisP2 -= 1
+        if (keys.down) axisP2 += 1
+        
+        socketRef.current.send(JSON.stringify({
+          event: 'input',
+          payload: { tick: Date.now(), axis: axisP2, boost: false, player: 'p2' }
+        }))
+      } else {
+        // Standard Input (WASD or Arrows)
+        let axis = 0
+        if (keys.w || keys.up) axis -= 1
+        if (keys.s || keys.down) axis += 1
+        
+        socketRef.current.send(JSON.stringify({
+          event: 'input',
+          payload: { tick: Date.now(), axis, boost: false }
+        }))
+      }
     }, 1000 / 60)
 
     return () => {
@@ -116,7 +185,7 @@ const GameRoomPage = () => {
       window.removeEventListener('keyup', handleKeyUp)
       clearInterval(intervalId)
     }
-  }, [status])
+  }, [status, searchParams])
 
   // Game loop
   useEffect(() => {
@@ -195,7 +264,7 @@ const GameRoomPage = () => {
         
         <div className="mb-8 space-y-6">
           <div>
-            <div className="mb-1 text-sm text-slate-500">Player 1 (You)</div>
+            <div className="mb-1 text-sm text-slate-500">Player 1 {playerSlot === 'p1' ? '(You)' : ''}</div>
             <div className="font-semibold text-slate-900">{players.p1}</div>
             <div className="text-3xl font-bold text-indigo-600">{scores.p1}</div>
           </div>
@@ -203,7 +272,7 @@ const GameRoomPage = () => {
           <div className="text-center text-sm font-medium text-slate-400">VS</div>
           
           <div>
-            <div className="mb-1 text-sm text-slate-500">Player 2</div>
+            <div className="mb-1 text-sm text-slate-500">Player 2 {playerSlot === 'p2' ? '(You)' : ''}</div>
             <div className="font-semibold text-slate-900">{players.p2}</div>
             <div className="text-3xl font-bold text-rose-600">{scores.p2}</div>
           </div>
@@ -258,16 +327,29 @@ const GameRoomPage = () => {
           )}
 
           {status === 'finished' && (
-            <div className="absolute inset-0 flex items-center justify-center bg-slate-900/80 backdrop-blur-sm">
-              <div className="text-center text-white">
-                <h3 className="mb-2 text-4xl font-bold">GAME OVER</h3>
-                <div className="mb-8 text-2xl text-indigo-400">
-                  Winner: {winner}
+            <div className="absolute inset-0 flex items-center justify-center bg-slate-900/90 backdrop-blur-md z-10">
+              <div className="text-center text-white animate-in fade-in zoom-in duration-300">
+                <h3 className="mb-2 text-5xl font-black tracking-tight text-transparent bg-clip-text bg-gradient-to-r from-indigo-400 to-rose-400">
+                  GAME OVER
+                </h3>
+                <div className="mb-6 text-3xl font-bold text-white">
+                  {winner === 'You' ? '🏆 You Won!' : '💀 You Lost'}
+                </div>
+                <div className="mb-8 flex justify-center gap-8 text-2xl font-mono">
+                  <div className="text-indigo-400">
+                    <div className="text-xs uppercase tracking-wider text-slate-400">Player 1</div>
+                    {scores.p1}
+                  </div>
+                  <div className="text-slate-600">-</div>
+                  <div className="text-rose-400">
+                    <div className="text-xs uppercase tracking-wider text-slate-400">Player 2</div>
+                    {scores.p2}
+                  </div>
                 </div>
                 <div className="flex gap-4 justify-center">
                   <button 
                     onClick={() => navigate('/game/new')}
-                    className="rounded-full bg-white px-6 py-2 font-semibold text-slate-900 hover:bg-slate-200"
+                    className="rounded-full bg-white px-8 py-3 font-bold text-slate-900 hover:bg-indigo-50 transition-colors shadow-lg hover:shadow-xl transform hover:-translate-y-0.5"
                   >
                     Back to Lobby
                   </button>
