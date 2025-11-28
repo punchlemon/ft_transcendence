@@ -88,13 +88,14 @@
 
 ### Next Actions
 - [ ] **Final Cleanup**
-    - [ ] Commit `fastify-tsconfig` dependency.
     - [ ] Verify Docker build.
 - [ ] **Release**
     - [ ] Deploy to production environment (if applicable).
     - [ ] Final presentation preparation.
 
 ### Completed Tasks
+- [x] **Final Cleanup**
+    - [x] Commit `fastify-tsconfig` dependency.
 - [x] **Fix Dependencies**
     - [x] Add `fastify-tsconfig` to backend devDependencies to fix TS error.
 - [x] **Final Polish**
