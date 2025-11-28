@@ -1,4 +1,5 @@
 import { FormEvent, useEffect, useState } from 'react'
+import { useNavigate } from 'react-router-dom'
 import {
   MatchQueueItem,
   advanceToNextMatch,
@@ -14,6 +15,7 @@ import useAuthStore from '../stores/authStore'
 
 const TournamentPage = () => {
   const { user } = useAuthStore()
+  const navigate = useNavigate()
   const [aliasInput, setAliasInput] = useState('')
   const [players, setPlayers] = useState<string[]>([])
   const [activeTournament, setActiveTournament] = useState<TournamentDetail | null>(null)
@@ -109,6 +111,15 @@ const TournamentPage = () => {
     resetMatchProgress()
   }
 
+  const handlePlayMatch = () => {
+    if (!currentMatch) return
+    const p1 = currentMatch.players[0]
+    const p2 = currentMatch.players[1]
+    if (!p2) return
+    
+    navigate(`/game/local-${currentMatch.id}?mode=local&p1Name=${encodeURIComponent(p1)}&p2Name=${encodeURIComponent(p2)}`)
+  }
+
   return (
     <div className="mx-auto flex max-w-4xl flex-col gap-8 px-6 py-10">
       <section className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
@@ -157,6 +168,7 @@ const TournamentPage = () => {
         matchQueue={matchQueue}
         currentMatchIndex={currentMatchIndex}
         onAdvance={handleAdvanceMatch}
+        onPlayMatch={handlePlayMatch}
       />
     </div>
   )

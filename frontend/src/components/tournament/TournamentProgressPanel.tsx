@@ -6,9 +6,10 @@ type TournamentProgressPanelProps = {
   matchQueue: MatchQueueItem[]
   currentMatchIndex: number
   onAdvance: () => void
+  onPlayMatch: () => void
 }
 
-const TournamentProgressPanel = ({ currentMatch, matchQueue, currentMatchIndex, onAdvance }: TournamentProgressPanelProps) => {
+const TournamentProgressPanel = ({ currentMatch, matchQueue, currentMatchIndex, onAdvance, onPlayMatch }: TournamentProgressPanelProps) => {
   const hasTournamentHistory = matchQueue.length > 0
 
   return (
@@ -20,10 +21,14 @@ const TournamentProgressPanel = ({ currentMatch, matchQueue, currentMatchIndex, 
           <p className="mt-2 text-2xl font-bold text-slate-900">
             {currentMatch.players[0]} vs {currentMatch.players[1] ?? 'シード'}
           </p>
-          {currentMatch.players[1] === null && (
+          {currentMatch.players[1] === null ? (
             <p className="mt-1 text-sm text-slate-600">対戦相手がいないため、自動的に次のラウンドへ進みます。</p>
+          ) : (
+            <Button className="mt-4 mr-2" onClick={onPlayMatch}>
+              試合を開始する
+            </Button>
           )}
-          <Button className="mt-4" onClick={onAdvance}>
+          <Button className="mt-4" onClick={onAdvance} variant={currentMatch.players[1] ? "secondary" : "primary"}>
             次の試合へ進む
           </Button>
         </div>
