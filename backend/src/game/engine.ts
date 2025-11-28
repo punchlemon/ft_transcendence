@@ -7,6 +7,7 @@ export class GameEngine {
   private state: GameState;
   private config: GameConfig;
   private clients: { p1?: WebSocket; p2?: WebSocket } = {};
+  private players: { p1?: number; p2?: number } = {};
   private loopId?: NodeJS.Timeout;
   
   // AI
@@ -16,9 +17,12 @@ export class GameEngine {
   // Input buffers
   private inputQueue: { p1: PlayerInput[]; p2: PlayerInput[] } = { p1: [], p2: [] };
 
-  constructor(sessionId: string, config: GameConfig = DEFAULT_CONFIG) {
+  private onGameEnd?: (result: { winner: 'p1' | 'p2'; score: { p1: number; p2: number }; p1Id?: number; p2Id?: number }) => void;
+
+  constructor(sessionId: string, config: GameConfig = DEFAULT_CONFIG, onGameEnd?: (result: { winner: 'p1' | 'p2'; score: { p1: number; p2: number }; p1Id?: number; p2Id?: number }) => void) {
     this.sessionId = sessionId;
     this.config = config;
+    this.onGameEnd = onGameEnd;
     this.state = {
       tick: 0,
       ball: { 
@@ -43,13 +47,15 @@ export class GameEngine {
     return this.state.status === 'WAITING' && (!this.clients.p1 || !this.clients.p2);
   }
 
-  addPlayer(socket: WebSocket): 'p1' | 'p2' | null {
+  addPlayer(socket: WebSocket, userId?: number): 'p1' | 'p2' | null {
     if (!this.clients.p1) {
       this.clients.p1 = socket;
+      if (userId) this.players.p1 = userId;
       this.checkStart();
       return 'p1';
     } else if (!this.clients.p2 && !this.isAIEnabled) {
       this.clients.p2 = socket;
+      if (userId) this.players.p2 = userId;
       this.checkStart();
       return 'p2';
     }
@@ -226,7 +232,27 @@ export class GameEngine {
   private score(scorer: 'p1' | 'p2') {
     this.state.score[scorer]++;
     this.broadcast({ event: 'score:update', payload: this.state.score });
-    this.resetBall(scorer === 'p1' ? 'p2' : 'p1'); // Serve to loser
+
+    if (this.state.score[scorer] >= (this.config.winningScore || 5)) {
+      this.finishGame(scorer);
+    } else {
+      this.resetBall(scorer === 'p1' ? 'p2' : 'p1'); // Serve to loser
+    }
+  }
+
+  private finishGame(winner: 'p1' | 'p2') {
+    this.state.status = 'FINISHED';
+    this.stop();
+    this.broadcast({ event: 'match:event', payload: { type: 'FINISHED', winner, score: this.state.score } });
+    
+    if (this.onGameEnd) {
+      this.onGameEnd({ 
+        winner, 
+        score: this.state.score,
+        p1Id: this.players.p1,
+        p2Id: this.players.p2
+      });
+    }
   }
 
   private resetBall(server: 'p1' | 'p2') {

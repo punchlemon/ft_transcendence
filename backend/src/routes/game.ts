@@ -1,7 +1,37 @@
 import { FastifyInstance } from 'fastify'
 import { GameManager } from '../game/GameManager'
+import { notificationService } from '../services/notification'
 
 export default async function gameRoutes(fastify: FastifyInstance) {
+  fastify.post('/api/game/invite', {
+    preValidation: [fastify.authenticate]
+  }, async (req, reply) => {
+    const { targetUserId } = req.body as { targetUserId: number };
+    const user = req.user;
+    
+    if (!targetUserId) {
+      return reply.code(400).send({ error: 'targetUserId is required' });
+    }
+
+    const inviter = await fastify.prisma.user.findUnique({
+      where: { id: user.userId },
+      select: { displayName: true }
+    });
+
+    const manager = GameManager.getInstance();
+    const { sessionId } = manager.createPrivateGame();
+
+    await notificationService.createNotification(
+      targetUserId,
+      'MATCH_INVITE',
+      'Game Invitation',
+      `${inviter?.displayName || 'Someone'} invited you to a game!`,
+      { sessionId, inviterId: user.userId }
+    );
+
+    return { sessionId };
+  });
+
   fastify.get('/ws/game', { websocket: true }, (connection, req) => {
     fastify.log.info('Client connected to game websocket')
     
@@ -21,6 +51,8 @@ export default async function gameRoutes(fastify: FastifyInstance) {
     let gameResult;
     if (query.mode === 'ai') {
       gameResult = manager.createAIGame((query.difficulty as any) || 'NORMAL');
+    } else if (query.mode === 'local') {
+      gameResult = manager.createLocalGame();
     } else {
       gameResult = manager.findOrCreatePublicGame();
     }
@@ -41,7 +73,23 @@ export default async function gameRoutes(fastify: FastifyInstance) {
         }
 
         if (data.event === 'ready') {
-          playerSlot = game.addPlayer(socket as any);
+          let userId: number | undefined;
+          if (data.payload?.token) {
+             try {
+               const decoded = fastify.jwt.verify<{ userId: number }>(data.payload.token);
+               userId = decoded.userId;
+             } catch (e) {
+               fastify.log.warn('Invalid token provided in ready event');
+             }
+          }
+
+          if (query.mode === 'local') {
+            game.addPlayer(socket as any, userId);
+            game.addPlayer(socket as any, userId);
+            playerSlot = 'p1';
+          } else {
+            playerSlot = game.addPlayer(socket as any, userId);
+          }
           
           const response = JSON.stringify({
             event: 'match:event',
@@ -56,8 +104,13 @@ export default async function gameRoutes(fastify: FastifyInstance) {
           if (typeof (socket as any).send === 'function') {
             (socket as any).send(response)
           }
-        } else if (data.event === 'input' && playerSlot) {
-          game.processInput(playerSlot, data.payload);
+        } else if (data.event === 'input') {
+          if (query.mode === 'local') {
+            const p = data.payload.player as 'p1' | 'p2';
+            if (p) game.processInput(p, data.payload);
+          } else if (playerSlot) {
+            game.processInput(playerSlot, data.payload);
+          }
         }
       } catch (err) {
         fastify.log.error(err, 'Failed to parse message')

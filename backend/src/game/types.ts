@@ -7,6 +7,7 @@ export interface GameConfig {
   paddleSpeed: number;
   ballSpeed: number;
   maxBallSpeed: number;
+  winningScore: number;
 }
 
 export interface GameState {
@@ -32,4 +33,5 @@ export const DEFAULT_CONFIG: GameConfig = {
   paddleSpeed: 5, // pixels per tick (at 120Hz? maybe too fast. 600px/s)
   ballSpeed: 4,
   maxBallSpeed: 12,
+  winningScore: 5,
 };
