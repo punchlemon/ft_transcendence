@@ -14,6 +14,9 @@
     "test": "vitest run --maxWorkers=1 --no-file-parallelism",
     "test:watch": "vitest --maxWorkers=1 --no-file-parallelism"
   },
+  "prisma": {
+    "seed": "ts-node prisma/seed.ts"
+  },
   "dependencies": {
     "@fastify/cors": "^8.4.1",
     "@fastify/jwt": "^8.0.1",
