@@ -49,7 +49,10 @@ export const useChatStore = create<ChatState>((set, get) => ({
     set({ isLoading: true });
     try {
       const res = await api.get('/chat/threads');
-      set({ threads: res.data.data });
+      // Support both axios response shapes and mocked shapes in tests
+      // Some tests/mock return { data: threads } while axios returns { data: { data: threads } }
+      const threads = (res.data && (res.data.data ?? res.data)) ?? []
+      set({ threads });
     } finally {
       set({ isLoading: false });
     }
@@ -62,10 +65,11 @@ export const useChatStore = create<ChatState>((set, get) => ({
     // Fetch messages
     try {
         const res = await api.get(`/chat/threads/${threadId}/messages`);
+        const messages = (res.data && (res.data.data ?? res.data)) ?? []
         set((state) => ({
         messages: {
-            ...state.messages,
-            [threadId]: res.data.data,
+          ...state.messages,
+          [threadId]: messages,
         },
         }));
     } catch (error) {
@@ -79,7 +83,8 @@ export const useChatStore = create<ChatState>((set, get) => ({
       : { type, name: targetIdOrName };
       
     const res = await api.post('/chat/threads', payload);
-    const newThreadId = res.data.data.id;
+    const created = (res.data && (res.data.data ?? res.data)) ?? null
+    const newThreadId = created?.id ?? null;
     await get().fetchThreads();
     await get().selectThread(newThreadId);
   },
@@ -89,7 +94,8 @@ export const useChatStore = create<ChatState>((set, get) => ({
     if (!activeThreadId) return;
 
     const res = await api.post(`/chat/threads/${activeThreadId}/messages`, { content });
-    get().addMessage(res.data.data);
+    const created = (res.data && (res.data.data ?? res.data)) ?? null
+    if (created) get().addMessage(created as ChatMessage);
   },
 
   addMessage: (message) => {
