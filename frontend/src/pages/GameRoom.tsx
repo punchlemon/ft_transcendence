@@ -17,7 +17,14 @@ const GameRoomPage = () => {
   
   const [status, setStatus] = useState<GameStatus>('connecting')
   const [scores, setScores] = useState({ p1: 0, p2: 0 })
-  const [players, setPlayers] = useState({ p1: 'Player 1', p2: 'Player 2' })
+  const [players, setPlayers] = useState(() => {
+    const p1Name = searchParams.get('p1Name')
+    const p2Name = searchParams.get('p2Name')
+    return {
+      p1: p1Name || 'Player 1',
+      p2: p2Name || 'Player 2'
+    }
+  })
   const [winner, setWinner] = useState<string | null>(null)
   const [playerSlot, setPlayerSlot] = useState<'p1' | 'p2' | null>(null)
   const playerSlotRef = useRef<'p1' | 'p2' | null>(null)
@@ -26,16 +33,7 @@ const GameRoomPage = () => {
     playerSlotRef.current = playerSlot
   }, [playerSlot])
 
-  useEffect(() => {
-    const p1Name = searchParams.get('p1Name')
-    const p2Name = searchParams.get('p2Name')
-    if (p1Name || p2Name) {
-      setPlayers({
-        p1: p1Name || 'Player 1',
-        p2: p2Name || 'Player 2'
-      })
-    }
-  }, [searchParams])
+  
 
   // WebSocket connection
   useEffect(() => {
