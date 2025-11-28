@@ -87,11 +87,16 @@
 ## Current Focus: Completion
 
 ### Next Actions
+- [ ] **Final Cleanup**
+    - [ ] Commit `fastify-tsconfig` dependency.
+    - [ ] Verify Docker build.
 - [ ] **Release**
     - [ ] Deploy to production environment (if applicable).
     - [ ] Final presentation preparation.
 
 ### Completed Tasks
+- [x] **Fix Dependencies**
+    - [x] Add `fastify-tsconfig` to backend devDependencies to fix TS error.
 - [x] **Final Polish**
     - [x] Verify all "Remaining" items in Epic C are actually covered.
     - [x] Ensure no critical bugs in main flows (Login -> Game -> Stats).

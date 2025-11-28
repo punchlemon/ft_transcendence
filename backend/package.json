@@ -38,6 +38,7 @@
     "@typescript-eslint/parser": "^8.48.0",
     "eslint": "^9.39.1",
     "eslint-config-prettier": "^10.1.8",
+    "fastify-tsconfig": "^3.0.0",
     "prettier": "^3.6.2",
     "prisma": "^5.8.1",
     "ts-node-dev": "^2.0.0",
