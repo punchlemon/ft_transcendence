@@ -84,14 +84,18 @@
 - [x] **AI Opponent Implementation**: Implement 1Hz vision constraint AI in `GameEngine`.
 - [x] **Game UI Polish**: Improve `GameRoom` UI, handle game over state, and add sound effects/animations.
 
-## Current Focus: Final Verification & Polish
+## Current Focus: Completion
 
 ### Next Actions
-- [ ] **Final Polish**
-    - [ ] Verify all "Remaining" items in Epic C are actually covered.
-    - [ ] Ensure no critical bugs in main flows (Login -> Game -> Stats).
+- [ ] **Release**
+    - [ ] Deploy to production environment (if applicable).
+    - [ ] Final presentation preparation.
 
 ### Completed Tasks
+- [x] **Final Polish**
+    - [x] Verify all "Remaining" items in Epic C are actually covered.
+    - [x] Ensure no critical bugs in main flows (Login -> Game -> Stats).
+    - [x] Add OAuth configuration guide to README.
 - [x] **Verification**
     - [x] Backend Tests: 100% Passing (68/68)
     - [x] Frontend Tests: 100% Passing (74/74)

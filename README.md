@@ -41,3 +41,19 @@ npm run dev
 - frontend: `npm run lint`, `npm run test`, `npm run build`
 
 GitHub Actions (`.github/workflows/ci.yml`) でも同じ手順を行うよう構成されています。
+
+## OAuth 設定
+OAuth 認証（42, Google 等）を利用するには、`.env` に以下の変数を設定してください。
+
+```env
+# OAuth Configuration
+OAUTH_42_CLIENT_ID=your_42_client_id
+OAUTH_42_CLIENT_SECRET=your_42_client_secret
+OAUTH_42_CALLBACK_URL=http://localhost:3000/auth/42/callback
+
+OAUTH_GOOGLE_CLIENT_ID=your_google_client_id
+OAUTH_GOOGLE_CLIENT_SECRET=your_google_client_secret
+OAUTH_GOOGLE_CALLBACK_URL=http://localhost:3000/auth/google/callback
+```
+
+プロバイダを追加する場合は `backend/src/plugins/oauth.ts` と `frontend/src/pages/Login.tsx` を拡張してください。
