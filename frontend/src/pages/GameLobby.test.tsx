@@ -2,6 +2,7 @@ import { render, screen, fireEvent, waitFor } from '@testing-library/react'
 import { describe, it, expect, vi } from 'vitest'
 import { MemoryRouter } from 'react-router-dom'
 import GameLobbyPage from './GameLobby'
+import useAuthStore, { resetAuthStoreForTesting } from '../stores/authStore'
 
 const mockNavigate = vi.fn()
 
@@ -14,6 +15,15 @@ vi.mock('react-router-dom', async () => {
 })
 
 describe('GameLobbyPage', () => {
+  beforeEach(() => {
+    // set a logged-in user so lobby actions are enabled during tests
+    useAuthStore.setState({ user: { id: 1, displayName: 'Test', status: 'ONLINE' } })
+    mockNavigate.mockClear()
+  })
+
+  afterEach(() => {
+    resetAuthStoreForTesting()
+  })
   it('renders all game modes', () => {
     render(
       <MemoryRouter>
@@ -99,6 +109,7 @@ describe('GameLobbyPage', () => {
     fireEvent.click(screen.getByText('Cancel'))
 
     expect(screen.queryByText('Looking for an opponent...')).not.toBeInTheDocument()
-    expect(screen.getByText('New Game')).toBeInTheDocument()
+    // after cancelling, mode selection should be visible again
+    expect(screen.getByText('Local 1v1')).toBeInTheDocument()
   })
 })

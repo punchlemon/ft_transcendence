@@ -14,6 +14,8 @@ const MfaChallengePage = () => {
   const [challengeMissing, setChallengeMissing] = useState(false)
 
   const setSession = useAuthStore((state) => state.setSession)
+  const user = useAuthStore((state) => state.user)
+  const isHydrated = useAuthStore((state) => state.isHydrated)
 
   const refreshChallengeId = () => {
     const storedId = sessionStorage.getItem('ft_mfa_challenge_id')
@@ -24,6 +26,13 @@ const MfaChallengePage = () => {
   useEffect(() => {
     refreshChallengeId()
   }, [])
+
+  useEffect(() => {
+    if (isHydrated && user) {
+      // already authenticated, navigate away to home
+      window.location.href = '/'
+    }
+  }, [isHydrated, user])
 
   const resetMessages = () => {
     setErrorMessage(null)

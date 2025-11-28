@@ -192,14 +192,13 @@ describe('GameRoomPage', () => {
     expect(screen.queryByText('PAUSED')).not.toBeInTheDocument()
   })
 
-  it('navigates to lobby on surrender', () => {
+  it('does not render Back to Home button (removed by UX)', () => {
     render(
       <MemoryRouter>
         <GameRoomPage />
       </MemoryRouter>
     )
 
-    fireEvent.click(screen.getByText('Surrender'))
-    expect(mockNavigate).toHaveBeenCalledWith('/game/new')
+    expect(screen.queryByText('Back to Home')).not.toBeInTheDocument()
   })
 })

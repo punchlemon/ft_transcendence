@@ -366,8 +366,10 @@ model PartyInvite {
 
 model Match {
   id             Int       @id @default(autoincrement())
-  playerAId      Int
-  playerBId      Int
+  playerAId      Int?
+  playerBId      Int?
+  playerAAlias   String?
+  playerBAlias   String?
   winnerId       Int?
   mode           String
   status         String    @default("SCHEDULED")
@@ -380,8 +382,8 @@ model Match {
   createdAt      DateTime  @default(now())
   updatedAt      DateTime  @updatedAt
 
-  playerA        User      @relation("PlayerA", fields: [playerAId], references: [id])
-  playerB        User      @relation("PlayerB", fields: [playerBId], references: [id])
+  playerA        User?     @relation("PlayerA", fields: [playerAId], references: [id])
+  playerB        User?     @relation("PlayerB", fields: [playerBId], references: [id])
   winner         User?     @relation("MatchWinner", fields: [winnerId], references: [id])
   rounds         MatchRound[]
   results        MatchResult[]
@@ -406,14 +408,14 @@ model MatchRound {
 model MatchResult {
   id        Int      @id @default(autoincrement())
   matchId   Int
-  userId    Int
+  userId    Int?
   outcome   String
   score     Int
   accuracy  Float?
   rallyMax  Int      @default(0)
 
   match     Match    @relation(fields: [matchId], references: [id])
-  user      User     @relation(fields: [userId], references: [id])
+  user      User?    @relation(fields: [userId], references: [id])
 }
 
 model Ladder {

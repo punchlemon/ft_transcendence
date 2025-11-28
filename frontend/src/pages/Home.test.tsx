@@ -25,24 +25,19 @@ describe('HomePage', () => {
 
   it('renders hero title, description, and navigation buttons', () => {
     render(<HomePage />)
-
     expect(screen.getByRole('heading', { name: 'ft_transcendence' })).toBeInTheDocument()
-    expect(
-      screen.getByText('Pong をベースにした SPA を構築する最終課題です。まずはバックエンドのヘルスチェックから動作確認しましょう。')
-    ).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: 'ヘルスチェックへ' })).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: 'トーナメント管理を開く' })).toBeInTheDocument()
+    expect(screen.getByText('Pong ベースのゲームへようこそ。ログインして対戦を始めましょう。')).toBeInTheDocument()
+    // Game lobby is embedded on the home page — verify mode options are present
+    expect(screen.getByText('Local 1v1')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Start Game' })).toBeInTheDocument()
   })
 
   it('navigates to health and tournament paths when buttons are clicked', async () => {
     const user = userEvent.setup()
     render(<HomePage />)
-
-    await user.click(screen.getByRole('button', { name: 'ヘルスチェックへ' }))
-    await user.click(screen.getByRole('button', { name: 'トーナメント管理を開く' }))
-
-    expect(mockNavigate).toHaveBeenNthCalledWith(1, '/health')
-    expect(mockNavigate).toHaveBeenNthCalledWith(2, '/tournament')
+    // Start Game is disabled until a mode is selected
+    const startBtn = screen.getByRole('button', { name: 'Start Game' })
+    expect(startBtn).toBeDisabled()
   })
 })
 

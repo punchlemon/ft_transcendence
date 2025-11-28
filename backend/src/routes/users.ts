@@ -276,7 +276,13 @@ const usersRoutes: FastifyPluginAsync = async (fastify) => {
         include: {
           playerA: { select: { id: true, displayName: true, avatarUrl: true } },
           playerB: { select: { id: true, displayName: true, avatarUrl: true } },
-          results: true
+          results: true,
+          rounds: {
+            select: {
+              scoreA: true,
+              scoreB: true
+            }
+          }
         },
         orderBy: { endedAt: 'desc' },
         skip,
@@ -286,15 +292,53 @@ const usersRoutes: FastifyPluginAsync = async (fastify) => {
 
     const data = matches.map((match) => {
       const isPlayerA = match.playerAId === userId
-      const opponent = isPlayerA ? match.playerB : match.playerA
+      const opponentUser = isPlayerA ? match.playerB : match.playerA
+      const opponentUserId = isPlayerA ? match.playerBId : match.playerAId
+
+      // Determine opponent display info: prefer real user, otherwise use alias
+      const pAAlias = (match as any).playerAAlias
+      const pBAlias = (match as any).playerBAlias
+
+      const opponent = {
+        id: opponentUser ? opponentUser.id : (opponentUserId ?? null),
+        displayName: opponentUser ? opponentUser.displayName : (isPlayerA ? pBAlias : pAAlias) ?? 'Guest',
+        avatarUrl: opponentUser ? opponentUser.avatarUrl : null
+      }
+
+      // Derive final scores from aggregated rounds to avoid mismatches
+      // that can happen when MatchResult entries are missing or out-of-order.
+      const totalA = match.rounds?.reduce((acc, r) => acc + (r.scoreA ?? 0), 0) ?? 0
+      const totalB = match.rounds?.reduce((acc, r) => acc + (r.scoreB ?? 0), 0) ?? 0
+
+      let userScore = isPlayerA ? totalA : totalB
+      let opponentScore = isPlayerA ? totalB : totalA
+
+      // If rounds are not present (totals are zero), fall back to MatchResult entries
+      // which are created when a match is saved by GameManager.
+      if ((totalA + totalB) === 0) {
+        const userResultEntry = match.results.find((r) => r.userId === userId)
+        // Try to find opponent by userId if present, otherwise pick the other result entry
+        let opponentResultEntry = typeof opponentUserId === 'number' ? match.results.find((r) => r.userId === opponentUserId) : undefined
+        if (!opponentResultEntry && match.results.length > 0) {
+          // If userResultEntry exists, pick the other entry as opponent; otherwise pick the first non-user entry
+          opponentResultEntry = match.results.find((r) => r !== userResultEntry) ?? match.results[0]
+        }
+
+        if (userResultEntry && typeof userResultEntry.score === 'number') {
+          userScore = userResultEntry.score
+        }
+        if (opponentResultEntry && typeof opponentResultEntry.score === 'number') {
+          opponentScore = opponentResultEntry.score
+        }
+      }
+
       const userResult = match.results.find((r) => r.userId === userId)
-      const opponentResult = match.results.find((r) => r.userId === opponent.id)
 
       return {
         id: match.id,
         opponent,
         result: userResult?.outcome || 'UNKNOWN',
-        score: `${userResult?.score ?? 0} - ${opponentResult?.score ?? 0}`,
+        score: `${userScore} - ${opponentScore}`,
         date: match.endedAt,
         mode: match.mode
       }

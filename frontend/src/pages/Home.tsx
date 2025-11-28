@@ -1,21 +1,26 @@
 import { useNavigate } from 'react-router-dom'
+import useAuthStore from '../stores/authStore'
+import GameLobbyPage from './GameLobby'
 import Button from '../components/ui/Button'
 
 const HomePage = () => {
   const navigate = useNavigate()
+  const user = useAuthStore((s) => s.user)
 
   return (
-    <div className="mx-auto flex min-h-screen max-w-3xl flex-col items-center justify-center gap-6 px-6 text-center">
-      <h1 className="text-4xl font-bold text-slate-900">ft_transcendence</h1>
-      <p className="text-lg text-slate-600">
-        Pong をベースにした SPA を構築する最終課題です。まずはバックエンドのヘルスチェックから動作確認しましょう。
-      </p>
-      <div className="flex flex-col gap-3 sm:flex-row">
-        <Button onClick={() => navigate('/health')}>ヘルスチェックへ</Button>
-        <Button variant="secondary" onClick={() => navigate('/tournament')}>
-          トーナメント管理を開く
-        </Button>
-      </div>
+    <div className="mx-auto min-h-screen max-w-4xl px-6 py-12">
+      {user ? (
+        <div className="mb-8 text-center">
+          <h1 className="mb-2 text-3xl font-bold text-slate-900">ようこそ、{user.displayName}さん</h1>
+        </div>
+      ) : (
+        <div className="mb-8 text-center">
+          <h1 className="mb-2 text-4xl font-bold text-slate-900">ft_transcendence</h1>
+          <p className="mb-6 text-lg text-slate-600">Pong ベースのゲームへようこそ。ログインして対戦を始めましょう。</p>
+        </div>
+      )}
+
+      <GameLobbyPage />
     </div>
   )
 }

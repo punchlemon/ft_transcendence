@@ -1,7 +1,7 @@
 import { useEffect } from 'react'
-import { BrowserRouter, Routes, Route, Link } from 'react-router-dom'
+import { BrowserRouter, Routes, Route, Link, useNavigate, useLocation } from 'react-router-dom'
 import HomePage from './pages/Home'
-import HealthCheckPage from './pages/HealthCheck'
+// HealthCheckPage removed from routes — health endpoint not needed on Home
 import TournamentPage from './pages/Tournament'
 import LoginPage from './pages/Login'
 import RegisterPage from './pages/Register'
@@ -15,6 +15,7 @@ import GameRoomPage from './pages/GameRoom'
 import ChatDrawer from './components/chat/ChatDrawer'
 import NotificationBell from './components/ui/NotificationBell'
 import useAuthStore from './stores/authStore'
+import RequireAuth from './components/auth/RequireAuth'
 
 const App = () => {
   const user = useAuthStore((state) => state.user)
@@ -24,8 +25,29 @@ const App = () => {
     useAuthStore.getState().hydrateFromStorage()
   }, [])
 
+  function AuthRedirectOnLogout() {
+    const user = useAuthStore((s) => s.user)
+    const navigate = useNavigate()
+    const location = useLocation()
+
+    useEffect(() => {
+      if (!user) {
+        // Allow auth-related routes to remain accessible (login/register/2fa/oauth callback)
+        const allowedPrefixes = ['/login', '/register', '/auth', '/oauth']
+        const current = location.pathname || '/'
+        const isAllowed = allowedPrefixes.some((p) => current.startsWith(p))
+        if (!isAllowed) {
+          navigate('/login', { replace: true })
+        }
+      }
+    }, [user, navigate, location])
+
+    return null
+  }
+
   return (
     <BrowserRouter>
+      <AuthRedirectOnLogout />
       <div className="min-h-screen bg-gradient-to-b from-slate-50 via-white to-slate-100">
         <header className="border-b border-slate-200 bg-white/80 backdrop-blur">
           <div className="mx-auto flex max-w-5xl items-center justify-between px-6 py-4">
@@ -34,10 +56,12 @@ const App = () => {
             </Link>
             <nav className="flex flex-wrap items-center gap-4 text-sm text-slate-600">
               <Link to="/">Home</Link>
-              <Link to="/users">Users</Link>
-              <Link to="/game/new">Game</Link>
-              <Link to="/health">Health</Link>
-              <Link to="/tournament">Tournament</Link>
+              {user ? (
+                <>
+                  <Link to="/users">Users</Link>
+                  <Link to="/tournament">Tournament</Link>
+                </>
+              ) : null}
               {user ? (
                 <div className="flex items-center gap-3" data-testid="navbar-auth-state">
                   <NotificationBell />
@@ -78,17 +102,50 @@ const App = () => {
         <main>
           <Routes>
             <Route path="/" element={<HomePage />} />
-            <Route path="/health" element={<HealthCheckPage />} />
-            <Route path="/tournament" element={<TournamentPage />} />
+            <Route
+              path="/tournament"
+              element={
+                <RequireAuth>
+                  <TournamentPage />
+                </RequireAuth>
+              }
+            />
             <Route path="/login" element={<LoginPage />} />
             <Route path="/register" element={<RegisterPage />} />
             <Route path="/auth/2fa" element={<MfaChallengePage />} />
             <Route path="/oauth/callback" element={<OAuthCallbackPage />} />
-            <Route path="/profile/:id" element={<ProfilePage />} />
-            <Route path="/users" element={<UsersPage />} />
-            <Route path="/settings/account" element={<SettingsPage />} />
-            <Route path="/game/new" element={<GameLobbyPage />} />
-            <Route path="/game/:id" element={<GameRoomPage />} />
+            <Route
+              path="/profile/:id"
+              element={
+                <RequireAuth>
+                  <ProfilePage />
+                </RequireAuth>
+              }
+            />
+            <Route
+              path="/users"
+              element={
+                <RequireAuth>
+                  <UsersPage />
+                </RequireAuth>
+              }
+            />
+            <Route
+              path="/settings/account"
+              element={
+                <RequireAuth>
+                  <SettingsPage />
+                </RequireAuth>
+              }
+            />
+            <Route
+              path="/game/:id"
+              element={
+                <RequireAuth>
+                  <GameRoomPage />
+                </RequireAuth>
+              }
+            />
           </Routes>
         </main>
 

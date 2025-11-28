@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
+import useAuthStore from '../stores/authStore'
 
 type GameMode = 'local' | 'remote' | 'ai'
 type MatchType = 'public' | 'private'
@@ -7,6 +8,7 @@ type AIDifficulty = 'EASY' | 'NORMAL' | 'HARD'
 
 const GameLobbyPage = () => {
   const navigate = useNavigate()
+  const user = useAuthStore((s) => s.user)
   const [selectedMode, setSelectedMode] = useState<GameMode | null>(null)
   const [matchType, setMatchType] = useState<MatchType | null>(null)
   const [aiDifficulty, setAiDifficulty] = useState<AIDifficulty>('NORMAL')
@@ -14,6 +16,7 @@ const GameLobbyPage = () => {
   const [roomCode, setRoomCode] = useState('')
 
   const handleModeSelect = (mode: GameMode) => {
+    if (!user) return
     setSelectedMode(mode)
     setMatchType(null)
     setIsMatching(false)
@@ -48,8 +51,6 @@ const GameLobbyPage = () => {
 
   return (
     <div className="mx-auto max-w-4xl px-6 py-12">
-      <h1 className="mb-8 text-center text-3xl font-bold text-slate-900">New Game</h1>
-
       {isMatching ? (
         <div className="flex flex-col items-center justify-center rounded-xl border border-slate-200 bg-white p-12 shadow-sm">
           <div className="mb-6 h-16 w-16 animate-spin rounded-full border-4 border-slate-200 border-t-indigo-600"></div>
@@ -68,11 +69,12 @@ const GameLobbyPage = () => {
           <div className="grid gap-6 md:grid-cols-3">
             <button
               onClick={() => handleModeSelect('local')}
+              disabled={!user}
               className={`flex flex-col items-center rounded-xl border p-8 transition-all ${
                 selectedMode === 'local'
                   ? 'border-indigo-600 bg-indigo-50 ring-2 ring-indigo-600 ring-offset-2'
                   : 'border-slate-200 bg-white hover:border-indigo-300 hover:shadow-md'
-              }`}
+              } ${!user ? 'opacity-60 cursor-not-allowed' : ''}`}
             >
               <div className="mb-4 text-4xl">👥</div>
               <h3 className="mb-2 text-lg font-semibold text-slate-900">Local 1v1</h3>
@@ -83,11 +85,12 @@ const GameLobbyPage = () => {
 
             <button
               onClick={() => handleModeSelect('remote')}
+              disabled={!user}
               className={`flex flex-col items-center rounded-xl border p-8 transition-all ${
                 selectedMode === 'remote'
                   ? 'border-indigo-600 bg-indigo-50 ring-2 ring-indigo-600 ring-offset-2'
                   : 'border-slate-200 bg-white hover:border-indigo-300 hover:shadow-md'
-              }`}
+              } ${!user ? 'opacity-60 cursor-not-allowed' : ''}`}
             >
               <div className="mb-4 text-4xl">🌍</div>
               <h3 className="mb-2 text-lg font-semibold text-slate-900">Online PvP</h3>
@@ -98,11 +101,12 @@ const GameLobbyPage = () => {
 
             <button
               onClick={() => handleModeSelect('ai')}
+              disabled={!user}
               className={`flex flex-col items-center rounded-xl border p-8 transition-all ${
                 selectedMode === 'ai'
                   ? 'border-indigo-600 bg-indigo-50 ring-2 ring-indigo-600 ring-offset-2'
                   : 'border-slate-200 bg-white hover:border-indigo-300 hover:shadow-md'
-              }`}
+              } ${!user ? 'opacity-60 cursor-not-allowed' : ''}`}
             >
               <div className="mb-4 text-4xl">🤖</div>
               <h3 className="mb-2 text-lg font-semibold text-slate-900">vs AI</h3>
@@ -184,7 +188,7 @@ const GameLobbyPage = () => {
           <div className="flex justify-center pt-4">
             <button
               onClick={handleStartMatch}
-              disabled={!selectedMode || (selectedMode === 'remote' && !matchType)}
+              disabled={!user || !selectedMode || (selectedMode === 'remote' && !matchType)}
               className="min-w-[200px] rounded-full bg-slate-900 px-8 py-3 font-semibold text-white transition-transform hover:scale-105 hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:scale-100"
             >
               Start Game

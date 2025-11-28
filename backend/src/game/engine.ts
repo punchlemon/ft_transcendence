@@ -8,6 +8,7 @@ export class GameEngine {
   private config: GameConfig;
   private clients: { p1?: WebSocket; p2?: WebSocket } = {};
   private players: { p1?: number; p2?: number } = {};
+  private playersAliases: { p1?: string; p2?: string } = {};
   private loopId?: NodeJS.Timeout;
   public startedAt?: Date;
   
@@ -18,9 +19,9 @@ export class GameEngine {
   // Input buffers
   private inputQueue: { p1: PlayerInput[]; p2: PlayerInput[] } = { p1: [], p2: [] };
 
-  private onGameEnd?: (result: { winner: 'p1' | 'p2'; score: { p1: number; p2: number }; p1Id?: number; p2Id?: number; startedAt?: Date }) => void;
+  private onGameEnd?: (result: { winner: 'p1' | 'p2'; score: { p1: number; p2: number }; p1Id?: number; p2Id?: number; p1Alias?: string; p2Alias?: string; startedAt?: Date }) => void;
 
-  constructor(sessionId: string, config: GameConfig = DEFAULT_CONFIG, onGameEnd?: (result: { winner: 'p1' | 'p2'; score: { p1: number; p2: number }; p1Id?: number; p2Id?: number; startedAt?: Date }) => void) {
+  constructor(sessionId: string, config: GameConfig = DEFAULT_CONFIG, onGameEnd?: (result: { winner: 'p1' | 'p2'; score: { p1: number; p2: number }; p1Id?: number; p2Id?: number; p1Alias?: string; p2Alias?: string; startedAt?: Date }) => void) {
     this.sessionId = sessionId;
     this.config = config;
     this.onGameEnd = onGameEnd;
@@ -48,15 +49,17 @@ export class GameEngine {
     return this.state.status === 'WAITING' && (!this.clients.p1 || !this.clients.p2);
   }
 
-  addPlayer(socket: WebSocket, userId?: number): 'p1' | 'p2' | null {
+  addPlayer(socket: WebSocket, userId?: number, alias?: string): 'p1' | 'p2' | null {
     if (!this.clients.p1) {
       this.clients.p1 = socket;
       if (userId) this.players.p1 = userId;
+      if (alias) this.playersAliases.p1 = alias;
       this.checkStart();
       return 'p1';
     } else if (!this.clients.p2 && !this.isAIEnabled) {
       this.clients.p2 = socket;
       if (userId) this.players.p2 = userId;
+      if (alias) this.playersAliases.p2 = alias;
       this.checkStart();
       return 'p2';
     }
@@ -67,6 +70,8 @@ export class GameEngine {
     if (this.clients.p2) return; // Slot taken
     this.isAIEnabled = true;
     this.aiOpponent = new AIOpponent(this.config, difficulty);
+    // Label AI opponent with difficulty so it can be persisted/displayed
+    this.playersAliases.p2 = `AI (${difficulty})`;
     this.checkStart();
   }
 
@@ -242,7 +247,7 @@ export class GameEngine {
     }
   }
 
-  private finishGame(winner: 'p1' | 'p2') {
+  public finishGame(winner: 'p1' | 'p2') {
     this.state.status = 'FINISHED';
     this.stop();
     this.broadcast({ event: 'match:event', payload: { type: 'FINISHED', winner, score: this.state.score } });
@@ -253,9 +258,19 @@ export class GameEngine {
         score: this.state.score,
         p1Id: this.players.p1,
         p2Id: this.players.p2,
+        p1Alias: this.playersAliases.p1,
+        p2Alias: this.playersAliases.p2,
         startedAt: this.startedAt
       });
     }
+  }
+
+  // Abort the game and save current score as final (winner determined by current score)
+  public abortGame() {
+    const { p1, p2 } = this.state.score
+    let winner: 'p1' | 'p2' = 'p1'
+    if (p2 > p1) winner = 'p2'
+    this.finishGame(winner)
   }
 
   private resetBall(server: 'p1' | 'p2') {

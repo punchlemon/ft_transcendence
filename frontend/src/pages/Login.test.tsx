@@ -5,6 +5,7 @@
  */
 import { describe, it, expect, beforeEach, vi } from 'vitest'
 import { render, screen, waitFor } from '@testing-library/react'
+import { MemoryRouter } from 'react-router-dom'
 import userEvent from '@testing-library/user-event'
 import { AxiosError, type AxiosResponse } from 'axios'
 import LoginPage from './Login'
@@ -36,6 +37,15 @@ const createAxiosError = <T,>(status: number, data: T) => {
   return error
 }
 
+vi.mock('react-router-dom', async () => {
+  const actual = await vi.importActual<typeof import('react-router-dom')>('react-router-dom')
+  return {
+    ...actual,
+    useNavigate: () => () => {},
+    useSearchParams: () => [new URLSearchParams(), () => {}]
+  }
+})
+
 describe('LoginPage', () => {
   const openSpy = vi.spyOn(window, 'open').mockImplementation(() => null)
 
@@ -60,7 +70,11 @@ describe('LoginPage', () => {
     }
     mockedLogin.mockResolvedValue(apiResponse)
 
-    render(<LoginPage />)
+    render(
+      <MemoryRouter>
+        <LoginPage />
+      </MemoryRouter>
+    )
 
     await user.type(screen.getByLabelText('メールアドレス'), 'Alice@example.com ')
     await user.type(screen.getByLabelText('パスワード'), 'password123')
@@ -79,7 +93,11 @@ describe('LoginPage', () => {
   it('shows validation error when input is empty and does not call API', async () => {
     const user = userEvent.setup()
 
-    render(<LoginPage />)
+    render(
+      <MemoryRouter>
+        <LoginPage />
+      </MemoryRouter>
+    )
 
     await user.click(screen.getByRole('button', { name: 'メールアドレスでログイン' }))
 
@@ -97,7 +115,11 @@ describe('LoginPage', () => {
       })
     )
 
-    render(<LoginPage />)
+    render(
+      <MemoryRouter>
+        <LoginPage />
+      </MemoryRouter>
+    )
 
     await user.type(screen.getByLabelText('メールアドレス'), 'user@example.com')
     await user.type(screen.getByLabelText('パスワード'), 'password123')
@@ -118,7 +140,11 @@ describe('LoginPage', () => {
     } as OAuthUrlResponse)
     const { stateKey, providerKey, codeChallengeKey } = getOAuthStorageKeys()
 
-    render(<LoginPage />)
+    render(
+      <MemoryRouter>
+        <LoginPage />
+      </MemoryRouter>
+    )
 
     await user.click(screen.getByRole('button', { name: '42 OAuthでログイン' }))
 

@@ -27,22 +27,20 @@ export class GameManager {
     return game;
   }
 
-  private async handleGameEnd(sessionId: string, result: { winner: 'p1' | 'p2'; score: { p1: number; p2: number }; p1Id?: number; p2Id?: number; startedAt?: Date }) {
+  private async handleGameEnd(sessionId: string, result: { winner: 'p1' | 'p2'; score: { p1: number; p2: number }; p1Id?: number; p2Id?: number; p1Alias?: string; p2Alias?: string; startedAt?: Date }) {
     this.games.delete(sessionId);
 
-    if (!result.p1Id) {
-      // AI game or incomplete
+    // Require at least one identifier (userId or alias) for each side to consider persisting.
+    const hasP1 = typeof result.p1Id === 'number' || !!result.p1Alias
+    const hasP2 = typeof result.p2Id === 'number' || !!result.p2Alias
+    if (!hasP1 && !hasP2) {
+      // Nothing meaningful to persist
       return;
     }
 
-    // If p2Id is missing, it might be AI.
-    // But for now let's assume we only save PvP or handle AI if we have a "bot user" or nullable playerB.
-    // The schema requires playerBId.
-    // If it's AI, we might need a dummy user or handle it differently.
-    // For now, let's only save if both are real users.
-    if (!result.p2Id) {
-       console.log('Game ended against AI or missing player, skipping DB save for now');
-       return;
+    // Defensive: if both player IDs exist and are identical, skip persisting the match.
+    if (result.p1Id && result.p2Id && result.p1Id === result.p2Id) {
+      return;
     }
 
     try {
@@ -50,48 +48,53 @@ export class GameManager {
       const loserId = result.winner === 'p1' ? result.p2Id : result.p1Id;
 
       await prisma.$transaction(async (tx) => {
-        // Create Match
+        // Create Match with optional aliases and optional user IDs
         await tx.match.create({
           data: {
-            playerAId: result.p1Id!,
-            playerBId: result.p2Id!,
-            winnerId,
+            playerAId: result.p1Id ?? null,
+            playerBId: result.p2Id ?? null,
+            playerAAlias: result.p1Alias ?? null,
+            playerBAlias: result.p2Alias ?? null,
+            winnerId: winnerId ?? null,
             mode: 'STANDARD',
             status: 'FINISHED',
             startedAt: result.startedAt || new Date(),
             endedAt: new Date(),
             results: {
               create: [
-                { userId: result.p1Id!, outcome: result.winner === 'p1' ? 'WIN' : 'LOSS', score: result.score.p1 },
-                { userId: result.p2Id!, outcome: result.winner === 'p2' ? 'WIN' : 'LOSS', score: result.score.p2 }
+                { userId: result.p1Id ?? null, outcome: result.winner === 'p1' ? 'WIN' : 'LOSS', score: result.score.p1 },
+                { userId: result.p2Id ?? null, outcome: result.winner === 'p2' ? 'WIN' : 'LOSS', score: result.score.p2 }
               ]
             }
           }
         });
 
-        // Update Stats for Winner
-        await tx.userStats.upsert({
-          where: { userId: winnerId },
-          create: { userId: winnerId!, wins: 1, matchesPlayed: 1, pointsScored: result.score[result.winner], pointsAgainst: result.score[result.winner === 'p1' ? 'p2' : 'p1'] },
-          update: {
-            wins: { increment: 1 },
-            matchesPlayed: { increment: 1 },
-            pointsScored: { increment: result.score[result.winner] },
-            pointsAgainst: { increment: result.score[result.winner === 'p1' ? 'p2' : 'p1'] }
-          }
-        });
+        // Update Stats only for real users (userId present)
+        if (typeof winnerId === 'number') {
+          await tx.userStats.upsert({
+            where: { userId: winnerId },
+            create: { userId: winnerId, wins: 1, matchesPlayed: 1, pointsScored: result.score[result.winner], pointsAgainst: result.score[result.winner === 'p1' ? 'p2' : 'p1'] },
+            update: {
+              wins: { increment: 1 },
+              matchesPlayed: { increment: 1 },
+              pointsScored: { increment: result.score[result.winner] },
+              pointsAgainst: { increment: result.score[result.winner === 'p1' ? 'p2' : 'p1'] }
+            }
+          });
+        }
 
-        // Update Stats for Loser
-        await tx.userStats.upsert({
-          where: { userId: loserId },
-          create: { userId: loserId!, losses: 1, matchesPlayed: 1, pointsScored: result.score[result.winner === 'p1' ? 'p2' : 'p1'], pointsAgainst: result.score[result.winner] },
-          update: {
-            losses: { increment: 1 },
-            matchesPlayed: { increment: 1 },
-            pointsScored: { increment: result.score[result.winner === 'p1' ? 'p2' : 'p1'] },
-            pointsAgainst: { increment: result.score[result.winner] }
-          }
-        });
+        if (typeof loserId === 'number') {
+          await tx.userStats.upsert({
+            where: { userId: loserId },
+            create: { userId: loserId, losses: 1, matchesPlayed: 1, pointsScored: result.score[result.winner === 'p1' ? 'p2' : 'p1'], pointsAgainst: result.score[result.winner] },
+            update: {
+              losses: { increment: 1 },
+              matchesPlayed: { increment: 1 },
+              pointsScored: { increment: result.score[result.winner === 'p1' ? 'p2' : 'p1'] },
+              pointsAgainst: { increment: result.score[result.winner] }
+            }
+          });
+        }
       });
     } catch (e) {
       console.error('Failed to save match result', e);

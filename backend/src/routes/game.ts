@@ -61,7 +61,7 @@ export default async function gameRoutes(fastify: FastifyInstance) {
     
     let playerSlot: 'p1' | 'p2' | null = null;
 
-    const handleMessage = (message: any) => {
+    const handleMessage = async (message: any) => {
       try {
         // Handle both Buffer (ws) and MessageEvent (native)
         const rawData = message.data || message
@@ -74,21 +74,29 @@ export default async function gameRoutes(fastify: FastifyInstance) {
 
         if (data.event === 'ready') {
           let userId: number | undefined;
+          let displayName: string | undefined;
           if (data.payload?.token) {
              try {
                const decoded = fastify.jwt.verify<{ userId: number }>(data.payload.token);
                userId = decoded.userId;
+               if (userId) {
+                 const u = await fastify.prisma.user.findUnique({ where: { id: userId }, select: { displayName: true } });
+                 displayName = u?.displayName;
+               }
              } catch (e) {
                fastify.log.warn('Invalid token provided in ready event');
              }
           }
 
           if (query.mode === 'local') {
-            game.addPlayer(socket as any, userId);
-            game.addPlayer(socket as any, userId);
+            // For local/demo mode, only the first player should be associated
+            // with the viewer's userId. The second local player is treated as
+            // an anonymous/local slot so we avoid saving duplicate user IDs.
+            game.addPlayer(socket as any, userId, displayName);
+            game.addPlayer(socket as any);
             playerSlot = 'p1';
           } else {
-            playerSlot = game.addPlayer(socket as any, userId);
+            playerSlot = game.addPlayer(socket as any, userId, displayName as any);
           }
           
           const response = JSON.stringify({
@@ -110,6 +118,27 @@ export default async function gameRoutes(fastify: FastifyInstance) {
             if (p) game.processInput(p, data.payload);
           } else if (playerSlot) {
             game.processInput(playerSlot, data.payload);
+          }
+        } else if (data.event === 'control') {
+          const type = data.payload?.type
+          if (type === 'PAUSE') {
+            game.pauseGame('Paused by player')
+          } else if (type === 'RESUME') {
+            game.startGame()
+          } else if (type === 'ABORT') {
+            try {
+              // Try to gracefully abort and persist partial result
+              if (typeof (game as any).abortGame === 'function') {
+                ;(game as any).abortGame()
+              } else if (typeof (game as any).finishGame === 'function') {
+                // Fallback: determine winner by score
+                const s = (game as any).state?.score
+                const winner = s && s.p2 > s.p1 ? 'p2' : 'p1'
+                ;(game as any).finishGame(winner)
+              }
+            } catch (e) {
+              fastify.log.error({ err: e }, 'Failed to abort game')
+            }
           }
         }
       } catch (err) {

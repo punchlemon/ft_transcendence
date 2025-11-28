@@ -1,4 +1,4 @@
-import { FormEvent, useState } from 'react'
+import { FormEvent, useState, useEffect } from 'react'
 import { isAxiosError } from 'axios'
 import { Link, useNavigate } from 'react-router-dom'
 import { register } from '../lib/api'
@@ -12,7 +12,15 @@ const RegisterPage = () => {
   const [errorMessage, setErrorMessage] = useState<string | null>(null)
   const [isSubmitting, setIsSubmitting] = useState(false)
   const setSession = useAuthStore((state) => state.setSession)
+  const user = useAuthStore((state) => state.user)
+  const isHydrated = useAuthStore((state) => state.isHydrated)
   const navigate = useNavigate()
+
+  useEffect(() => {
+    if (isHydrated && user) {
+      navigate('/', { replace: true })
+    }
+  }, [isHydrated, user, navigate])
 
   const validateInput = (): boolean => {
     const normalizedEmail = email.trim().toLowerCase()

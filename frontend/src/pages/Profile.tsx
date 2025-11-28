@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useCallback } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import useAuthStore from '../stores/authStore'
 import { 
@@ -68,7 +68,7 @@ const ProfilePage = () => {
   const [error, setError] = useState<string | null>(null)
   const [isEditModalOpen, setIsEditModalOpen] = useState(false)
 
-  const fetchProfileData = async () => {
+  const fetchProfileData = useCallback(async () => {
     if (!id) return
     // Don't set loading true on refresh to avoid flicker
     setError(null)
@@ -133,12 +133,12 @@ const ProfilePage = () => {
     } finally {
       setIsLoading(false)
     }
-  }
+  }, [id]);
 
   useEffect(() => {
     setIsLoading(true)
     fetchProfileData()
-  }, [id])
+  }, [fetchProfileData])
 
   const handleFriendAction = async (action: 'add' | 'remove' | 'accept' | 'block' | 'unblock') => {
     if (!profile) return

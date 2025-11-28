@@ -1,4 +1,5 @@
-import { FormEvent, useMemo, useState } from 'react'
+import { FormEvent, useMemo, useState, useEffect } from 'react'
+import { useNavigate, useSearchParams } from 'react-router-dom'
 import { isAxiosError } from 'axios'
 import { login, fetchOAuthAuthorizationUrl, type OAuthProvider } from '../lib/api'
 import { resolveOAuthRedirectUri, saveOAuthRequestContext } from '../lib/oauth'
@@ -19,6 +20,17 @@ const LoginPage = () => {
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [oauthLoadingProvider, setOauthLoadingProvider] = useState<OAuthProvider | null>(null)
   const setSession = useAuthStore((state) => state.setSession)
+  const user = useAuthStore((state) => state.user)
+  const isHydrated = useAuthStore((state) => state.isHydrated)
+  const navigate = useNavigate()
+  const [searchParams] = useSearchParams()
+
+  useEffect(() => {
+    // If the store is hydrated and we already have a user, redirect to home
+    if (isHydrated && user) {
+      navigate('/', { replace: true })
+    }
+  }, [isHydrated, user, navigate])
 
   const oauthRedirectUri = useMemo(() => resolveOAuthRedirectUri(), [])
 
@@ -62,6 +74,10 @@ const LoginPage = () => {
       setSession({ user: response.user, tokens: response.tokens })
       setStatusMessage(`${response.user.displayName} としてログインに成功しました。`)
       setPassword('')
+
+      const redirectParam = searchParams.get('redirect')
+      const target = redirectParam ?? '/'
+      navigate(target, { replace: true })
     } catch (error) {
       if (isAxiosError(error) && error.response?.status === 423) {
         const challengeId = (error.response.data as { challengeId?: string }).challengeId ?? null

@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useRef, useState, useCallback } from 'react'
 import { useParams, useNavigate, useSearchParams } from 'react-router-dom'
 import useAuthStore from '../stores/authStore'
 import { soundManager } from '../lib/sound'
@@ -28,6 +28,8 @@ const GameRoomPage = () => {
   const [winner, setWinner] = useState<string | null>(null)
   const [playerSlot, setPlayerSlot] = useState<'p1' | 'p2' | null>(null)
   const playerSlotRef = useRef<'p1' | 'p2' | null>(null)
+  const [reconnectKey, setReconnectKey] = useState(0)
+  const [sessionId, setSessionId] = useState<string | null>(null)
 
   useEffect(() => {
     playerSlotRef.current = playerSlot
@@ -59,10 +61,13 @@ const GameRoomPage = () => {
     ws.onmessage = (event) => {
       try {
         const data = JSON.parse(event.data)
+        // (debug logs removed)
         
         if (data.event === 'match:event') {
           if (data.payload.type === 'CONNECTED') {
             setPlayerSlot(data.payload.slot)
+            if (data.payload.sessionId) setSessionId(data.payload.sessionId)
+            // connection handled
           } else if (data.payload.type === 'START') {
             setStatus('playing')
           } else if (data.payload.type === 'PAUSE') {
@@ -113,7 +118,8 @@ const GameRoomPage = () => {
     return () => {
       ws.close()
     }
-  }, [token, searchParams])
+    // reconnectKey is used to force a reconnect when user wants to play again
+  }, [token, searchParams, reconnectKey])
 
   // Input handling
   useEffect(() => {
@@ -185,6 +191,63 @@ const GameRoomPage = () => {
       clearInterval(intervalId)
     }
   }, [status, searchParams])
+
+  const togglePause = useCallback(() => {
+    // Do nothing if the game is finished or still connecting.
+    if (status === 'finished' || status === 'connecting') return
+
+    const ws = socketRef.current
+    if (!ws || ws.readyState !== (WebSocket as any).OPEN) {
+      setStatus((s) => (s === 'playing' ? 'paused' : 'playing'))
+      return
+    }
+
+    if (status === 'playing') {
+      ws.send(JSON.stringify({ event: 'control', payload: { type: 'PAUSE' } }))
+      setStatus('paused')
+    } else {
+      ws.send(JSON.stringify({ event: 'control', payload: { type: 'RESUME' } }))
+      setStatus('playing')
+    }
+  }, [status])
+
+  const playAgain = useCallback(() => {
+    // Close existing socket and reset local state. reconnectKey triggers a fresh connection.
+    if (socketRef.current) {
+      try { socketRef.current.close() } catch (e) { /* ignore */ }
+      socketRef.current = null
+    }
+    gameStateRef.current = null
+    setScores({ p1: 0, p2: 0 })
+    setWinner(null)
+    setPlayerSlot(null)
+    setStatus('connecting')
+    setReconnectKey((k) => k + 1)
+  }, [])
+
+  // Space key behavior:
+  // - When finished: Space -> Play Again
+  // - When paused: Space -> Resume
+  // - During playing: Space does nothing (to avoid conflicting with input mapping)
+  useEffect(() => {
+    const handleSpace = (e: KeyboardEvent) => {
+      if (e.code !== 'Space') return
+      // Prevent page scrolling
+      e.preventDefault()
+
+      if (status === 'finished') {
+        playAgain()
+      } else if (status === 'paused') {
+        // resume
+        togglePause()
+      }
+    }
+
+    window.addEventListener('keydown', handleSpace)
+    return () => window.removeEventListener('keydown', handleSpace)
+  }, [status, playAgain, togglePause])
+
+
 
   // Game loop
   useEffect(() => {
@@ -258,23 +321,9 @@ const GameRoomPage = () => {
   return (
     <div className="flex min-h-[calc(100vh-64px)] flex-col lg:flex-row">
       {/* Left Panel: Match Info */}
-      <div className="flex w-full flex-col border-b border-slate-200 bg-white p-6 lg:w-64 lg:border-b-0 lg:border-r">
-        <h2 className="mb-6 text-lg font-bold text-slate-900">Match Info</h2>
-        
-        <div className="mb-8 space-y-6">
-          <div>
-            <div className="mb-1 text-sm text-slate-500">Player 1 {playerSlot === 'p1' ? '(You)' : ''}</div>
-            <div className="font-semibold text-slate-900">{players.p1}</div>
-            <div className="text-3xl font-bold text-indigo-600">{scores.p1}</div>
-          </div>
-          
-          <div className="text-center text-sm font-medium text-slate-400">VS</div>
-          
-          <div>
-            <div className="mb-1 text-sm text-slate-500">Player 2 {playerSlot === 'p2' ? '(You)' : ''}</div>
-            <div className="font-semibold text-slate-900">{players.p2}</div>
-            <div className="text-3xl font-bold text-rose-600">{scores.p2}</div>
-          </div>
+        <div className="flex w-full flex-col border-b border-slate-200 bg-white p-6 lg:w-64 lg:border-b-0 lg:border-r">
+        <div className="mb-4">
+          <h2 className="text-lg font-bold text-slate-900">Match Info</h2>
         </div>
 
         <div className="mt-auto">
@@ -292,6 +341,21 @@ const GameRoomPage = () => {
 
       {/* Main Area: Game Canvas */}
       <div className="relative flex flex-1 items-center justify-center bg-slate-100 p-4">
+        {/* Top score bar (moved from sidebar) */}
+        <div className="absolute top-4 left-1/2 z-20 w-full max-w-5xl -translate-x-1/2 transform px-4">
+          <div className="mx-auto flex items-center justify-center gap-8 rounded-xl bg-white/80 py-2 px-4 text-center shadow">
+            <div className="text-center">
+              <div className="text-xs uppercase tracking-wider text-slate-500">{players.p1} {playerSlot === 'p1' ? '(You)' : ''}</div>
+              <div className="text-2xl font-bold text-indigo-600">{scores.p1}</div>
+            </div>
+            <div className="text-sm font-medium text-slate-400">VS</div>
+            <div className="text-center">
+              <div className="text-xs uppercase tracking-wider text-slate-500">{players.p2} {playerSlot === 'p2' ? '(You)' : ''}</div>
+              <div className="text-2xl font-bold text-rose-600">{scores.p2}</div>
+            </div>
+          </div>
+        </div>
+
         <div className="relative aspect-video w-full max-w-5xl overflow-hidden rounded-lg bg-slate-800 shadow-xl">
           <canvas
             ref={canvasRef}
@@ -316,7 +380,7 @@ const GameRoomPage = () => {
               <div className="text-center text-white">
                 <h3 className="mb-4 text-2xl font-bold">PAUSED</h3>
                 <button 
-                  onClick={() => setStatus('playing')}
+                  onClick={togglePause}
                   className="rounded-full bg-white px-6 py-2 font-semibold text-slate-900 hover:bg-slate-200"
                 >
                   Resume
@@ -334,23 +398,13 @@ const GameRoomPage = () => {
                 <div className="mb-6 text-3xl font-bold text-white">
                   {winner === 'You' ? '🏆 You Won!' : '💀 You Lost'}
                 </div>
-                <div className="mb-8 flex justify-center gap-8 text-2xl font-mono">
-                  <div className="text-indigo-400">
-                    <div className="text-xs uppercase tracking-wider text-slate-400">Player 1</div>
-                    {scores.p1}
-                  </div>
-                  <div className="text-slate-600">-</div>
-                  <div className="text-rose-400">
-                    <div className="text-xs uppercase tracking-wider text-slate-400">Player 2</div>
-                    {scores.p2}
-                  </div>
-                </div>
+                {/* Scores intentionally omitted from finished overlay per UX request */}
                 <div className="flex gap-4 justify-center">
                   <button 
-                    onClick={() => navigate('/game/new')}
+                    onClick={playAgain}
                     className="rounded-full bg-white px-8 py-3 font-bold text-slate-900 hover:bg-indigo-50 transition-colors shadow-lg hover:shadow-xl transform hover:-translate-y-0.5"
                   >
-                    Back to Lobby
+                    Play Again
                   </button>
                 </div>
               </div>
@@ -377,16 +431,13 @@ const GameRoomPage = () => {
 
         <div className="mb-6 flex gap-2">
           <button
-            onClick={() => setStatus(status === 'playing' ? 'paused' : 'playing')}
-            className="flex-1 rounded-md border border-slate-300 px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50"
+            onClick={togglePause}
+            disabled={!(status === 'playing' || status === 'paused')}
+                className={`flex-1 rounded-md border border-slate-300 px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50 ${
+                  (status === 'finished' || status === 'connecting') ? 'opacity-50 cursor-not-allowed' : ''
+                }`}
           >
             {status === 'playing' ? 'Pause' : 'Resume'}
-          </button>
-          <button
-            onClick={() => navigate('/game/new')}
-            className="flex-1 rounded-md bg-red-50 px-4 py-2 text-sm font-medium text-red-700 hover:bg-red-100"
-          >
-            Surrender
           </button>
         </div>
 

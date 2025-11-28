@@ -22,6 +22,8 @@ const isOAuthProvider = (value: string | null): value is OAuthProvider =>
 
 const OAuthCallbackPage = () => {
   const setSession = useAuthStore((state) => state.setSession)
+  const user = useAuthStore((state) => state.user)
+  const isHydrated = useAuthStore((state) => state.isHydrated)
   const navigate = useNavigate()
   const [searchParams] = useSearchParams()
   const [status, setStatus] = useState<CallbackStatus>('validating')
@@ -152,6 +154,17 @@ const OAuthCallbackPage = () => {
     }, 1000)
     return () => window.clearTimeout(timerId)
   }, [status, countdown, navigate])
+
+  useEffect(() => {
+    // Only redirect away from this page when the store is hydrated and a user
+    // already exists *and* we're not currently processing an OAuth callback.
+    // This avoids immediately navigating away after this page itself calls
+    // `setSession()` during a successful callback (which would prevent the
+    // success message and countdown from being shown).
+    if (isHydrated && user && status !== 'validating') {
+      navigate('/', { replace: true })
+    }
+  }, [isHydrated, user, navigate])
 
   const renderActions = () => {
     if (status === 'success') {
