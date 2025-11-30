@@ -346,7 +346,17 @@ export type UserSearchParams = {
 }
 
 export const fetchUsers = async (params: UserSearchParams = {}) => {
-  const response = await apiClient.get('/users', { params })
+  // Backend expects `q` as the search query param. Frontend types use `query`.
+  const sendParams: Record<string, any> = { ...params }
+  // Only include `q` when a non-empty query is provided. Backend validation
+  // rejects empty strings (schema expects min length 1), so omit empty.
+  if (typeof params.query === 'string' && params.query.trim().length > 0) {
+    sendParams.q = params.query.trim()
+  }
+  // Remove frontend-only `query` key before sending
+  delete sendParams.query
+
+  const response = await apiClient.get('/users', { params: sendParams })
   return response.data as UserSearchResponse
 }
 

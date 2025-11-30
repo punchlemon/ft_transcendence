@@ -13,7 +13,7 @@ const UsersPage = () => {
     limit: 20,
     sortBy: 'displayName',
     order: 'asc',
-    query: ''
+    query: undefined
   })
   const { user: currentUser } = useAuthStore()
   const [myFriends, setMyFriends] = useState<number[]>([])
@@ -81,8 +81,8 @@ const UsersPage = () => {
             type="text"
             placeholder="名前で検索..."
             className="rounded-md border border-slate-300 px-3 py-2 text-sm focus:border-indigo-500 focus:outline-none focus:ring-1 focus:ring-indigo-500"
-            value={params.query}
-            onChange={(e) => setParams((prev) => ({ ...prev, query: e.target.value, page: 1 }))}
+            value={params.query ?? ''}
+            onChange={(e) => setParams((prev) => ({ ...prev, query: e.target.value || undefined, page: 1 }))}
           />
         </form>
       </div>
