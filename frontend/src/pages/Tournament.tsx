@@ -38,7 +38,8 @@ const TournamentPage = () => {
             
             const queue: MatchQueueItem[] = detail.matches.map((m) => ({
               id: `match-${m.id}`,
-              players: [m.playerA.alias, m.playerB.alias]
+              players: [m.playerA?.alias ?? 'Unknown', m.playerB?.alias ?? null],
+              participantIds: [m.playerA?.participantId ?? -1, m.playerB?.participantId ?? null]
             }))
             setMatchQueue(queue)
             
@@ -119,7 +120,8 @@ const TournamentPage = () => {
       // Map API matches to UI MatchQueueItem
       const queue: MatchQueueItem[] = detail.data.matches.map(m => ({
         id: `match-${m.id}`,
-        players: [m.playerA.alias, m.playerB.alias]
+        players: [m.playerA?.alias ?? 'Unknown', m.playerB?.alias ?? null],
+        participantIds: [m.playerA?.participantId ?? -1, m.playerB?.participantId ?? null]
       }))
       
       setMatchQueue(queue)
@@ -156,7 +158,17 @@ const TournamentPage = () => {
     const p2 = currentMatch.players[1]
     if (!p2) return
     
-    navigate(`/game/local-${currentMatch.id}?mode=local&p1Name=${encodeURIComponent(p1)}&p2Name=${encodeURIComponent(p2)}`)
+    const p1Id = currentMatch.participantIds?.[0]
+    const p2Id = currentMatch.participantIds?.[1]
+    
+    let url = `/game/local-${currentMatch.id}?mode=local&p1Name=${encodeURIComponent(p1)}&p2Name=${encodeURIComponent(p2)}`
+    if (activeTournament) {
+        url += `&tournamentId=${activeTournament.id}`
+    }
+    if (p1Id) url += `&p1Id=${p1Id}`
+    if (p2Id) url += `&p2Id=${p2Id}`
+
+    navigate(url)
   }
 
   return (

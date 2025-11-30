@@ -248,11 +248,11 @@ export type TournamentDetail = Tournament & {
     playerA: {
       participantId: number
       alias: string
-    }
+    } | null
     playerB: {
       participantId: number
       alias: string
-    }
+    } | null
     winnerId: number | null
   }>
 }

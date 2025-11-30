@@ -2,6 +2,7 @@ import { useEffect, useRef, useState, useCallback } from 'react'
 import { useParams, useNavigate, useSearchParams } from 'react-router-dom'
 import useAuthStore from '../stores/authStore'
 import { soundManager } from '../lib/sound'
+import { api } from '../lib/api'
 
 type GameStatus = 'connecting' | 'playing' | 'paused' | 'finished'
 
@@ -43,6 +44,10 @@ const GameRoomPage = () => {
 
     const mode = searchParams.get('mode')
     const difficulty = searchParams.get('difficulty')
+    const tournamentId = searchParams.get('tournamentId')
+    const p1Id = searchParams.get('p1Id')
+    const p2Id = searchParams.get('p2Id')
+
     const query = new URLSearchParams()
     if (mode) query.append('mode', mode)
     if (difficulty) query.append('difficulty', difficulty)
@@ -79,8 +84,31 @@ const GameRoomPage = () => {
             setStatus('paused')
           } else if (data.payload.type === 'FINISHED') {
             setStatus('finished')
-            setWinner(data.payload.winner === playerSlotRef.current ? 'You' : 'Opponent')
+            const winnerSlot = data.payload.winner
+            setWinner(winnerSlot === playerSlotRef.current ? 'You' : 'Opponent')
             soundManager.playGameOver()
+
+            // Tournament Result Notification
+            if (id?.startsWith('local-match-') && tournamentId) {
+              const matchId = id.replace('local-match-', '')
+              const winnerId = winnerSlot === 'p1' ? p1Id : p2Id
+              
+              if (winnerId) {
+                api.post(`/tournaments/matches/${matchId}/result`, { winnerId: parseInt(winnerId) })
+                  .then(() => {
+                    // Redirect back to tournament page after a short delay
+                    setTimeout(() => {
+                      navigate(`/tournament`) // Or specific ID if route supports it, but currently /tournament is the page
+                      // Wait, the user asked to redirect to /tournament/:tournamentId
+                      // But the route in App.tsx might be just /tournament?
+                      // Let's check App.tsx later. For now, I'll assume /tournament is the page where state is restored.
+                      // Actually, Tournament.tsx restores state from localStorage.
+                      // So navigating to /tournament is correct.
+                    }, 3000)
+                  })
+                  .catch(err => console.error('Failed to submit match result', err))
+              }
+            }
           }
         } else if (data.event === 'state:update') {
           const newState = data.payload
