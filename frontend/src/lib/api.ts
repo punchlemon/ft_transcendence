@@ -278,7 +278,9 @@ export const fetchTournaments = async (page = 1, limit = 20) => {
 }
 
 export const fetchTournament = async (id: number) => {
-  const response = await apiClient.get(`/tournaments/${id}`)
+  const response = await apiClient.get(`/tournaments/${id}`, {
+    params: { _t: Date.now() }
+  })
   return response.data as { data: TournamentDetail }
 }
 

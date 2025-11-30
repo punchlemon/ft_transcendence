@@ -28,9 +28,11 @@ const TournamentProgressPanel = ({ currentMatch, matchQueue, currentMatchIndex, 
               試合を開始する
             </Button>
           )}
-          <Button className="mt-4" onClick={onAdvance} variant={currentMatch.players[1] ? "secondary" : "primary"}>
-            次の試合へ進む
-          </Button>
+          {currentMatch.players[1] === null && (
+            <Button className="mt-4" onClick={onAdvance} variant="primary">
+              次の試合へ進む
+            </Button>
+          )}
         </div>
       ) : (
         <p className="mt-4 text-sm text-slate-600">
