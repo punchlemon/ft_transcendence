@@ -1,0 +1,33 @@
+name: Docker Compose Build Check
+
+on:
+  pull_request:
+    paths:
+      - '**'
+
+jobs:
+  compose-build:
+    name: Build Docker Compose images
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v2
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v2
+
+      - name: Show Docker & Compose versions
+        run: |
+          docker --version
+          docker compose version || docker-compose --version
+
+      - name: Build images (docker compose)
+        run: |
+          # Attempt Compose V2 command first
+          docker compose build --pull --no-cache
+        env:
+          COMPOSE_DOCKER_CLI_BUILD: 1
+          DOCKER_BUILDKIT: 1

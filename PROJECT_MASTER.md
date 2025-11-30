@@ -84,14 +84,25 @@
 - [x] **AI Opponent Implementation**: Implement 1Hz vision constraint AI in `GameEngine`.
 - [x] **Game UI Polish**: Improve `GameRoom` UI, handle game over state, and add sound effects/animations.
 
-## Current Focus: Completion
+## Current Focus: Release Review
 
 ### Next Actions
-- [ ] **Final Cleanup**
-    - [ ] Verify Docker build.
+- [x] **Final Cleanup**
+    - [x] Verify Docker build.
 - [ ] **Release**
     - [ ] Deploy to production environment (if applicable).
     - [ ] Final presentation preparation.
+
+### Release Review Actions
+- [ ] **Push Tag**: Push `v1.0.0-candidate` to remote for review (`git push origin v1.0.0-candidate`).
+- [ ] **Create Release Draft**: Create GitHub Release draft using `RELEASE_NOTES.md`.
+
+### Upcoming Actions
+ - [x] **Prepare Release Artifacts**: Create simple deploy script and release checklist (`scripts/deploy_prepare.sh`).
+ - [x] **CI: Docker Build Check**: Add a CI job to validate Docker Compose build in PRs.
+ - [x] **Release Notes & Tagging**: Draft release notes and create Git tag `v1.0.0` candidate.
+ - [ ] **Presentation**: Prepare slides and demo checklist for release presentation.
+ - [x] **Create Release Tag Candidate**: Create Git tag `v1.0.0-candidate` and push for review.
 
 ### Completed Tasks
 - [x] **Final Cleanup**
