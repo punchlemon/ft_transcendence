@@ -370,19 +370,13 @@ const ensureUniqueLogin = async (prisma: PrismaClient, preferred: string) => {
   return `${base}${randomUUID().slice(0, 4)}`
 }
 
-const ensureUniqueDisplayName = async (prisma: PrismaClient, preferred: string) => {
-  const normalized = preferred.trim().replace(/\s+/g, ' ').slice(0, 32)
+const ensureUniqueDisplayName = async (_prisma: PrismaClient, preferred: string) => {
+  // No longer enforce uniqueness at application or DB level.
+  // Normalize and return a safe display name. If the provider value is
+  // too short, fall back to a generated player name.
+  const normalized = preferred?.trim().replace(/\s+/g, ' ').slice(0, 32) ?? ''
   const base = normalized.length >= 3 ? normalized : `Player ${Math.floor(Math.random() * 9000) + 1000}`
-  let attempt = 0
-  while (attempt < 50) {
-    const candidate = attempt === 0 ? base : `${base} ${attempt + 1}`
-    const existing = await prisma.user.findUnique({ where: { displayName: candidate } })
-    if (!existing) {
-      return candidate
-    }
-    attempt += 1
-  }
-  return `${base} ${randomUUID().slice(0, 4)}`
+  return base
 }
 
 const authRoutes: FastifyPluginAsync = async (fastify) => {
@@ -437,7 +431,7 @@ const authRoutes: FastifyPluginAsync = async (fastify) => {
 
     const existing = await fastify.prisma.user.findFirst({
       where: {
-        OR: [{ email }, { login: username }, { displayName }]
+        OR: [{ email }, { login: username }]
       },
       select: { id: true }
     })
@@ -447,7 +441,7 @@ const authRoutes: FastifyPluginAsync = async (fastify) => {
       return {
         error: {
           code: 'USER_ALREADY_EXISTS',
-          message: 'User with same email/login/displayName already exists'
+          message: 'User with same email or login already exists'
         }
       }
     }
@@ -746,13 +740,13 @@ const authRoutes: FastifyPluginAsync = async (fastify) => {
       } else {
         const loginSeed = normalizedEmail.split('@')[0] || profile.providerUserId
         const uniqueLogin = await ensureUniqueLogin(fastify.prisma, loginSeed)
-        const uniqueDisplayName = await ensureUniqueDisplayName(fastify.prisma, profile.displayName)
+        const sanitizedDisplayName = await ensureUniqueDisplayName(fastify.prisma, profile.displayName)
 
         const createdUser = await fastify.prisma.user.create({
           data: {
             email: normalizedEmail,
             login: uniqueLogin,
-            displayName: uniqueDisplayName,
+            displayName: sanitizedDisplayName,
             avatarUrl: profile.avatarUrl ?? undefined,
             passwordHash: null,
             twoFAEnabled: false
