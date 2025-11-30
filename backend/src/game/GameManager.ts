@@ -43,6 +43,13 @@ export class GameManager {
       return;
     }
 
+    // Check if this is a tournament match (format: local-match-{id})
+    const tournamentMatchMatch = sessionId.match(/^local-match-(\d+)$/);
+    if (tournamentMatchMatch) {
+      const tournamentMatchId = parseInt(tournamentMatchMatch[1], 10);
+      await this.handleTournamentMatchEnd(tournamentMatchId, result);
+    }
+
     try {
       const winnerId = result.winner === 'p1' ? result.p1Id : result.p2Id;
       const loserId = result.winner === 'p1' ? result.p2Id : result.p1Id;
@@ -141,5 +148,26 @@ export class GameManager {
   createLocalGame(): { game: GameEngine; sessionId: string } {
     const sessionId = `game_local_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
     return { game: this.createGame(sessionId), sessionId };
+  }
+
+  private async handleTournamentMatchEnd(matchId: number, result: { winner: 'p1' | 'p2' }) {
+    try {
+      const match = await prisma.tournamentMatch.findUnique({
+        where: { id: matchId }
+      });
+      if (!match) return;
+
+      const winnerParticipantId = result.winner === 'p1' ? match.playerAId : match.playerBId;
+
+      await prisma.tournamentMatch.update({
+        where: { id: matchId },
+        data: {
+          winnerId: winnerParticipantId,
+          status: 'COMPLETED'
+        }
+      });
+    } catch (e) {
+      console.error('Failed to update tournament match', e);
+    }
   }
 }

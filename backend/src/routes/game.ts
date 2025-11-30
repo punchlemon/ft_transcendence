@@ -46,10 +46,20 @@ export default async function gameRoutes(fastify: FastifyInstance) {
     // Use GameManager to find/create game
     // In future, extract sessionId from req.query or token
     const manager = GameManager.getInstance();
-    const query = req.query as { mode?: string; difficulty?: string };
+    const query = req.query as { mode?: string; difficulty?: string; sessionId?: string };
     
     let gameResult;
-    if (query.mode === 'ai') {
+    if (query.sessionId) {
+      // If client provides a specific session ID (e.g. tournament match), use it.
+      // This allows the frontend to dictate the session ID for tournament matches.
+      const existingGame = manager.getGame(query.sessionId);
+      if (existingGame) {
+        gameResult = { game: existingGame, sessionId: query.sessionId };
+      } else {
+        // Create new game with this specific ID
+        gameResult = { game: manager.createGame(query.sessionId), sessionId: query.sessionId };
+      }
+    } else if (query.mode === 'ai') {
       gameResult = manager.createAIGame((query.difficulty as any) || 'NORMAL');
     } else if (query.mode === 'local') {
       gameResult = manager.createLocalGame();

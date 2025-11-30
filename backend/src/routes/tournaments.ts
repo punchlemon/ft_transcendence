@@ -1,6 +1,7 @@
 import fp from 'fastify-plugin'
 import type { FastifyPluginAsync } from 'fastify'
 import { z } from 'zod'
+import { tournamentService } from '../services/tournamentService'
 
 const STATUS_VALUES = ['DRAFT', 'READY', 'RUNNING', 'COMPLETED'] as const
 const BRACKET_VALUES = ['SINGLE_ELIMINATION', 'DOUBLE_ELIMINATION'] as const
@@ -36,6 +37,14 @@ const listQuerySchema = z.object({
 
 const detailParamSchema = z.object({
   id: z.coerce.number().int().positive()
+})
+
+const matchResultSchema = z.object({
+  winnerId: z.coerce.number().int().positive()
+})
+
+const matchParamSchema = z.object({
+  matchId: z.coerce.number().int().positive()
 })
 
 const tournamentsRoutes: FastifyPluginAsync = async (fastify) => {
@@ -93,18 +102,47 @@ const tournamentsRoutes: FastifyPluginAsync = async (fastify) => {
 
     // Generate Round 1 Matches
     if (tournament.participants.length >= 2) {
-      const participants = [...tournament.participants]
-      // Simple shuffle or seed sort could go here. For now, use insertion order.
+      // Sort participants by ID to ensure they are in the order of creation (which matches input order)
+      // This is our "Seed Order" (Seed 1, Seed 2, ...)
+      const sortedParticipants = [...tournament.participants].sort((a, b) => a.id - b.id)
+      
+      // Reorder participants based on seeding logic, padding with Byes (nulls)
+      const seededParticipants = tournamentService.padWithBye(sortedParticipants)
       
       const matchesToCreate = []
-      for (let i = 0; i < participants.length - 1; i += 2) {
-        matchesToCreate.push({
-          tournamentId: tournament.id,
-          round: 1,
-          playerAId: participants[i].id,
-          playerBId: participants[i+1].id,
-          status: 'PENDING'
-        })
+      for (let i = 0; i < seededParticipants.length; i += 2) {
+        const playerA = seededParticipants[i];
+        const playerB = seededParticipants[i+1]; // Can be null (Bye)
+
+        if (playerA && playerB) {
+          matchesToCreate.push({
+            tournamentId: tournament.id,
+            round: 1,
+            playerAId: playerA.id,
+            playerBId: playerB.id,
+            status: 'PENDING'
+          })
+        } else if (playerA && !playerB) {
+          // Player A gets a Bye
+          matchesToCreate.push({
+            tournamentId: tournament.id,
+            round: 1,
+            playerAId: playerA.id,
+            playerBId: null, // Bye
+            status: 'FINISHED',
+            winnerId: playerA.id
+          })
+        }
+        // Note: playerA should not be null because padWithBye puts nulls at the end of the seed list,
+        // and getSeededPlayerList distributes them.
+        // However, if getSeededPlayerList returns [null, P1], we might have an issue.
+        // But getSeededPlayerList logic pairs (0, 7), (3, 4) etc.
+        // If we have 6 players, padded to 8.
+        // Indices 6 and 7 are null.
+        // Pairs: (0, 7) -> P1 vs null. (3, 4) -> P4 vs P5. (1, 6) -> P2 vs null. (2, 5) -> P3 vs P6.
+        // So we will encounter pairs where playerB is null.
+        // We shouldn't encounter pairs where playerA is null, unless the tournament is empty or logic is weird.
+        // But for safety, we check playerA.
       }
 
       if (matchesToCreate.length > 0) {
@@ -265,16 +303,49 @@ const tournamentsRoutes: FastifyPluginAsync = async (fastify) => {
           round: match.round,
           status: match.status,
           scheduledAt: match.scheduledAt ? match.scheduledAt.toISOString() : null,
-          playerA: {
+          playerA: match.playerA ? {
             participantId: match.playerA.id,
             alias: match.playerA.alias
-          },
-          playerB: {
+          } : null,
+          playerB: match.playerB ? {
             participantId: match.playerB.id,
             alias: match.playerB.alias
-          },
+          } : null,
           winnerId: match.winnerId
         }))
+      }
+    }
+  })
+
+  fastify.post('/tournaments/matches/:matchId/result', async (request, reply) => {
+    const params = matchParamSchema.safeParse(request.params)
+    const body = matchResultSchema.safeParse(request.body)
+
+    if (!params.success || !body.success) {
+      reply.code(400)
+      return {
+        error: {
+          code: 'INVALID_REQUEST',
+          message: 'Invalid parameters or body',
+          details: {
+             params: params.success ? null : params.error.flatten().fieldErrors,
+             body: body.success ? null : body.error.flatten().fieldErrors
+          }
+        }
+      }
+    }
+
+    try {
+      await tournamentService.handleMatchResult(params.data.matchId, body.data.winnerId)
+      reply.code(200).send({ success: true })
+    } catch (error: any) {
+      if (error.message === 'Match not found') {
+        reply.code(404).send({ error: { code: 'MATCH_NOT_FOUND', message: error.message } })
+      } else if (error.message === 'Winner is not a participant of this match') {
+        reply.code(400).send({ error: { code: 'INVALID_WINNER', message: error.message } })
+      } else {
+        request.log.error(error)
+        reply.code(500).send({ error: { code: 'INTERNAL_SERVER_ERROR', message: 'Internal server error' } })
       }
     }
   })

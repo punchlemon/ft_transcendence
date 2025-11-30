@@ -45,6 +45,9 @@ GitHub Actions (`.github/workflows/ci.yml`) でも同じ手順を行うよう構
 ## データベース管理 (Docker環境)
 Docker で起動している場合、ホスト側のコマンドではなく、コンテナ内でコマンドを実行する必要があります。
 
+```
+docker compose exec backend npx prisma migrate deploy
+```
 - **データを全消去 (リセット)**:
   ```bash
   docker compose exec backend npm run db:reset

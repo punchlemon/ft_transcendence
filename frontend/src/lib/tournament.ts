@@ -1,6 +1,7 @@
 export interface MatchQueueItem {
   id: string
   players: [string, string | null]
+  participantIds?: [number, number | null]
 }
 
 const MATCH_PREFIX = 'match-'
