@@ -3,7 +3,7 @@ import { useParams, useNavigate, useSearchParams } from 'react-router-dom'
 import useAuthStore from '../stores/authStore'
 import { soundManager } from '../lib/sound'
 import { api, fetchTournament, TournamentDetail } from '../lib/api'
-import TournamentProgressPanel from '../components/tournament/TournamentProgressPanel'
+import BracketView from '../components/tournament/BracketView'
 import TournamentRanking from '../components/tournament/TournamentRanking'
 import { MatchQueueItem, advanceToNextMatch } from '../lib/tournament'
 
@@ -463,15 +463,12 @@ const GameRoomPage = () => {
         <div className="w-full bg-white border-b border-slate-200 p-4">
             <div className="max-w-6xl mx-auto">
                 <h2 className="text-lg font-bold text-slate-900 mb-2">{activeTournament.name}</h2>
-                <TournamentProgressPanel
-                    currentMatch={null} // Hide current match card, we are IN the match
-                    matchQueue={matchQueue}
-                    currentMatchIndex={currentMatchIndex}
-                    onAdvance={() => {}}
-                    onPlayMatch={() => {}}
-                    matches={activeTournament.matches}
-                    compact={true}
-                />
+                {activeTournament.matches && activeTournament.matches.length > 0 && (
+                    <BracketView 
+                        matches={activeTournament.matches} 
+                        currentMatchIndex={currentMatchIndex} 
+                    />
+                )}
             </div>
         </div>
       )}
