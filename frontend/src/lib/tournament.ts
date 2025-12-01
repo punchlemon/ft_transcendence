@@ -55,18 +55,91 @@ export const advanceToNextMatch = (queue: MatchQueueItem[], currentIndex: number
   return nextIndex < queue.length ? nextIndex : -1
 }
 
-/*
-解説:
+// Helper to generate seed indices (same as backend)
+const getSeededIndices = (n: number): number[] => {
+  if (n === 0) return []
+  let size = 1
+  while (size < n) size *= 2
 
-1) MatchQueueItem インターフェース
-  - トーナメントの各試合を ID と参加者 2 名 (または BYE 用の null) で表現し、UI から扱いやすい構造にする。
+  let seeds = [0]
+  let currentSize = 1
+  while (currentSize < size) {
+    const nextSeeds = []
+    for (let i = 0; i < seeds.length; i++) {
+      const seed = seeds[i]
+      nextSeeds.push(seed)
+      nextSeeds.push((currentSize * 2) - 1 - seed)
+    }
+    seeds = nextSeeds
+    currentSize *= 2
+  }
+  return seeds.filter(s => s < n)
+}
 
-2) normalizeAlias / aliasExists
-  - エイリアスの余分な空白を取り除き、大小文字を区別せずに重複チェックするヘルパー関数。登録段階とマッチ生成で一貫した正規化を保証する。
+// Generate preview matches for BracketView
+export const generatePreviewMatches = (players: string[]) => {
+  if (players.length < 2) return []
 
-3) buildMatchQueue
-  - 正規化・重複排除したプレイヤー配列から 2 人ずつペアを組み、奇数の場合は null をセットして BYE を表現する。ID には連番 prefix を使用し、テストや UI で参照しやすくする。
+  // 1. Pad with Byes to power of 2
+  let size = 1
+  while (size < players.length) size *= 2
+  
+  const paddedPlayers: (string | null)[] = [...players]
+  while (paddedPlayers.length < size) {
+    paddedPlayers.push(null)
+  }
 
-4) findNextMatch / advanceToNextMatch
-  - 現在のマッチを取り出す、または次へ進める純粋関数。キューが空の場合は -1 / null を返して UI のボタン制御に利用しやすくしている。
-*/
+  // 2. Apply seeding
+  // Backend logic: getSeededPlayerList distributes nulls (Byes) to the lowest seeds.
+  // The backend implementation of getSeededPlayerList takes the padded array and reorders it.
+  // Let's replicate that.
+  
+  // Re-implement getSeededPlayerList logic locally
+  const seeds = getSeededIndices(size)
+  const seededPlayers = seeds.map(i => paddedPlayers[i])
+
+  // 3. Create Round 1 matches
+  const matches = []
+  let matchIdCounter = 1
+
+  // Round 1
+  const round1Matches = []
+  for (let i = 0; i < seededPlayers.length; i += 2) {
+    const p1 = seededPlayers[i]
+    const p2 = seededPlayers[i+1]
+    
+    round1Matches.push({
+      id: matchIdCounter++,
+      round: 1,
+      status: 'PENDING',
+      scheduledAt: null,
+      playerA: p1 ? { participantId: -1, alias: p1 } : null,
+      playerB: p2 ? { participantId: -1, alias: p2 } : null,
+      winnerId: null
+    })
+  }
+  matches.push(...round1Matches)
+
+  // Generate subsequent rounds (empty placeholders)
+  let currentRoundMatches = round1Matches
+  let round = 2
+  while (currentRoundMatches.length > 1) {
+    const nextRoundMatches = []
+    for (let i = 0; i < currentRoundMatches.length; i += 2) {
+      nextRoundMatches.push({
+        id: matchIdCounter++,
+        round: round,
+        status: 'PENDING',
+        scheduledAt: null,
+        playerA: null, // TBD
+        playerB: null, // TBD
+        winnerId: null
+      })
+    }
+    matches.push(...nextRoundMatches)
+    currentRoundMatches = nextRoundMatches
+    round++
+  }
+
+  return matches
+}

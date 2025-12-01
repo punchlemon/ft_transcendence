@@ -2,7 +2,6 @@ import { useEffect } from 'react'
 import { BrowserRouter, Routes, Route, Link, useNavigate, useLocation } from 'react-router-dom'
 import HomePage from './pages/Home'
 // HealthCheckPage removed from routes — health endpoint not needed on Home
-import TournamentPage from './pages/Tournament'
 import LoginPage from './pages/Login'
 import RegisterPage from './pages/Register'
 import MfaChallengePage from './pages/MfaChallenge'
@@ -10,7 +9,6 @@ import OAuthCallbackPage from './pages/OAuthCallback'
 import ProfilePage from './pages/Profile'
 import SettingsPage from './pages/Settings'
 import UsersPage from './pages/Users'
-import GameLobbyPage from './pages/GameLobby'
 import GameRoomPage from './pages/GameRoom'
 import ChatDrawer from './components/chat/ChatDrawer'
 import NotificationBell from './components/ui/NotificationBell'
@@ -101,14 +99,6 @@ const App = () => {
         <main>
           <Routes>
             <Route path="/" element={<HomePage />} />
-            <Route
-              path="/tournament"
-              element={
-                <RequireAuth>
-                  <TournamentPage />
-                </RequireAuth>
-              }
-            />
             <Route path="/login" element={<LoginPage />} />
             <Route path="/register" element={<RegisterPage />} />
             <Route path="/auth/2fa" element={<MfaChallengePage />} />

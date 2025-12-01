@@ -254,6 +254,8 @@ export type TournamentDetail = Tournament & {
       alias: string
     } | null
     winnerId: number | null
+    scoreA?: number | null
+    scoreB?: number | null
   }>
 }
 

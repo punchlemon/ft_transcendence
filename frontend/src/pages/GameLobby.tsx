@@ -1,6 +1,11 @@
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import useAuthStore from '../stores/authStore'
+import TournamentAliasPanel from '../components/tournament/TournamentAliasPanel'
+import TournamentEntryPanel from '../components/tournament/TournamentEntryPanel'
+import BracketView from '../components/tournament/BracketView'
+import { useTournamentSetup } from '../hooks/useTournamentSetup'
+import { generatePreviewMatches } from '../lib/tournament'
 
 type GameMode = 'local' | 'remote' | 'ai' | 'tournament'
 type MatchType = 'public' | 'private'
@@ -15,6 +20,13 @@ const GameLobbyPage = () => {
   const [isMatching, setIsMatching] = useState(false)
   const [roomCode, setRoomCode] = useState('')
 
+  // Local 1v1 State
+  const [localP1, setLocalP1] = useState('Player 1')
+  const [localP2, setLocalP2] = useState('Player 2')
+
+  // Tournament State
+  const tournamentSetup = useTournamentSetup()
+
   const handleModeSelect = (mode: GameMode) => {
     if (!user) return
     setSelectedMode(mode)
@@ -22,16 +34,37 @@ const GameLobbyPage = () => {
     setIsMatching(false)
   }
 
-  const handleStartMatch = () => {
+  const handleStartMatch = async () => {
     if (selectedMode === 'local') {
-      // 即座にゲーム開始（モックIDへ遷移）
       const mockGameId = `game-${selectedMode}-${Date.now()}`
-      navigate(`/game/${mockGameId}?mode=local`)
+      navigate(
+        `/game/${mockGameId}?mode=local&p1Name=${encodeURIComponent(localP1)}&p2Name=${encodeURIComponent(localP2)}`
+      )
     } else if (selectedMode === 'ai') {
       const mockGameId = `game-${selectedMode}-${Date.now()}`
       navigate(`/game/${mockGameId}?mode=ai&difficulty=${aiDifficulty}`)
     } else if (selectedMode === 'tournament') {
-      navigate('/tournament')
+      const tournament = await tournamentSetup.create()
+      if (tournament) {
+        // Find the first match
+        const firstMatch = tournament.matches.find(m => !m.winnerId)
+        if (firstMatch) {
+          const p1 = firstMatch.playerA?.alias ?? 'Unknown'
+          const p2 = firstMatch.playerB?.alias ?? null
+          const p1Id = firstMatch.playerA?.participantId ?? -1
+          const p2Id = firstMatch.playerB?.participantId ?? null
+          
+          let url = `/game/local-match-${firstMatch.id}?mode=local&p1Name=${encodeURIComponent(p1)}&p2Name=${encodeURIComponent(p2 ?? '')}`
+          url += `&tournamentId=${tournament.id}`
+          if (p1Id) url += `&p1Id=${p1Id}`
+          if (p2Id) url += `&p2Id=${p2Id}`
+          
+          navigate(url)
+        } else {
+          // Should not happen for a new tournament
+          console.error('No matches found in new tournament')
+        }
+      }
     } else if (selectedMode === 'remote') {
       if (matchType === 'public') {
         setIsMatching(true)
@@ -134,6 +167,33 @@ const GameLobbyPage = () => {
             </button>
           </div>
 
+          {/* Sub Options for Local */}
+          {selectedMode === 'local' && (
+            <div className="animate-in fade-in slide-in-from-top-4 rounded-xl border border-slate-200 bg-slate-50 p-6 duration-300">
+              <h3 className="mb-4 text-lg font-medium text-slate-900">Player Aliases</h3>
+              <div className="flex flex-col gap-4 sm:flex-row">
+                <div className="flex-1">
+                  <label className="mb-1 block text-sm font-medium text-slate-700">Player 1</label>
+                  <input
+                    type="text"
+                    value={localP1}
+                    onChange={(e) => setLocalP1(e.target.value)}
+                    className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm focus:border-indigo-500 focus:outline-none focus:ring-1 focus:ring-indigo-500"
+                  />
+                </div>
+                <div className="flex-1">
+                  <label className="mb-1 block text-sm font-medium text-slate-700">Player 2</label>
+                  <input
+                    type="text"
+                    value={localP2}
+                    onChange={(e) => setLocalP2(e.target.value)}
+                    className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm focus:border-indigo-500 focus:outline-none focus:ring-1 focus:ring-indigo-500"
+                  />
+                </div>
+              </div>
+            </div>
+          )}
+
           {/* Sub Options for Remote */}
           {selectedMode === 'remote' && (
             <div className="animate-in fade-in slide-in-from-top-4 rounded-xl border border-slate-200 bg-slate-50 p-6 duration-300">
@@ -202,14 +262,50 @@ const GameLobbyPage = () => {
             </div>
           )}
 
+          {/* Sub Options for Tournament */}
+          {selectedMode === 'tournament' && (
+            <div className="animate-in fade-in slide-in-from-top-4 rounded-xl border border-slate-200 bg-slate-50 p-6 duration-300">
+              <h3 className="mb-4 text-lg font-medium text-slate-900">Tournament Setup</h3>
+              <TournamentAliasPanel
+                aliasInput={tournamentSetup.aliasInput}
+                onAliasChange={tournamentSetup.setAliasInput}
+                onSubmit={tournamentSetup.handleRegisterPlayer}
+                errorMessage={tournamentSetup.errorMessage}
+                infoMessage={tournamentSetup.infoMessage}
+                isSubmitDisabled={!tournamentSetup.aliasInput.trim()}
+              />
+              
+              {tournamentSetup.players.length > 0 && (
+                <div className="mt-6 border-t border-slate-200 pt-6">
+                  <h4 className="mb-4 text-sm font-semibold uppercase tracking-wide text-slate-500">Tournament Bracket</h4>
+                  <BracketView 
+                    matches={generatePreviewMatches(tournamentSetup.players) as any} 
+                    currentMatchIndex={-1}
+                    onRemovePlayer={tournamentSetup.handleRemovePlayer}
+                  />
+                </div>
+              )}
+            </div>
+          )}
+
           {/* Start Button */}
           <div className="flex justify-center pt-4">
             <button
               onClick={handleStartMatch}
-              disabled={!user || !selectedMode || (selectedMode === 'remote' && !matchType)}
+              disabled={
+                !user ||
+                !selectedMode ||
+                (selectedMode === 'remote' && !matchType) ||
+                (selectedMode === 'tournament' && tournamentSetup.players.length < 2) ||
+                tournamentSetup.isCreating
+              }
               className="min-w-[200px] rounded-full bg-slate-900 px-8 py-3 font-semibold text-white transition-transform hover:scale-105 hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:scale-100"
             >
-              Start Game
+              {selectedMode === 'tournament'
+                ? tournamentSetup.isCreating
+                  ? 'Creating...'
+                  : 'Start Tournament'
+                : 'Start Game'}
             </button>
           </div>
         </div>
@@ -217,5 +313,6 @@ const GameLobbyPage = () => {
     </div>
   )
 }
+
 
 export default GameLobbyPage

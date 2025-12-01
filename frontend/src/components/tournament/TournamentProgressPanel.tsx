@@ -10,14 +10,15 @@ type TournamentProgressPanelProps = {
   onAdvance: () => void
   onPlayMatch: () => void
   matches?: TournamentDetail['matches']
+  compact?: boolean
 }
 
-const TournamentProgressPanel = ({ currentMatch, matchQueue, currentMatchIndex, onAdvance, onPlayMatch, matches }: TournamentProgressPanelProps) => {
+const TournamentProgressPanel = ({ currentMatch, matchQueue, currentMatchIndex, onAdvance, onPlayMatch, matches, compact = false }: TournamentProgressPanelProps) => {
   const hasTournamentHistory = matchQueue.length > 0
 
   return (
-    <section className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
-      <h2 className="text-xl font-semibold text-slate-900">進行状況</h2>
+    <section className={`rounded-2xl border border-slate-200 bg-white shadow-sm ${compact ? 'p-4' : 'p-6'}`}>
+      {!compact && <h2 className="text-xl font-semibold text-slate-900">進行状況</h2>}
       {currentMatch ? (
         <div className="mt-4 rounded-xl border border-brand/40 bg-brand/10 p-4">
           <p className="text-sm text-slate-600">現在の試合</p>
@@ -38,12 +39,14 @@ const TournamentProgressPanel = ({ currentMatch, matchQueue, currentMatchIndex, 
           )}
         </div>
       ) : (
-        <p className="mt-4 text-sm text-slate-600">
-          {hasTournamentHistory ? '全ての試合が終了しました。' : 'トーナメント生成ボタンでマッチメイクを開始してください。'}
-        </p>
+        !compact && (
+          <p className="mt-4 text-sm text-slate-600">
+            {hasTournamentHistory ? '全ての試合が終了しました。' : 'トーナメント生成ボタンでマッチメイクを開始してください。'}
+          </p>
+        )
       )}
 
-      {matchQueue.length > 0 && (
+      {!compact && matchQueue.length > 0 && (
         <div className="mt-6">
           <h3 className="text-sm font-semibold uppercase tracking-wide text-slate-500">組み合わせ一覧</h3>
           <ol className="mt-3 space-y-2" aria-label="トーナメント組み合わせ一覧">
@@ -64,8 +67,8 @@ const TournamentProgressPanel = ({ currentMatch, matchQueue, currentMatchIndex, 
 
       {/* Bracket visualization (if server-provided matches are available) */}
       {matches && matches.length > 0 && (
-        <div className="mt-6">
-          <h3 className="text-sm font-semibold uppercase tracking-wide text-slate-500">トーナメント表</h3>
+        <div className={compact ? '' : 'mt-6'}>
+          {!compact && <h3 className="text-sm font-semibold uppercase tracking-wide text-slate-500">トーナメント表</h3>}
           <BracketView matches={matches} currentMatchIndex={currentMatchIndex} />
         </div>
       )}

@@ -6,9 +6,17 @@ type TournamentEntryPanelProps = {
   onGenerate: () => void
   onReset: () => void
   isGenerateDisabled?: boolean
+  hideGenerateButton?: boolean
 }
 
-const TournamentEntryPanel = ({ players, onRemove, onGenerate, onReset, isGenerateDisabled }: TournamentEntryPanelProps) => {
+const TournamentEntryPanel = ({
+  players,
+  onRemove,
+  onGenerate,
+  onReset,
+  isGenerateDisabled,
+  hideGenerateButton
+}: TournamentEntryPanelProps) => {
   return (
     <div className="mt-6 rounded-xl border border-slate-100 bg-slate-50 p-4">
       <h2 className="text-lg font-semibold text-slate-800">エントリー一覧</h2>
@@ -28,9 +36,11 @@ const TournamentEntryPanel = ({ players, onRemove, onGenerate, onReset, isGenera
       )}
 
       <div className="mt-4 flex flex-wrap gap-3">
-        <Button onClick={onGenerate} disabled={Boolean(isGenerateDisabled)}>
-          トーナメント生成
-        </Button>
+        {!hideGenerateButton && (
+          <Button onClick={onGenerate} disabled={Boolean(isGenerateDisabled)}>
+            トーナメント生成
+          </Button>
+        )}
         <Button variant="secondary" onClick={onReset}>
           エントリーをリセット
         </Button>
