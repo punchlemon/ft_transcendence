@@ -220,6 +220,7 @@ const TournamentPage = () => {
         currentMatchIndex={currentMatchIndex}
         onAdvance={handleAdvanceMatch}
         onPlayMatch={handlePlayMatch}
+        matches={activeTournament?.matches}
       />
     </div>
   )

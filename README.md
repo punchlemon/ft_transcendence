@@ -40,11 +40,24 @@ npm run dev
 - backend: `npm run lint`, `npm run test`, `npm run build`
 - frontend: `npm run lint`, `npm run test`, `npm run build`
 
+#### 一時コンテナ（起動後に自動で削除されるコンテナ）でテストやビルドを実行する例:
+
+- backend を一時コンテナで実行 (lint → test → build)
+```bash
+docker compose run --rm backend sh -c "npm run lint && npm run test && npm run build"
+```
+
+- frontend を一時コンテナで実行 (lint → test → build)
+```bash
+docker compose run --rm frontend sh -c "npm run lint && npm run test && npm run build"
+```
+
 GitHub Actions (`.github/workflows/ci.yml`) でも同じ手順を行うよう構成されています。
 
 ## データベース管理 (Docker環境)
 Docker で起動している場合、ホスト側のコマンドではなく、コンテナ内でコマンドを実行する必要があります。
 
+- **マイグレーションをデータベースに適用**
 ```
 docker compose exec backend npx prisma migrate deploy
 ```
