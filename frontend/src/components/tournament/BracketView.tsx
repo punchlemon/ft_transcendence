@@ -70,11 +70,11 @@ const MatchCard = ({
 
   return (
     <div 
-      className={`relative w-64 rounded-lg border bg-white shadow-sm transition-all ${
+      className={`relative w-64 h-24 rounded-lg border bg-white shadow-sm transition-all flex flex-col justify-between ${
         isCurrent ? 'border-indigo-500 ring-2 ring-indigo-500/20' : 'border-slate-200'
       }`}
     >
-      <div className="divide-y divide-slate-100">
+      <div className="divide-y divide-slate-100 flex-1 flex flex-col justify-center">
         <PlayerRow 
           player={match.playerA} 
           score={match.scoreA} 
@@ -90,7 +90,7 @@ const MatchCard = ({
       </div>
       
       {/* Match ID / Status footer */}
-      <div className="bg-slate-50 px-3 py-1 text-[10px] text-slate-400 flex justify-between">
+      <div className="bg-slate-50 px-3 py-1 text-[10px] text-slate-400 flex justify-between rounded-b-lg">
         <span>Match #{match.id}</span>
         <span>{match.status}</span>
       </div>
@@ -127,33 +127,46 @@ const BracketView = ({ matches, currentMatchIndex, onRemovePlayer }: BracketView
     .map((k) => parseInt(k, 10))
     .sort((a, b) => a - b)
 
+  const CARD_HEIGHT = 96 // h-24 = 96px
+  const BASE_GAP = 32 // gap-8 = 32px
+
   return (
     <div className="mt-6 overflow-x-auto pb-8">
       <div className="flex min-w-max">
         {rounds.map((roundNum, roundIdx) => {
           const roundMatches = roundsMap[roundNum]
-          // Sort matches by ID to ensure correct visual order (1 vs 8, 4 vs 5, etc.)
-          // Assuming match IDs are generated in order of the bracket flow
-          // Actually, for the tree to look right, we need to order them by their position in the bracket.
-          // The backend generates matches in order.
           
+          // Calculate layout metrics for this round
+          // Gap between matches in this round
+          const gap = CARD_HEIGHT * (Math.pow(2, roundIdx) - 1) + BASE_GAP * Math.pow(2, roundIdx)
+          
+          // Top offset to align the first match with the center of the previous round's pair
+          let offset = 0
+          for (let i = 0; i < roundIdx; i++) {
+             const prevGap = CARD_HEIGHT * (Math.pow(2, i) - 1) + BASE_GAP * Math.pow(2, i)
+             offset += (CARD_HEIGHT + prevGap) / 2
+          }
+
           return (
             <div key={roundNum} className="flex">
               {/* Round Column */}
-              <div className="flex flex-col justify-around gap-8 px-4">
-                <div className="text-center text-xs font-bold uppercase tracking-wider text-slate-400 mb-2">
+              <div 
+                className="flex flex-col px-4 relative"
+                style={{ rowGap: `${gap}px`, paddingTop: `${offset}px` }}
+              >
+                <div className="absolute top-0 left-0 w-full text-center text-xs font-bold uppercase tracking-wider text-slate-400 -mt-6">
                   {roundNum === rounds[rounds.length - 1] ? 'Finals' : `Round ${roundNum}`}
                 </div>
+                
                 {roundMatches.map((m) => {
                   const idx = matches.findIndex((mm) => mm.id === m.id)
                   const isCurrent = idx === currentMatchIndex
+                  
+                  // Connector metrics
+                  const verticalArmLength = (CARD_HEIGHT + gap) / 2
+                  
                   return (
-                    <div key={m.id} className="relative flex items-center">
-                      {/* Connector to previous round (Left) */}
-                      {roundIdx > 0 && (
-                        <div className="absolute -left-4 w-4 border-b-2 border-slate-300" />
-                      )}
-                      
+                    <div key={m.id} className="relative flex items-center h-24">
                       <MatchCard 
                         match={m} 
                         isCurrent={isCurrent} 
@@ -161,63 +174,37 @@ const BracketView = ({ matches, currentMatchIndex, onRemovePlayer }: BracketView
                         onRemovePlayer={onRemovePlayer}
                       />
 
-                      {/* Connector to next round (Right) */}
+                      {/* Connectors to next round */}
                       {roundIdx < rounds.length - 1 && (
-                        <div 
-                            className={`absolute -right-4 w-4 border-r-2 border-slate-300 ${
-                                // Logic to determine if this match connects up or down
-                                // This is tricky without knowing the exact tree structure index.
-                                // Simple heuristic: Even index goes down, Odd index goes up?
-                                // Matches are usually paired: (0,1) -> Next 0. (2,3) -> Next 1.
-                                // So even index in the current round list connects to the "top" of the next match.
-                                // Odd index connects to the "bottom".
-                                roundMatches.indexOf(m) % 2 === 0 
-                                    ? 'top-1/2 h-[calc(50%+2rem)] border-t-2 rounded-tr-lg translate-y-1/2' // Down
-                                    : 'bottom-1/2 h-[calc(50%+2rem)] border-b-2 rounded-br-lg -translate-y-1/2' // Up
-                            }`}
-                            style={{
-                                // Adjust height based on gap. 
-                                // Since we use flex justify-around, the gap is dynamic.
-                                // This CSS-only connector is fragile.
-                                // A better way is to use a fixed grid or SVG.
-                                // Let's try a simpler visual: just a line out.
-                                // The curved connectors are hard with just flexbox.
-                                // Let's stick to simple straight lines for now or improve if possible.
-                                display: 'none' // Disabling complex connectors for now, will use simple lines
-                            }}
-                        />
+                        <>
+                            {/* Horizontal line out */}
+                            <div className="absolute -right-8 w-8 h-0.5 bg-slate-300 top-1/2" />
+                            
+                            {/* Vertical line */}
+                            <div 
+                                className={`absolute -right-8 w-0.5 bg-slate-300 ${
+                                    roundMatches.indexOf(m) % 2 === 0 
+                                        ? 'top-1/2' // Even: goes down
+                                        : 'bottom-1/2' // Odd: goes up
+                                }`}
+                                style={{
+                                    height: `${verticalArmLength}px`
+                                }}
+                            />
+                        </>
                       )}
                       
-                      {/* Simple Line Connector attempt */}
-                      {roundIdx < rounds.length - 1 && (
-                          <div className={`absolute -right-8 w-8 h-px bg-slate-300 top-1/2`} />
-                      )}
-                      
-                      {/* Vertical Bracket Lines */}
-                      {roundIdx < rounds.length - 1 && roundMatches.indexOf(m) % 2 === 0 && (
-                          <div 
-                            className="absolute -right-8 w-px bg-slate-300"
-                            style={{
-                                top: '50%',
-                                height: '100%', // This assumes the next match is exactly centered below. 
-                                // In flex justify-around, the distance between pair items depends on the container height.
-                                // This is the hard part of CSS brackets.
-                                // Let's try to rely on the fact that we have max 8 players.
-                                // We can force a specific height.
-                            }}
-                          />
+                      {/* Connector from previous round (Horizontal in) */}
+                      {roundIdx > 0 && (
+                        <div className="absolute -left-8 w-8 h-0.5 bg-slate-300 top-1/2" />
                       )}
                     </div>
                   )
                 })}
               </div>
               
-              {/* Spacer/Connector Column */}
-              {roundIdx < rounds.length - 1 && (
-                  <div className="w-8 flex flex-col justify-around relative">
-                      {/* We can draw lines here if we knew positions */}
-                  </div>
-              )}
+              {/* Spacer Column */}
+              <div className="w-16" />
             </div>
           )
         })}
