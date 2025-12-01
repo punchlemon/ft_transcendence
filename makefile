@@ -21,10 +21,10 @@ ARCH = README_ARCHITECTURE.md
 #    Generates a prompt that references files instead of dumping content.
 # ==============================================================================
 ai:
-	@echo "Generating reference prompt..."
+	@echo "Generating context prompt..."
 	
 	@# Create a prompt that tells Copilot to look at specific files
-	@echo "Please execute the next step of the autonomous loop based on the context of these files:" > .ai_prompt_temp
+	@echo "Please understand the context of the project from these files to help me with my task:" > .ai_prompt_temp
 	@echo "" >> .ai_prompt_temp
 	@echo "Context Files:" >> .ai_prompt_temp
 	@echo "- Rules: #$(RULES)" >> .ai_prompt_temp
@@ -36,21 +36,19 @@ ai:
 	@echo "- Architecture: #$(ARCH)" >> .ai_prompt_temp
 	@echo "- Project Master: #$(MASTER)" >> .ai_prompt_temp
 	@echo "" >> .ai_prompt_temp
-	@echo "YOUR CORE MISSION:" >> .ai_prompt_temp
-	@echo "1. ANALYZE the current state in #$(MASTER)." >> .ai_prompt_temp
-	@echo "2. IF the 'Next Actions' are done, YOU MUST UPDATE #$(MASTER) immediately." >> .ai_prompt_temp
-	@echo "   - Mark tasks as [x]." >> .ai_prompt_temp
-	@echo "   - Create NEW 'Next Actions' based on the roadmap." >> .ai_prompt_temp
-	@echo "   - Change the 'Current Focus' phase if necessary." >> .ai_prompt_temp
-	@echo "3. EXECUTE the new action." >> .ai_prompt_temp
+	@echo "INSTRUCTIONS:" >> .ai_prompt_temp
+	@echo "1. Read the files above to understand the project status and rules." >> .ai_prompt_temp
+	@echo "2. Wait for my specific instructions which I will provide after this prompt." >> .ai_prompt_temp
+	@echo "3. Continue to follow the Git Policy and Project Master for progress tracking." >> .ai_prompt_temp
 	@echo "" >> .ai_prompt_temp
-	@echo "INSTRUCTION: Read the files, UPDATE the plan if needed, and WRITE CODE. Do not wait for permission to update the plan." >> .ai_prompt_temp
 	@echo "ALL OUTPUT MUST BE IN JAPANESE." >> .ai_prompt_temp
+	@echo "" >> .ai_prompt_temp
+	@echo "My Request:" >> .ai_prompt_temp
 
 	@cat .ai_prompt_temp | $(CLIP)
 	@rm .ai_prompt_temp
-	@echo "✅ Reference prompt copied!"
-	@echo "👉 Paste into Copilot Chat. If files aren't automatically linked, type '#' to reference them."
+	@echo "✅ Context prompt copied!"
+	@echo "👉 Paste into Copilot Chat and add your specific instructions."
 
 # ==============================================================================
 # 2. Project Initialization
