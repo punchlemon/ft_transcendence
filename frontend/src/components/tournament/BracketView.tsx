@@ -11,12 +11,14 @@ const MatchCard = ({
   match, 
   isCurrent, 
   totalScores,
-  onRemovePlayer
+  onRemovePlayer,
+  compact = false
 }: { 
   match: TournamentDetail['matches'][0], 
   isCurrent: boolean,
   totalScores: Record<string, number>,
-  onRemovePlayer?: (alias: string) => void
+  onRemovePlayer?: (alias: string) => void,
+  compact?: boolean
 }) => {
   const winnerId = match.winnerId
   
@@ -35,14 +37,14 @@ const MatchCard = ({
     const totalScore = player ? (totalScores[player.alias] ?? 0) : 0
     
     return (
-      <div className={`flex items-center justify-between px-3 py-2 ${isWinner ? 'bg-yellow-50/50' : ''}`}>
+      <div className={`flex items-center justify-between px-3 ${compact ? 'py-1' : 'py-2'} ${isWinner ? 'bg-yellow-50/50' : ''}`}>
         <div className="flex items-center gap-2 min-w-0 flex-1">
           <span className={`truncate text-sm font-medium ${isWinner ? 'text-slate-900' : 'text-slate-600'} ${isPlaceholder ? 'text-slate-400 italic' : ''}`}>
             {player?.alias ?? (isPlaceholder ? 'Bye' : 'TBD')}
           </span>
           {player && !isPlaceholder && (
             <span className="text-[10px] text-slate-400 bg-slate-100 px-1.5 rounded-full" title="Total Score">
-              {totalScore} pts
+              {totalScore}
             </span>
           )}
         </div>
@@ -70,7 +72,7 @@ const MatchCard = ({
 
   return (
     <div 
-      className={`relative w-64 h-24 rounded-lg border bg-white shadow-sm transition-all flex flex-col justify-between ${
+      className={`relative w-64 ${compact ? 'h-20' : 'h-24'} rounded-lg border bg-white shadow-sm transition-all flex flex-col justify-between ${
         isCurrent ? 'border-indigo-500 ring-2 ring-indigo-500/20' : 'border-slate-200'
       }`}
     >
@@ -90,10 +92,12 @@ const MatchCard = ({
       </div>
       
       {/* Match ID / Status footer */}
-      <div className="bg-slate-50 px-3 py-1 text-[10px] text-slate-400 flex justify-between rounded-b-lg">
-        <span>Match #{match.id}</span>
-        <span>{match.status}</span>
-      </div>
+      {!compact && (
+        <div className="bg-slate-50 px-3 py-1 text-[10px] text-slate-400 flex justify-between rounded-b-lg">
+          <span>Match #{match.id}</span>
+          <span>{match.status}</span>
+        </div>
+      )}
     </div>
   )
 }
@@ -127,84 +131,105 @@ const BracketView = ({ matches, currentMatchIndex, onRemovePlayer }: BracketView
     .map((k) => parseInt(k, 10))
     .sort((a, b) => a - b)
 
-  const CARD_HEIGHT = 96 // h-24 = 96px
-  const BASE_GAP = 32 // gap-8 = 32px
+  // Vertical Layout Constants
+  const CARD_WIDTH = 256 // w-64 = 256px
+  const CARD_HEIGHT = 80 // Reduced height for compactness
+  const GAP_X = 32 // Horizontal gap between matches in the same round
 
   return (
-    <div className="mt-6 overflow-x-auto pb-8">
-      <div className="flex min-w-max">
+    <div className="mt-4 overflow-x-auto pb-4 flex justify-center">
+      <div className="flex flex-col items-center gap-12">
         {rounds.map((roundNum, roundIdx) => {
           const roundMatches = roundsMap[roundNum]
           
-          // Calculate layout metrics for this round
-          // Gap between matches in this round
-          const gap = CARD_HEIGHT * (Math.pow(2, roundIdx) - 1) + BASE_GAP * Math.pow(2, roundIdx)
+          // Calculate gap between matches in this round based on tree depth
+          // Round 1 (idx 0): Gap is small
+          // Round 2 (idx 1): Gap is larger to span across two Round 1 matches
+          // Formula: Gap = (CardWidth + BaseGap) * (2^roundIdx) - CardWidth
+          // Actually, simpler: Just use flex gap and let the tree structure emerge naturally?
+          // No, we need precise alignment for connectors.
           
-          // Top offset to align the first match with the center of the previous round's pair
-          let offset = 0
-          for (let i = 0; i < roundIdx; i++) {
-             const prevGap = CARD_HEIGHT * (Math.pow(2, i) - 1) + BASE_GAP * Math.pow(2, i)
-             offset += (CARD_HEIGHT + prevGap) / 2
-          }
-
+          // Let's use a grid-like approach or calculated margins.
+          // In a vertical tree (Top-Down):
+          // Round 1: [M1]   [M2]   [M3]   [M4]
+          //            \     /       \     /
+          // Round 2:     [M5]         [M6]
+          //                \           /
+          // Round 3:           [M7]
+          
+          // The distance between centers of matches in Round R is double the distance in Round R-1.
+          
           return (
-            <div key={roundNum} className="flex">
-              {/* Round Column */}
-              <div 
-                className="flex flex-col px-4 relative"
-                style={{ rowGap: `${gap}px`, paddingTop: `${offset}px` }}
-              >
-                <div className="absolute top-0 left-0 w-full text-center text-xs font-bold uppercase tracking-wider text-slate-400 -mt-6">
+            <div key={roundNum} className="relative flex justify-center">
+               {/* Round Label */}
+               <div className="absolute -left-24 top-1/2 -translate-y-1/2 text-xs font-bold uppercase tracking-wider text-slate-400 w-20 text-right">
                   {roundNum === rounds[rounds.length - 1] ? 'Finals' : `Round ${roundNum}`}
-                </div>
-                
+               </div>
+
+              <div className="flex" style={{ gap: `${GAP_X * Math.pow(2, roundIdx) + CARD_WIDTH * (Math.pow(2, roundIdx) - 1)}px` }}>
                 {roundMatches.map((m) => {
                   const idx = matches.findIndex((mm) => mm.id === m.id)
                   const isCurrent = idx === currentMatchIndex
                   
-                  // Connector metrics
-                  const verticalArmLength = (CARD_HEIGHT + gap) / 2
-                  
                   return (
-                    <div key={m.id} className="relative flex items-center h-24">
+                    <div key={m.id} className="relative flex flex-col items-center">
+                      {/* Connector from previous round (Top) */}
+                      {roundIdx > 0 && (
+                        <div className="absolute -top-6 h-6 w-0.5 bg-slate-300" />
+                      )}
+
                       <MatchCard 
                         match={m} 
                         isCurrent={isCurrent} 
                         totalScores={totalScores}
                         onRemovePlayer={onRemovePlayer}
+                        compact={true}
                       />
 
-                      {/* Connectors to next round */}
+                      {/* Connectors to next round (Bottom) */}
                       {roundIdx < rounds.length - 1 && (
                         <>
-                            {/* Horizontal line out */}
-                            <div className="absolute -right-8 w-8 h-0.5 bg-slate-300 top-1/2" />
+                            {/* Vertical line down */}
+                            <div className="absolute -bottom-6 h-6 w-0.5 bg-slate-300" />
                             
-                            {/* Vertical line */}
+                            {/* Horizontal bar connecting children */}
+                            {/* This logic is tricky in a loop. 
+                                Instead of drawing from parent down, let's draw from children up?
+                                Or draw the "fork" here.
+                                A match in Round 1 connects to a match in Round 2.
+                                Actually, in a single elimination bracket:
+                                Round 1 matches (0,1) -> Round 2 match 0.
+                                So Round 1 matches need to draw lines to meet in the middle.
+                            */}
                             <div 
-                                className={`absolute -right-8 w-0.5 bg-slate-300 ${
+                                className={`absolute -bottom-6 h-0.5 bg-slate-300 ${
                                     roundMatches.indexOf(m) % 2 === 0 
-                                        ? 'top-1/2' // Even: goes down
-                                        : 'bottom-1/2' // Odd: goes up
+                                        ? 'left-1/2 w-[calc(50%+var(--gap-half))]' // Even: draw right
+                                        : 'right-1/2 w-[calc(50%+var(--gap-half))]' // Odd: draw left
                                 }`}
                                 style={{
-                                    height: `${verticalArmLength}px`
+                                    // We need to calculate the width to reach the midpoint
+                                    // Distance to neighbor center = CARD_WIDTH + CurrentGap
+                                    // Line length = (Distance) / 2
+                                    // CurrentGap = GAP_X * 2^roundIdx + CARD_WIDTH * (2^roundIdx - 1)
+                                    // Wait, the gap logic above is for the container.
+                                    // Let's simplify.
+                                    // The gap between THIS match and its sibling is:
+                                    // gap = GAP_X * 2^roundIdx + CARD_WIDTH * (2^roundIdx - 1)
+                                    // Half distance = (CARD_WIDTH + gap) / 2
+                                    // So the line should extend by (gap / 2) + (CARD_WIDTH / 2)? 
+                                    // No, the line starts from center.
+                                    // It needs to go to the midpoint between this and neighbor.
+                                    // Midpoint is at (CARD_WIDTH/2 + gap/2) from center.
+                                    width: `calc(50% + ${(GAP_X * Math.pow(2, roundIdx) + CARD_WIDTH * (Math.pow(2, roundIdx) - 1)) / 2}px + 1px)`
                                 }}
                             />
                         </>
-                      )}
-                      
-                      {/* Connector from previous round (Horizontal in) */}
-                      {roundIdx > 0 && (
-                        <div className="absolute -left-8 w-8 h-0.5 bg-slate-300 top-1/2" />
                       )}
                     </div>
                   )
                 })}
               </div>
-              
-              {/* Spacer Column */}
-              <div className="w-16" />
             </div>
           )
         })}

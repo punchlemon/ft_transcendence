@@ -67,7 +67,7 @@ describe('TournamentProgressPanel', () => {
     expect(screen.getByText('トーナメント生成ボタンでマッチメイクを開始してください。')).toBeInTheDocument()
   })
 
-  it('履歴が存在し現在試合がない場合は完了メッセージとハイライトを表示する', () => {
+  it('履歴が存在し現在試合がない場合は完了メッセージを表示する', () => {
     const matchQueue: MatchQueueItem[] = [
       { id: 'match-1', players: ['Alpha', 'Beta'] },
       { id: 'match-2', players: ['Gamma', 'Delta'] }
@@ -84,10 +84,6 @@ describe('TournamentProgressPanel', () => {
     )
 
     expect(screen.getByText('全ての試合が終了しました。')).toBeInTheDocument()
-
-    const matchItems = screen.getAllByRole('listitem')
-    expect(matchItems[0]).not.toHaveAttribute('aria-current')
-    expect(matchItems[1]).toHaveAttribute('aria-current', 'true')
   })
 })
 

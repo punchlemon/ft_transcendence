@@ -25,8 +25,8 @@ export const useTournamentSetup = () => {
       return
     }
 
-    if (players.length >= 8) {
-      setErrorMessage('参加者は最大8名までです')
+    if (players.length >= 4) {
+      setErrorMessage('参加者は最大4名までです')
       return
     }
 
@@ -57,8 +57,8 @@ export const useTournamentSetup = () => {
         setErrorMessage('最低2名の参加者が必要です')
         return null
     }
-    if (players.length > 8) {
-        setErrorMessage('参加者は最大8名までです')
+    if (players.length > 4) {
+        setErrorMessage('参加者は最大4名までです')
         return null
     }
 
