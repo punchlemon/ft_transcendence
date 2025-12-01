@@ -46,25 +46,6 @@ const TournamentProgressPanel = ({ currentMatch, matchQueue, currentMatchIndex, 
         )
       )}
 
-      {!compact && matchQueue.length > 0 && (
-        <div className="mt-6">
-          <h3 className="text-sm font-semibold uppercase tracking-wide text-slate-500">組み合わせ一覧</h3>
-          <ol className="mt-3 space-y-2" aria-label="トーナメント組み合わせ一覧">
-            {matchQueue.map((match, index) => (
-              <li
-                key={match.id}
-                className={`rounded-lg border px-4 py-2 text-sm ${
-                  index === currentMatchIndex ? 'border-brand bg-brand/5 text-slate-900' : 'border-slate-200 text-slate-600'
-                }`}
-                aria-current={index === currentMatchIndex ? 'true' : undefined}
-              >
-                <span className="font-semibold">第 {index + 1} 試合:</span> {match.players[0]} vs {match.players[1] ?? 'シード'}
-              </li>
-            ))}
-          </ol>
-        </div>
-      )}
-
       {/* Bracket visualization (if server-provided matches are available) */}
       {matches && matches.length > 0 && (
         <div className={compact ? '' : 'mt-6'}>
