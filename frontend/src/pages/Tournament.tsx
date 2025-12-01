@@ -25,6 +25,44 @@ const TournamentPage = () => {
   const [infoMessage, setInfoMessage] = useState<string | null>(null)
   const [isCreating, setIsCreating] = useState(false)
 
+  // Restore tournament state on mount
+  useEffect(() => {
+    const savedId = localStorage.getItem('activeTournamentId')
+    if (savedId) {
+      const id = parseInt(savedId, 10)
+      if (!isNaN(id)) {
+        fetchTournament(id)
+          .then((res) => {
+            const detail = res.data
+            setActiveTournament(detail)
+            
+            const queue: MatchQueueItem[] = detail.matches.map((m) => ({
+              id: `match-${m.id}`,
+              players: [m.playerA?.alias ?? 'Unknown', m.playerB?.alias ?? null],
+              participantIds: [m.playerA?.participantId ?? -1, m.playerB?.participantId ?? null]
+            }))
+            setMatchQueue(queue)
+            
+            // Find first pending match (where winnerId is null)
+            // Note: The API response matches should be sorted by round/id usually.
+            const nextIndex = detail.matches.findIndex((m) => !m.winnerId)
+            setCurrentMatchIndex(nextIndex !== -1 ? nextIndex : -1)
+            
+            if (nextIndex !== -1) {
+               setInfoMessage('次の試合の準備ができました。')
+            } else if (detail.matches.every(m => m.winnerId)) {
+               setInfoMessage('全ての試合が終了しました。')
+               setCurrentMatchIndex(-1) // Ensure no match is selected if all finished
+            }
+          })
+          .catch((err) => {
+            console.error('Failed to restore tournament', err)
+            localStorage.removeItem('activeTournamentId')
+          })
+      }
+    }
+  }, [])
+
   const currentMatch = findNextMatch(matchQueue, currentMatchIndex)
   const isTournamentReady = players.length >= 2
 
@@ -77,11 +115,13 @@ const TournamentPage = () => {
       
       const detail = await fetchTournament(res.data.id)
       setActiveTournament(detail.data)
+      localStorage.setItem('activeTournamentId', detail.data.id.toString())
       
       // Map API matches to UI MatchQueueItem
       const queue: MatchQueueItem[] = detail.data.matches.map(m => ({
         id: `match-${m.id}`,
-        players: [m.playerA.alias, m.playerB.alias]
+        players: [m.playerA?.alias ?? 'Unknown', m.playerB?.alias ?? null],
+        participantIds: [m.playerA?.participantId ?? -1, m.playerB?.participantId ?? null]
       }))
       
       setMatchQueue(queue)
@@ -104,6 +144,7 @@ const TournamentPage = () => {
   }
 
   const handleResetTournament = () => {
+    localStorage.removeItem('activeTournamentId')
     setPlayers([])
     setAliasInput('')
     setInfoMessage('エントリーを初期化しました。')
@@ -117,7 +158,17 @@ const TournamentPage = () => {
     const p2 = currentMatch.players[1]
     if (!p2) return
     
-    navigate(`/game/local-${currentMatch.id}?mode=local&p1Name=${encodeURIComponent(p1)}&p2Name=${encodeURIComponent(p2)}`)
+    const p1Id = currentMatch.participantIds?.[0]
+    const p2Id = currentMatch.participantIds?.[1]
+    
+    let url = `/game/local-${currentMatch.id}?mode=local&p1Name=${encodeURIComponent(p1)}&p2Name=${encodeURIComponent(p2)}`
+    if (activeTournament) {
+        url += `&tournamentId=${activeTournament.id}`
+    }
+    if (p1Id) url += `&p1Id=${p1Id}`
+    if (p2Id) url += `&p2Id=${p2Id}`
+
+    navigate(url)
   }
 
   return (
@@ -169,6 +220,7 @@ const TournamentPage = () => {
         currentMatchIndex={currentMatchIndex}
         onAdvance={handleAdvanceMatch}
         onPlayMatch={handlePlayMatch}
+        matches={activeTournament?.matches}
       />
     </div>
   )

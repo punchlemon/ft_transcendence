@@ -61,6 +61,7 @@ model User {
   ownedChannels         Channel[]           @relation("ChannelOwner")
   tournamentParticipants TournamentParticipant[]
   tournamentsCreated     Tournament[]        @relation("TournamentCreator")
+  tournamentsWon         Tournament[]        @relation("TournamentWinner")
   notifications         Notification[]
   auditLogs             AuditLog[]
   sessions              Session[]
@@ -75,11 +76,13 @@ model Tournament {
   status      String    @default("DRAFT")
   bracketType String    @default("SINGLE_ELIMINATION")
   createdById Int
+  winnerId    Int?
   startsAt    DateTime?
   createdAt   DateTime  @default(now())
   updatedAt   DateTime  @updatedAt
 
   createdBy   User      @relation("TournamentCreator", fields: [createdById], references: [id])
+  winner      User?     @relation("TournamentWinner", fields: [winnerId], references: [id])
   participants TournamentParticipant[]
   matches      TournamentMatch[]
 }
@@ -107,7 +110,7 @@ model TournamentMatch {
   tournamentId Int
   round        Int
   playerAId    Int
-  playerBId    Int
+  playerBId    Int?
   winnerId     Int?
   status       String     @default("PENDING")
   scheduledAt  DateTime?
@@ -115,7 +118,7 @@ model TournamentMatch {
 
   tournament   Tournament @relation(fields: [tournamentId], references: [id])
   playerA      TournamentParticipant @relation("MatchPlayerA", fields: [playerAId], references: [id])
-  playerB      TournamentParticipant @relation("MatchPlayerB", fields: [playerBId], references: [id])
+  playerB      TournamentParticipant? @relation("MatchPlayerB", fields: [playerBId], references: [id])
   winner       TournamentParticipant? @relation("MatchWinner", fields: [winnerId], references: [id])
 }
 
