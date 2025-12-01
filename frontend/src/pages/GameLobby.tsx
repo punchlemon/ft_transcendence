@@ -2,7 +2,7 @@ import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import useAuthStore from '../stores/authStore'
 
-type GameMode = 'local' | 'remote' | 'ai'
+type GameMode = 'local' | 'remote' | 'ai' | 'tournament'
 type MatchType = 'public' | 'private'
 type AIDifficulty = 'EASY' | 'NORMAL' | 'HARD'
 
@@ -30,6 +30,8 @@ const GameLobbyPage = () => {
     } else if (selectedMode === 'ai') {
       const mockGameId = `game-${selectedMode}-${Date.now()}`
       navigate(`/game/${mockGameId}?mode=ai&difficulty=${aiDifficulty}`)
+    } else if (selectedMode === 'tournament') {
+      navigate('/tournament')
     } else if (selectedMode === 'remote') {
       if (matchType === 'public') {
         setIsMatching(true)
@@ -66,7 +68,7 @@ const GameLobbyPage = () => {
       ) : (
         <div className="grid gap-8">
           {/* Mode Selection */}
-          <div className="grid gap-6 md:grid-cols-3">
+          <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-4">
             <button
               onClick={() => handleModeSelect('local')}
               disabled={!user}
@@ -112,6 +114,22 @@ const GameLobbyPage = () => {
               <h3 className="mb-2 text-lg font-semibold text-slate-900">vs AI</h3>
               <p className="text-center text-sm text-slate-500">
                 Practice your skills against a bot.
+              </p>
+            </button>
+
+            <button
+              onClick={() => handleModeSelect('tournament')}
+              disabled={!user}
+              className={`flex flex-col items-center rounded-xl border p-8 transition-all ${
+                selectedMode === 'tournament'
+                  ? 'border-indigo-600 bg-indigo-50 ring-2 ring-indigo-600 ring-offset-2'
+                  : 'border-slate-200 bg-white hover:border-indigo-300 hover:shadow-md'
+              } ${!user ? 'opacity-60 cursor-not-allowed' : ''}`}
+            >
+              <div className="mb-4 text-4xl">🏆</div>
+              <h3 className="mb-2 text-lg font-semibold text-slate-900">Tournament</h3>
+              <p className="text-center text-sm text-slate-500">
+                Compete in a bracket-style tournament.
               </p>
             </button>
           </div>

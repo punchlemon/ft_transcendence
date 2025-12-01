@@ -59,7 +59,6 @@ const App = () => {
               {user ? (
                 <>
                   <Link to="/users">Users</Link>
-                  <Link to="/tournament">Tournament</Link>
                 </>
               ) : null}
               {user ? (
