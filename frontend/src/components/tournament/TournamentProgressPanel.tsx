@@ -1,5 +1,7 @@
 import Button from '../ui/Button'
 import type { MatchQueueItem } from '../../lib/tournament'
+import BracketView from './BracketView'
+import type { TournamentDetail } from '../../lib/api'
 
 type TournamentProgressPanelProps = {
   currentMatch: MatchQueueItem | null
@@ -7,9 +9,10 @@ type TournamentProgressPanelProps = {
   currentMatchIndex: number
   onAdvance: () => void
   onPlayMatch: () => void
+  matches?: TournamentDetail['matches']
 }
 
-const TournamentProgressPanel = ({ currentMatch, matchQueue, currentMatchIndex, onAdvance, onPlayMatch }: TournamentProgressPanelProps) => {
+const TournamentProgressPanel = ({ currentMatch, matchQueue, currentMatchIndex, onAdvance, onPlayMatch, matches }: TournamentProgressPanelProps) => {
   const hasTournamentHistory = matchQueue.length > 0
 
   return (
@@ -28,9 +31,11 @@ const TournamentProgressPanel = ({ currentMatch, matchQueue, currentMatchIndex, 
               試合を開始する
             </Button>
           )}
-          <Button className="mt-4" onClick={onAdvance} variant={currentMatch.players[1] ? "secondary" : "primary"}>
-            次の試合へ進む
-          </Button>
+          {currentMatch.players[1] === null && (
+            <Button className="mt-4" onClick={onAdvance} variant="primary">
+              次の試合へ進む
+            </Button>
+          )}
         </div>
       ) : (
         <p className="mt-4 text-sm text-slate-600">
@@ -54,6 +59,14 @@ const TournamentProgressPanel = ({ currentMatch, matchQueue, currentMatchIndex, 
               </li>
             ))}
           </ol>
+        </div>
+      )}
+
+      {/* Bracket visualization (if server-provided matches are available) */}
+      {matches && matches.length > 0 && (
+        <div className="mt-6">
+          <h3 className="text-sm font-semibold uppercase tracking-wide text-slate-500">トーナメント表</h3>
+          <BracketView matches={matches} currentMatchIndex={currentMatchIndex} />
         </div>
       )}
     </section>

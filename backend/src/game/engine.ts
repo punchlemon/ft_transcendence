@@ -19,9 +19,9 @@ export class GameEngine {
   // Input buffers
   private inputQueue: { p1: PlayerInput[]; p2: PlayerInput[] } = { p1: [], p2: [] };
 
-  private onGameEnd?: (result: { winner: 'p1' | 'p2'; score: { p1: number; p2: number }; p1Id?: number; p2Id?: number; p1Alias?: string; p2Alias?: string; startedAt?: Date }) => void;
+  private onGameEnd?: (result: { winner: 'p1' | 'p2'; score: { p1: number; p2: number }; p1Id?: number; p2Id?: number; p1Alias?: string; p2Alias?: string; startedAt?: Date }) => Promise<void> | void;
 
-  constructor(sessionId: string, config: GameConfig = DEFAULT_CONFIG, onGameEnd?: (result: { winner: 'p1' | 'p2'; score: { p1: number; p2: number }; p1Id?: number; p2Id?: number; p1Alias?: string; p2Alias?: string; startedAt?: Date }) => void) {
+  constructor(sessionId: string, config: GameConfig = DEFAULT_CONFIG, onGameEnd?: (result: { winner: 'p1' | 'p2'; score: { p1: number; p2: number }; p1Id?: number; p2Id?: number; p1Alias?: string; p2Alias?: string; startedAt?: Date }) => Promise<void> | void) {
     this.sessionId = sessionId;
     this.config = config;
     this.onGameEnd = onGameEnd;
@@ -241,28 +241,36 @@ export class GameEngine {
     this.broadcast({ event: 'score:update', payload: this.state.score });
 
     if (this.state.score[scorer] >= (this.config.winningScore || 5)) {
-      this.finishGame(scorer);
+      // Fire and forget finishGame, but catch errors
+      this.finishGame(scorer).catch(err => console.error('Error finishing game:', err));
     } else {
       this.resetBall(scorer === 'p1' ? 'p2' : 'p1'); // Serve to loser
     }
   }
 
-  public finishGame(winner: 'p1' | 'p2') {
+  public async finishGame(winner: 'p1' | 'p2') {
     this.state.status = 'FINISHED';
     this.stop();
-    this.broadcast({ event: 'match:event', payload: { type: 'FINISHED', winner, score: this.state.score } });
     
+    // Persist result first
     if (this.onGameEnd) {
-      this.onGameEnd({ 
-        winner, 
-        score: this.state.score,
-        p1Id: this.players.p1,
-        p2Id: this.players.p2,
-        p1Alias: this.playersAliases.p1,
-        p2Alias: this.playersAliases.p2,
-        startedAt: this.startedAt
-      });
+      try {
+        await this.onGameEnd({ 
+          winner, 
+          score: this.state.score,
+          p1Id: this.players.p1,
+          p2Id: this.players.p2,
+          p1Alias: this.playersAliases.p1,
+          p2Alias: this.playersAliases.p2,
+          startedAt: this.startedAt
+        });
+      } catch (e) {
+        console.error('Failed to persist game result', e);
+      }
     }
+
+    // Then notify clients
+    this.broadcast({ event: 'match:event', payload: { type: 'FINISHED', winner, score: this.state.score } });
   }
 
   // Abort the game and save current score as final (winner determined by current score)
@@ -270,7 +278,7 @@ export class GameEngine {
     const { p1, p2 } = this.state.score
     let winner: 'p1' | 'p2' = 'p1'
     if (p2 > p1) winner = 'p2'
-    this.finishGame(winner)
+    this.finishGame(winner).catch(err => console.error('Error aborting game:', err));
   }
 
   private resetBall(server: 'p1' | 'p2') {
