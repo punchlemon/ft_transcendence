@@ -2,7 +2,7 @@ import { prisma } from '../utils/prisma';
 import { Prisma } from '@prisma/client';
 
 export const tournamentService = {
-  async handleMatchResult(matchId: number, winnerUserId: number) {
+  async handleMatchResult(matchId: number, winnerUserId: number, scoreA?: number, scoreB?: number) {
     await prisma.$transaction(async (tx) => {
       // 1. Get the match with participants
       const match = await tx.tournamentMatch.findUnique({
@@ -44,7 +44,9 @@ export const tournamentService = {
         where: { id: matchId },
         data: {
           status: 'FINISHED',
-          winnerId: winnerParticipantId
+          winnerId: winnerParticipantId,
+          scoreA: scoreA,
+          scoreB: scoreB
         }
       });
 

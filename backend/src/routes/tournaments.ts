@@ -40,7 +40,9 @@ const detailParamSchema = z.object({
 })
 
 const matchResultSchema = z.object({
-  winnerId: z.coerce.number().int().positive()
+  winnerId: z.coerce.number().int().positive(),
+  scoreA: z.coerce.number().int().min(0).optional(),
+  scoreB: z.coerce.number().int().min(0).optional()
 })
 
 const matchParamSchema = z.object({
@@ -311,7 +313,9 @@ const tournamentsRoutes: FastifyPluginAsync = async (fastify) => {
             participantId: match.playerB.id,
             alias: match.playerB.alias
           } : null,
-          winnerId: match.winnerId
+          winnerId: match.winnerId,
+          scoreA: match.scoreA,
+          scoreB: match.scoreB
         }))
       }
     }
@@ -336,7 +340,12 @@ const tournamentsRoutes: FastifyPluginAsync = async (fastify) => {
     }
 
     try {
-      await tournamentService.handleMatchResult(params.data.matchId, body.data.winnerId)
+      await tournamentService.handleMatchResult(
+        params.data.matchId,
+        body.data.winnerId,
+        body.data.scoreA,
+        body.data.scoreB
+      )
       reply.code(200).send({ success: true })
     } catch (error: any) {
       if (error.message === 'Match not found') {

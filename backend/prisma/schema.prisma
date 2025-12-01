@@ -112,6 +112,8 @@ model TournamentMatch {
   playerAId    Int
   playerBId    Int?
   winnerId     Int?
+  scoreA       Int?
+  scoreB       Int?
   status       String     @default("PENDING")
   scheduledAt  DateTime?
   createdAt    DateTime   @default(now())
