@@ -13,6 +13,7 @@ import {
   inviteToGame
 } from '../lib/api'
 import { EditProfileModal } from '../components/profile/EditProfileModal'
+import Avatar from '../components/ui/Avatar'
 
 // Mock types
 interface UserProfile {
@@ -54,10 +55,11 @@ interface Friend {
 }
 
 const ProfilePage = () => {
-  const { id } = useParams<{ id: string }>()
+  const { username } = useParams<{ username: string }>()
   const navigate = useNavigate()
   const currentUser = useAuthStore((state) => state.user)
-  const isOwnProfile = currentUser?.id === (id ? Number(id) : undefined)
+  const clearSession = useAuthStore((state) => state.clearSession)
+  const isOwnProfile = currentUser?.login === username
 
   const [profile, setProfile] = useState<UserProfile | null>(null)
   const [stats, setStats] = useState<UserStats | null>(null)
@@ -69,21 +71,21 @@ const ProfilePage = () => {
   const [isEditModalOpen, setIsEditModalOpen] = useState(false)
 
   const fetchProfileData = useCallback(async () => {
-    if (!id) return
+    if (!username) return
     // Don't set loading true on refresh to avoid flicker
     setError(null)
     try {
       const [profileData, matchesData, friendsData] = await Promise.all([
-        fetchUserProfile(id),
-        fetchUserMatches(id),
-        fetchUserFriends(id)
+        fetchUserProfile(username),
+        fetchUserMatches(username),
+        fetchUserFriends(username)
       ])
 
       setProfile({
         id: String(profileData.id),
         displayName: profileData.displayName,
         tag: `#${profileData.login}`,
-        avatarUrl: profileData.avatarUrl || 'https://via.placeholder.com/150',
+        avatarUrl: profileData.avatarUrl || '',
         status: (profileData.status?.toLowerCase() as 'online' | 'offline' | 'in-game') || 'offline',
         bio: profileData.bio || 'No bio available',
         friendshipStatus: profileData.friendshipStatus,
@@ -124,7 +126,7 @@ const ProfilePage = () => {
           id: String(f.id),
           displayName: f.displayName,
           status: (f.status.toLowerCase() as 'online' | 'offline' | 'in-game') || 'offline',
-          avatarUrl: f.avatarUrl || 'https://via.placeholder.com/40',
+          avatarUrl: f.avatarUrl || '',
         }))
       )
     } catch (err) {
@@ -133,7 +135,7 @@ const ProfilePage = () => {
     } finally {
       setIsLoading(false)
     }
-  }, [id]);
+  }, [username]);
 
   useEffect(() => {
     setIsLoading(true)
@@ -197,10 +199,11 @@ const ProfilePage = () => {
       {/* Hero Section */}
       <div className="mb-8 flex flex-col items-center gap-6 rounded-xl border border-slate-200 bg-white p-8 shadow-sm sm:flex-row sm:items-start">
         <div className="relative">
-          <img
+          <Avatar
             src={profile.avatarUrl}
             alt={profile.displayName}
-            className="h-32 w-32 rounded-full border-4 border-white shadow-md"
+            size="2xl"
+            className="border-4 border-white shadow-md"
           />
           <span
             className={`absolute bottom-2 right-2 h-4 w-4 rounded-full border-2 border-white ${
@@ -222,12 +225,20 @@ const ProfilePage = () => {
           
           <div className="mt-4 flex flex-wrap justify-center gap-2 sm:justify-start">
             {isOwnProfile ? (
-              <button
-                onClick={() => setIsEditModalOpen(true)}
-                className="rounded-md bg-slate-900 px-4 py-2 text-sm font-medium text-white hover:bg-slate-800"
-              >
-                Edit Profile
-              </button>
+              <>
+                <button
+                  onClick={() => setIsEditModalOpen(true)}
+                  className="rounded-md bg-slate-900 px-4 py-2 text-sm font-medium text-white hover:bg-slate-800"
+                >
+                  Edit Profile
+                </button>
+                <button
+                  onClick={clearSession}
+                  className="rounded-md border border-red-200 bg-white px-4 py-2 text-sm font-medium text-red-600 hover:bg-red-50"
+                >
+                  Logout
+                </button>
+              </>
             ) : (
               <>
                 {!profile.isBlockedByViewer && !profile.isBlockingViewer && (
@@ -300,134 +311,138 @@ const ProfilePage = () => {
         </div>
       </div>
 
-      <div className="grid gap-8 lg:grid-cols-3">
-        {/* Left Column: Stats & Friends */}
-        <div className="space-y-8 lg:col-span-1">
-          {/* Stats Card */}
-          <div className="rounded-xl border border-slate-200 bg-white p-6 shadow-sm">
-            <h2 className="mb-4 text-lg font-semibold text-slate-900">Statistics</h2>
-            {stats ? (
-              <div className="space-y-4">
-                <div className="flex justify-between border-b border-slate-100 pb-2">
-                  <span className="text-slate-600">Win Rate</span>
-                  <span className="font-medium text-slate-900">{stats.winRate}%</span>
-                </div>
-                <div className="flex justify-between border-b border-slate-100 pb-2">
-                  <span className="text-slate-600">Matches</span>
-                  <span className="font-medium text-slate-900">{stats.totalMatches}</span>
-                </div>
-                <div className="flex justify-between border-b border-slate-100 pb-2">
-                  <span className="text-slate-600">Wins / Losses</span>
-                  <span className="font-medium text-slate-900">
-                    {stats.wins} / {stats.losses}
-                  </span>
-                </div>
-                <div className="flex justify-between border-b border-slate-100 pb-2">
-                  <span className="text-slate-600">Current Streak</span>
-                  <span className="font-medium text-slate-900">{stats.currentStreak}</span>
-                </div>
-              </div>
-            ) : (
-              <div className="text-center text-slate-500">No stats available</div>
-            )}
-          </div>
-
-          {/* Friends Panel */}
-          <div className="rounded-xl border border-slate-200 bg-white p-6 shadow-sm">
-            <div className="mb-4 flex items-center justify-between">
-              <h2 className="text-lg font-semibold text-slate-900">Friends</h2>
-              <span className="rounded-full bg-slate-100 px-2 py-0.5 text-xs font-medium text-slate-600">
-                {friends.length}
-              </span>
-            </div>
-            <div className="space-y-3">
-              {friends.length > 0 ? (
-                friends.map((friend) => (
-                  <div key={friend.id} className="flex items-center gap-3">
-                    <div className="relative">
-                      <img
-                        src={friend.avatarUrl}
-                        alt={friend.displayName}
-                        className="h-10 w-10 rounded-full"
-                      />
-                      <span
-                        className={`absolute bottom-0 right-0 h-2.5 w-2.5 rounded-full border-2 border-white ${
-                          friend.status === 'online' ? 'bg-green-500' : 'bg-slate-400'
-                        }`}
-                      />
-                    </div>
-                    <div className="flex-1 overflow-hidden">
-                      <div className="truncate font-medium text-slate-900">
-                        {friend.displayName}
-                      </div>
-                      <div className="text-xs text-slate-500 capitalize">{friend.status}</div>
-                    </div>
+      {/* Main Content */}
+      <div className="space-y-12">
+        {/* Overview Section */}
+        <div className="grid gap-8 lg:grid-cols-3">
+          {/* Left Column: Stats & Friends */}
+          <div className="space-y-8 lg:col-span-1">
+            {/* Stats Card */}
+            <div className="rounded-xl border border-slate-200 bg-white p-6 shadow-sm">
+              <h2 className="mb-4 text-lg font-semibold text-slate-900">Statistics</h2>
+              {stats ? (
+                <div className="space-y-4">
+                  <div className="flex justify-between border-b border-slate-100 pb-2">
+                    <span className="text-slate-600">Win Rate</span>
+                    <span className="font-medium text-slate-900">{stats.winRate}%</span>
                   </div>
-                ))
+                  <div className="flex justify-between border-b border-slate-100 pb-2">
+                    <span className="text-slate-600">Matches</span>
+                    <span className="font-medium text-slate-900">{stats.totalMatches}</span>
+                  </div>
+                  <div className="flex justify-between border-b border-slate-100 pb-2">
+                    <span className="text-slate-600">Wins / Losses</span>
+                    <span className="font-medium text-slate-900">
+                      {stats.wins} / {stats.losses}
+                    </span>
+                  </div>
+                  <div className="flex justify-between border-b border-slate-100 pb-2">
+                    <span className="text-slate-600">Current Streak</span>
+                    <span className="font-medium text-slate-900">{stats.currentStreak}</span>
+                  </div>
+                </div>
               ) : (
-                <div className="text-center text-sm text-slate-500">No friends yet</div>
+                <div className="text-center text-slate-500">No stats available</div>
               )}
             </div>
-          </div>
-        </div>
 
-        {/* Right Column: Match History */}
-        <div className="lg:col-span-2">
-          <div className="rounded-xl border border-slate-200 bg-white p-6 shadow-sm">
-            <h2 className="mb-4 text-lg font-semibold text-slate-900">Match History</h2>
-            <div className="overflow-hidden rounded-lg border border-slate-200">
-              <table className="min-w-full divide-y divide-slate-200">
-                <thead className="bg-slate-50">
-                  <tr>
-                    <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-slate-500">
-                      Date
-                    </th>
-                    <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-slate-500">
-                      Opponent
-                    </th>
-                    <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-slate-500">
-                      Mode
-                    </th>
-                    <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-slate-500">
-                      Result
-                    </th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-slate-200 bg-white">
-                  {history.length > 0 ? (
-                    history.map((match) => (
-                      <tr key={match.id}>
-                        <td className="whitespace-nowrap px-6 py-4 text-sm text-slate-500">
-                          {match.date}
-                        </td>
-                        <td className="whitespace-nowrap px-6 py-4 text-sm font-medium text-slate-900">
-                          {match.opponentName}
-                        </td>
-                        <td className="whitespace-nowrap px-6 py-4 text-sm text-slate-500 capitalize">
-                          {match.mode}
-                        </td>
-                        <td className="whitespace-nowrap px-6 py-4 text-sm">
-                          <span
-                            className={`inline-flex rounded-full px-2 text-xs font-semibold leading-5 ${
-                              match.result === 'win'
-                                ? 'bg-green-100 text-green-800'
-                                : 'bg-red-100 text-red-800'
-                            }`}
-                          >
-                            {match.result.toUpperCase()} ({match.score})
-                          </span>
+            {/* Friends Panel */}
+            <div className="rounded-xl border border-slate-200 bg-white p-6 shadow-sm">
+              <div className="mb-4 flex items-center justify-between">
+                <h2 className="text-lg font-semibold text-slate-900">Friends</h2>
+                <span className="rounded-full bg-slate-100 px-2 py-0.5 text-xs font-medium text-slate-600">
+                  {friends.length}
+                </span>
+              </div>
+              <div className="space-y-3">
+                {friends.length > 0 ? (
+                  friends.map((friend) => (
+                    <div key={friend.id} className="flex items-center gap-3">
+                      <div className="relative">
+                        <Avatar
+                          src={friend.avatarUrl}
+                          alt={friend.displayName}
+                          size="md"
+                        />
+                        <span
+                          className={`absolute bottom-0 right-0 h-2.5 w-2.5 rounded-full border-2 border-white ${
+                            friend.status === 'online' ? 'bg-green-500' : 'bg-slate-400'
+                          }`}
+                        />
+                      </div>
+                      <div className="flex-1 overflow-hidden">
+                        <div className="truncate font-medium text-slate-900">
+                          {friend.displayName}
+                        </div>
+                        <div className="text-xs text-slate-500 capitalize">{friend.status}</div>
+                      </div>
+                    </div>
+                  ))
+                ) : (
+                  <div className="text-center text-sm text-slate-500">No friends yet</div>
+                )}
+              </div>
+            </div>
+          </div>
+
+          {/* Right Column: Match History */}
+          <div className="lg:col-span-2">
+            <div className="rounded-xl border border-slate-200 bg-white p-6 shadow-sm">
+              <h2 className="mb-4 text-lg font-semibold text-slate-900">Match History</h2>
+              <div className="overflow-hidden rounded-lg border border-slate-200">
+                <table className="min-w-full divide-y divide-slate-200">
+                  <thead className="bg-slate-50">
+                    <tr>
+                      <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-slate-500">
+                        Date
+                      </th>
+                      <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-slate-500">
+                        Opponent
+                      </th>
+                      <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-slate-500">
+                        Mode
+                      </th>
+                      <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-slate-500">
+                        Result
+                      </th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-200 bg-white">
+                    {history.length > 0 ? (
+                      history.map((match) => (
+                        <tr key={match.id}>
+                          <td className="whitespace-nowrap px-6 py-4 text-sm text-slate-500">
+                            {match.date}
+                          </td>
+                          <td className="whitespace-nowrap px-6 py-4 text-sm font-medium text-slate-900">
+                            {match.opponentName}
+                          </td>
+                          <td className="whitespace-nowrap px-6 py-4 text-sm text-slate-500 capitalize">
+                            {match.mode}
+                          </td>
+                          <td className="whitespace-nowrap px-6 py-4 text-sm">
+                            <span
+                              className={`inline-flex rounded-full px-2 text-xs font-semibold leading-5 ${
+                                match.result === 'win'
+                                  ? 'bg-green-100 text-green-800'
+                                  : 'bg-red-100 text-red-800'
+                              }`}
+                            >
+                              {match.result.toUpperCase()} ({match.score})
+                            </span>
+                          </td>
+                        </tr>
+                      ))
+                    ) : (
+                      <tr>
+                        <td colSpan={4} className="px-6 py-8 text-center text-sm text-slate-500">
+                          No matches played yet
                         </td>
                       </tr>
-                    ))
-                  ) : (
-                    <tr>
-                      <td colSpan={4} className="px-6 py-8 text-center text-sm text-slate-500">
-                        No matches played yet
-                      </td>
-                    </tr>
-                  )}
-                </tbody>
-              </table>
+                    )}
+                  </tbody>
+                </table>
+              </div>
             </div>
           </div>
         </div>
@@ -462,25 +477,3 @@ const ProfilePage = () => {
 }
 
 export default ProfilePage
-
-/*
-解説:
-
-1) モックデータ構造
-  - `UserProfile`, `UserStats`, `MatchHistory`, `Friend` インターフェースを定義し、将来の API レスポンス型に合わせている。
-
-2) データ取得シミュレーション
-  - `useEffect` 内で非同期処理を模倣し、ローディング状態とエラーハンドリングを実装。`id === 'not-found'` の場合はエラーを表示する。
-
-3) レイアウト構成
-  - **Hero Section**: アバター、名前、ステータス、自己紹介を表示。`isOwnProfile` が true の場合のみ「Edit Profile」ボタンを表示。
-  - **Grid Layout**: PC (lg) では 2 カラム構成（左: Stats/Friends, 右: History）、モバイルでは縦積み。
-
-4) コンポーネント詳細
-  - **Stats Card**: 勝率や試合数をリスト表示。
-  - **Friends Panel**: フレンドリストをアバター付きで表示し、オンライン状態をインジケータで示す。
-  - **Match History**: テーブル形式で対戦履歴を表示し、勝敗に応じたバッジ色分けを行う。
-
-5) 状態管理
-  - `isLoading`, `error` ステートにより、データ取得中の UI とエラー時のフォールバックを制御している。
-*/

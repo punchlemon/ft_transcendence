@@ -12,15 +12,32 @@ vi.mock('../stores/authStore', () => ({
 
 // Mock api
 vi.mock('../lib/api', () => ({
+  api: {
+    get: vi.fn(),
+    post: vi.fn(),
+    patch: vi.fn(),
+    delete: vi.fn(),
+    interceptors: {
+      request: { use: vi.fn() },
+      response: { use: vi.fn() }
+    }
+  },
   fetchUserProfile: vi.fn(),
   fetchUserMatches: vi.fn(),
   fetchUserFriends: vi.fn(),
+  acceptFriendRequest: vi.fn(),
+  sendFriendRequest: vi.fn(),
+  removeFriend: vi.fn(),
+  blockUser: vi.fn(),
+  unblockUser: vi.fn(),
+  inviteToGame: vi.fn(),
 }))
 
 describe('ProfilePage', () => {
   const mockUser = {
     id: 123,
     displayName: 'Test User',
+    login: 'user123',
     email: 'test@example.com',
   }
 
@@ -119,9 +136,9 @@ describe('ProfilePage', () => {
     ;(fetchUserProfile as unknown as ReturnType<typeof vi.fn>).mockImplementation(() => new Promise(() => {}))
 
     render(
-      <MemoryRouter initialEntries={['/profile/123']}>
+      <MemoryRouter initialEntries={['/user123']}>
         <Routes>
-          <Route path="/profile/:id" element={<ProfilePage />} />
+          <Route path="/:username" element={<ProfilePage />} />
         </Routes>
       </MemoryRouter>
     )
@@ -131,9 +148,9 @@ describe('ProfilePage', () => {
 
   it('renders profile data after loading', async () => {
     render(
-      <MemoryRouter initialEntries={['/profile/123']}>
+      <MemoryRouter initialEntries={['/user123']}>
         <Routes>
-          <Route path="/profile/:id" element={<ProfilePage />} />
+          <Route path="/:username" element={<ProfilePage />} />
         </Routes>
       </MemoryRouter>
     )
@@ -146,17 +163,17 @@ describe('ProfilePage', () => {
   })
 
   it('shows edit button for own profile', async () => {
-    // Mock auth store to return the same ID as the URL
+    // Mock auth store to return the same login as the URL
     ;(useAuthStore as unknown as ReturnType<typeof vi.fn>).mockImplementation((selector) =>
       selector({
-        user: { ...mockUser, id: 123 },
+        user: { ...mockUser, login: 'user123' },
       })
     )
 
     render(
-      <MemoryRouter initialEntries={['/profile/123']}>
+      <MemoryRouter initialEntries={['/user123']}>
         <Routes>
-          <Route path="/profile/:id" element={<ProfilePage />} />
+          <Route path="/:username" element={<ProfilePage />} />
         </Routes>
       </MemoryRouter>
     )
@@ -167,17 +184,17 @@ describe('ProfilePage', () => {
   })
 
   it('hides edit button for other profile', async () => {
-    // Mock auth store to return a different ID
+    // Mock auth store to return a different login
     ;(useAuthStore as unknown as ReturnType<typeof vi.fn>).mockImplementation((selector) =>
       selector({
-        user: { ...mockUser, id: 456 },
+        user: { ...mockUser, login: 'otheruser' },
       })
     )
 
     render(
-      <MemoryRouter initialEntries={['/profile/123']}>
+      <MemoryRouter initialEntries={['/user123']}>
         <Routes>
-          <Route path="/profile/:id" element={<ProfilePage />} />
+          <Route path="/:username" element={<ProfilePage />} />
         </Routes>
       </MemoryRouter>
     )
@@ -189,9 +206,9 @@ describe('ProfilePage', () => {
 
   it('renders stats', async () => {
     render(
-      <MemoryRouter initialEntries={['/profile/123']}>
+      <MemoryRouter initialEntries={['/user123']}>
         <Routes>
-          <Route path="/profile/:id" element={<ProfilePage />} />
+          <Route path="/:username" element={<ProfilePage />} />
         </Routes>
       </MemoryRouter>
     )
@@ -205,9 +222,9 @@ describe('ProfilePage', () => {
 
   it('renders match history', async () => {
     render(
-      <MemoryRouter initialEntries={['/profile/123']}>
+      <MemoryRouter initialEntries={['/user123']}>
         <Routes>
-          <Route path="/profile/:id" element={<ProfilePage />} />
+          <Route path="/:username" element={<ProfilePage />} />
         </Routes>
       </MemoryRouter>
     )
@@ -223,9 +240,9 @@ describe('ProfilePage', () => {
 
   it('renders friends list', async () => {
     render(
-      <MemoryRouter initialEntries={['/profile/123']}>
+      <MemoryRouter initialEntries={['/user123']}>
         <Routes>
-          <Route path="/profile/:id" element={<ProfilePage />} />
+          <Route path="/:username" element={<ProfilePage />} />
         </Routes>
       </MemoryRouter>
     )
@@ -240,15 +257,37 @@ describe('ProfilePage', () => {
     ;(fetchUserProfile as unknown as ReturnType<typeof vi.fn>).mockRejectedValue(new Error('User not found'))
 
     render(
-      <MemoryRouter initialEntries={['/profile/999']}>
+      <MemoryRouter initialEntries={['/nonexistent']}>
         <Routes>
-          <Route path="/profile/:id" element={<ProfilePage />} />
+          <Route path="/:username" element={<ProfilePage />} />
         </Routes>
       </MemoryRouter>
     )
 
     await waitFor(() => {
       expect(screen.getByText('Failed to load profile')).toBeInTheDocument()
+    })
+  })
+
+  it('shows logout button for own profile', async () => {
+    // Mock auth store to return the same login as the URL
+    ;(useAuthStore as unknown as ReturnType<typeof vi.fn>).mockImplementation((selector) =>
+      selector({
+        user: { ...mockUser, login: 'user123' },
+        clearSession: vi.fn()
+      })
+    )
+
+    render(
+      <MemoryRouter initialEntries={['/user123']}>
+        <Routes>
+          <Route path="/:username" element={<ProfilePage />} />
+        </Routes>
+      </MemoryRouter>
+    )
+
+    await waitFor(() => {
+      expect(screen.getByText('Logout')).toBeInTheDocument()
     })
   })
 })

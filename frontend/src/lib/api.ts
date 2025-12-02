@@ -48,6 +48,7 @@ export type LoginSuccessResponse = {
   user: {
     id: number
     displayName: string
+    login: string
     status: string
   }
   tokens: {
@@ -327,6 +328,7 @@ export type UserSearchResponse = {
   data: Array<{
     id: number
     displayName: string
+    login: string
     status: string
     avatarUrl: string | null
     ladderProfile: {

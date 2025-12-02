@@ -64,7 +64,9 @@ describe('ChatDrawer', () => {
         members: [{ id: 2, displayName: 'Alice', status: 'ONLINE' }]
       }
     ]
-    vi.mocked(api.get).mockResolvedValueOnce({ data: mockThreads })
+    vi.mocked(api.get)
+      .mockResolvedValueOnce({ data: mockThreads }) // fetchThreads
+      .mockResolvedValueOnce({ data: { data: [] } }) // fetchNotifications
 
     render(<ChatDrawer />)
     fireEvent.click(screen.getByTestId('chat-header'))
@@ -100,6 +102,7 @@ describe('ChatDrawer', () => {
     vi.mocked(api.get).mockResolvedValue({ data: [] }) // Default fallback
     vi.mocked(api.get)
       .mockResolvedValueOnce({ data: mockThreads }) // fetchThreads (initial)
+      .mockResolvedValueOnce({ data: { data: [] } }) // fetchNotifications
       .mockResolvedValueOnce({ data: mockMessages }) // fetchMessages (select thread)
 
     vi.mocked(api.post).mockResolvedValueOnce({ data: {
@@ -152,6 +155,7 @@ describe('ChatDrawer', () => {
     vi.mocked(api.get).mockResolvedValue({ data: [] })
     vi.mocked(api.get)
       .mockResolvedValueOnce({ data: mockThreads }) // fetchThreads
+      .mockResolvedValueOnce({ data: { data: [] } }) // fetchNotifications
       .mockResolvedValueOnce({ data: mockMessages }) // fetchMessages
 
     vi.mocked(inviteToGame).mockResolvedValue({ sessionId: 'sess-123' })

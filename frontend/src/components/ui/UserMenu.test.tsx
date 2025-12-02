@@ -1,19 +1,27 @@
-import { render, screen, fireEvent } from '@testing-library/react'
+import { render, screen } from '@testing-library/react'
 import { BrowserRouter } from 'react-router-dom'
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import UserMenu from './UserMenu'
 import useAuthStore from '../../stores/authStore'
+import { useNotificationStore } from '../../stores/notificationStore'
 
 // Mock auth store
 vi.mock('../../stores/authStore', () => ({
   default: vi.fn()
 }))
 
+// Mock notification store
+vi.mock('../../stores/notificationStore', () => ({
+  useNotificationStore: vi.fn()
+}))
+
 describe('UserMenu', () => {
   const mockClearSession = vi.fn()
+  const mockFetchNotifications = vi.fn()
   const mockUser = {
     id: 1,
     displayName: 'Test User',
+    login: 'testuser',
     avatarUrl: 'https://example.com/avatar.png'
   }
 
@@ -26,6 +34,13 @@ describe('UserMenu', () => {
       }
       return selector(state)
     })
+    ;(useNotificationStore as any).mockImplementation((selector: any) => {
+      const state = {
+        unreadCount: 5,
+        fetchNotifications: mockFetchNotifications
+      }
+      return selector(state)
+    })
   })
 
   it('renders user avatar and name', () => {
@@ -34,44 +49,28 @@ describe('UserMenu', () => {
         <UserMenu />
       </BrowserRouter>
     )
-    expect(screen.getByText('Test User')).toBeInTheDocument()
+    // Name is not displayed in the menu button itself, only avatar
     expect(screen.getByAltText('Test User')).toHaveAttribute('src', 'https://example.com/avatar.png')
   })
 
-  it('toggles dropdown on click', () => {
+  it('renders unread badge when count > 0', () => {
     render(
       <BrowserRouter>
         <UserMenu />
       </BrowserRouter>
     )
-    
-    const button = screen.getByTestId('user-menu-button')
-    
-    // Initially closed
-    expect(screen.queryByText('マイプロフィール')).not.toBeInTheDocument()
-    
-    // Open
-    fireEvent.click(button)
-    expect(screen.getByText('マイプロフィール')).toBeInTheDocument()
-    expect(screen.getByText('設定')).toBeInTheDocument()
-    expect(screen.getByText('ログアウト')).toBeInTheDocument()
-    
-    // Close
-    fireEvent.click(button)
-    expect(screen.queryByText('マイプロフィール')).not.toBeInTheDocument()
+    expect(screen.getByText('5')).toBeInTheDocument()
   })
 
-  it('calls clearSession on logout click', () => {
+  it('renders link to profile', () => {
     render(
       <BrowserRouter>
         <UserMenu />
       </BrowserRouter>
     )
     
-    fireEvent.click(screen.getByTestId('user-menu-button'))
-    fireEvent.click(screen.getByText('ログアウト'))
-    
-    expect(mockClearSession).toHaveBeenCalled()
+    const link = screen.getByTestId('user-menu-link')
+    expect(link).toHaveAttribute('href', '/testuser')
   })
 
   it('renders nothing if user is null', () => {
@@ -89,6 +88,6 @@ describe('UserMenu', () => {
       </BrowserRouter>
     )
     
-    expect(screen.queryByTestId('user-menu-button')).not.toBeInTheDocument()
+    expect(screen.queryByTestId('user-menu-link')).not.toBeInTheDocument()
   })
 })
