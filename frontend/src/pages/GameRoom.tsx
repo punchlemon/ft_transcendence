@@ -2,7 +2,10 @@ import { useEffect, useRef, useState, useCallback } from 'react'
 import { useParams, useNavigate, useSearchParams } from 'react-router-dom'
 import useAuthStore from '../stores/authStore'
 import { soundManager } from '../lib/sound'
-import { api } from '../lib/api'
+import { api, fetchTournament, TournamentDetail } from '../lib/api'
+import BracketView from '../components/tournament/BracketView'
+import TournamentRanking from '../components/tournament/TournamentRanking'
+import { MatchQueueItem, advanceToNextMatch } from '../lib/tournament'
 
 type GameStatus = 'connecting' | 'playing' | 'paused' | 'finished'
 
@@ -15,28 +18,78 @@ const GameRoomPage = () => {
   const gameStateRef = useRef<any>(null)
   const prevBallRef = useRef<{ dx: number; dy: number } | null>(null)
   const token = useAuthStore((state) => state.accessToken)
+  const user = useAuthStore((state) => state.user)
   
   const [status, setStatus] = useState<GameStatus>('connecting')
   const [scores, setScores] = useState({ p1: 0, p2: 0 })
-  const [players, setPlayers] = useState(() => {
-    const p1Name = searchParams.get('p1Name')
-    const p2Name = searchParams.get('p2Name')
-    return {
-      p1: p1Name || 'Player 1',
-      p2: p2Name || 'Player 2'
-    }
-  })
   const [winner, setWinner] = useState<string | null>(null)
   const [playerSlot, setPlayerSlot] = useState<'p1' | 'p2' | null>(null)
   const playerSlotRef = useRef<'p1' | 'p2' | null>(null)
   const [reconnectKey, setReconnectKey] = useState(0)
   const [sessionId, setSessionId] = useState<string | null>(null)
 
+  const mode = searchParams.get('mode')
+
+  const getPlayerName = (slot: 'p1' | 'p2') => {
+    const paramName = searchParams.get(`${slot}Name`)
+    if (paramName) return paramName
+    
+    if (mode === 'ai') {
+        if (playerSlot) {
+            return playerSlot === slot ? (user?.displayName || 'You') : 'AI'
+        }
+        // Default before connection (assume P1 is user)
+        return slot === 'p1' ? (user?.displayName || 'You') : 'AI'
+    }
+    
+    return slot === 'p1' ? 'Player 1' : 'Player 2'
+  }
+
+  const players = {
+    p1: getPlayerName('p1'),
+    p2: getPlayerName('p2')
+  }
+
+  // Tournament State
+  const [activeTournament, setActiveTournament] = useState<TournamentDetail | null>(null)
+  const [matchQueue, setMatchQueue] = useState<MatchQueueItem[]>([])
+  const [currentMatchIndex, setCurrentMatchIndex] = useState(-1)
+  const [showRanking, setShowRanking] = useState(false)
+
   useEffect(() => {
     playerSlotRef.current = playerSlot
   }, [playerSlot])
 
-  
+  // Fetch Tournament Info
+  useEffect(() => {
+    const tournamentId = searchParams.get('tournamentId')
+    if (tournamentId) {
+      const tid = parseInt(tournamentId, 10)
+      if (!isNaN(tid)) {
+        fetchTournament(tid)
+          .then((res) => {
+            const detail = res.data
+            setActiveTournament(detail)
+            
+            const queue: MatchQueueItem[] = detail.matches.map((m) => ({
+              id: `match-${m.id}`,
+              players: [m.playerA?.alias ?? 'Unknown', m.playerB?.alias ?? null],
+              participantIds: [m.playerA?.participantId ?? -1, m.playerB?.participantId ?? null]
+            }))
+            setMatchQueue(queue)
+            
+            // Find current match index based on URL id (local-match-X)
+            if (id?.startsWith('local-match-')) {
+              const matchIdStr = id.replace('local-match-', '')
+              const matchId = parseInt(matchIdStr, 10)
+              const index = detail.matches.findIndex(m => m.id === matchId)
+              setCurrentMatchIndex(index)
+            }
+          })
+          .catch(err => console.error('Failed to fetch tournament', err))
+      }
+    }
+  }, [id, searchParams, status]) // Re-fetch on status change (e.g. finished) to update bracket
 
   // WebSocket connection
   useEffect(() => {
@@ -47,6 +100,8 @@ const GameRoomPage = () => {
     const tournamentId = searchParams.get('tournamentId')
     const p1Id = searchParams.get('p1Id')
     const p2Id = searchParams.get('p2Id')
+    const p1Name = searchParams.get('p1Name')
+    const p2Name = searchParams.get('p2Name')
 
     const query = new URLSearchParams()
     if (mode) query.append('mode', mode)
@@ -55,6 +110,12 @@ const GameRoomPage = () => {
     // If this is a tournament match (local-match-X), pass it as sessionId
     if (id?.startsWith('local-match-')) {
       query.append('sessionId', id)
+      // If one of the players is AI, force mode=ai so backend adds AI player
+      if (p1Name === 'AI' || p2Name === 'AI') {
+        query.set('mode', 'ai')
+        if (p1Name === 'AI') query.set('aiSlot', 'p1')
+        if (p2Name === 'AI') query.set('aiSlot', 'p2')
+      }
     }
 
     const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:'
@@ -85,7 +146,15 @@ const GameRoomPage = () => {
           } else if (data.payload.type === 'FINISHED') {
             setStatus('finished')
             const winnerSlot = data.payload.winner
-            setWinner(winnerSlot === playerSlotRef.current ? 'You' : 'Opponent')
+            
+            if (mode === 'local') {
+                const p1Name = searchParams.get('p1Name') || 'Player 1'
+                const p2Name = searchParams.get('p2Name') || 'Player 2'
+                setWinner(winnerSlot === 'p1' ? p1Name : p2Name)
+            } else {
+                setWinner(winnerSlot === playerSlotRef.current ? 'You' : 'Opponent')
+            }
+            
             soundManager.playGameOver()
 
             // Tournament Result Notification
@@ -94,17 +163,29 @@ const GameRoomPage = () => {
               const winnerId = winnerSlot === 'p1' ? p1Id : p2Id
               
               if (winnerId) {
-                api.post(`/tournaments/matches/${matchId}/result`, { winnerId: parseInt(winnerId) })
+                // Use score from payload if available (most reliable), fallback to state
+                const finalScore = data.payload.score || gameStateRef.current?.score || { p1: 0, p2: 0 }
+
+                api.post(`/tournaments/matches/${matchId}/result`, { 
+                    winnerId: parseInt(winnerId),
+                    scoreA: finalScore.p1,
+                    scoreB: finalScore.p2
+                })
                   .then(() => {
-                    // Redirect back to tournament page after a short delay
-                    setTimeout(() => {
-                      navigate(`/tournament`) // Or specific ID if route supports it, but currently /tournament is the page
-                      // Wait, the user asked to redirect to /tournament/:tournamentId
-                      // But the route in App.tsx might be just /tournament?
-                      // Let's check App.tsx later. For now, I'll assume /tournament is the page where state is restored.
-                      // Actually, Tournament.tsx restores state from localStorage.
-                      // So navigating to /tournament is correct.
-                    }, 3000)
+                    // Refresh tournament data to show updated bracket
+                    const tid = parseInt(tournamentId, 10)
+                    if (!isNaN(tid)) {
+                        fetchTournament(tid).then(res => {
+                            setActiveTournament(res.data)
+                            // Update queue as well
+                            const queue: MatchQueueItem[] = res.data.matches.map((m) => ({
+                                id: `match-${m.id}`,
+                                players: [m.playerA?.alias ?? 'Unknown', m.playerB?.alias ?? null],
+                                participantIds: [m.playerA?.participantId ?? -1, m.playerB?.participantId ?? null]
+                            }))
+                            setMatchQueue(queue)
+                        })
+                    }
                   })
                   .catch(err => console.error('Failed to submit match result', err))
               }
@@ -152,7 +233,7 @@ const GameRoomPage = () => {
       ws.close()
     }
     // reconnectKey is used to force a reconnect when user wants to play again
-  }, [token, searchParams, reconnectKey])
+  }, [token, searchParams, reconnectKey, id])
 
   // Input handling
   useEffect(() => {
@@ -258,6 +339,38 @@ const GameRoomPage = () => {
     setReconnectKey((k) => k + 1)
   }, [])
 
+  const handleNextMatch = useCallback(() => {
+    if (!activeTournament) return
+    
+    // Find next match
+    const nextIndex = advanceToNextMatch(matchQueue, currentMatchIndex)
+    if (nextIndex !== -1) {
+        const nextMatch = matchQueue[nextIndex]
+        const p1 = nextMatch.players[0]
+        const p2 = nextMatch.players[1]
+        const p1Id = nextMatch.participantIds?.[0]
+        const p2Id = nextMatch.participantIds?.[1]
+        
+        let url = `/game/local-${nextMatch.id}?mode=local&p1Name=${encodeURIComponent(p1)}&p2Name=${encodeURIComponent(p2 ?? '')}`
+        url += `&tournamentId=${activeTournament.id}`
+        if (p1Id) url += `&p1Id=${p1Id}`
+        if (p2Id) url += `&p2Id=${p2Id}`
+        
+        // Force full reload or just navigate? Navigate should be enough if useEffect handles id change
+        // But we need to reset state.
+        // Navigate to new URL
+        navigate(url)
+        // Reset local state manually because component might not unmount
+        setReconnectKey(k => k + 1)
+        setStatus('connecting')
+        setScores({ p1: 0, p2: 0 })
+        setWinner(null)
+    } else {
+        // Tournament finished
+        setShowRanking(true)
+    }
+  }, [activeTournament, matchQueue, currentMatchIndex, navigate])
+
   // Space key behavior:
   // - When finished: Space -> Play Again
   // - When paused: Space -> Resume
@@ -269,7 +382,11 @@ const GameRoomPage = () => {
       e.preventDefault()
 
       if (status === 'finished') {
-        playAgain()
+        if (id?.startsWith('local-')) {
+            handleNextMatch()
+        } else {
+            playAgain()
+        }
       } else if (status === 'paused') {
         // resume
         togglePause()
@@ -278,9 +395,7 @@ const GameRoomPage = () => {
 
     window.addEventListener('keydown', handleSpace)
     return () => window.removeEventListener('keydown', handleSpace)
-  }, [status, playAgain, togglePause])
-
-
+  }, [status, playAgain, togglePause, handleNextMatch, id])
 
   // Game loop
   useEffect(() => {
@@ -352,7 +467,29 @@ const GameRoomPage = () => {
   }, [status])
 
   return (
-    <div className="flex min-h-[calc(100vh-64px)] flex-col lg:flex-row">
+    <div className="flex min-h-[calc(100vh-64px)] flex-col">
+      {showRanking && activeTournament && (
+        <TournamentRanking 
+            tournament={activeTournament} 
+            onClose={() => navigate('/')} 
+        />
+      )}
+      {/* Tournament Bracket Overlay (Top) */}
+      {activeTournament && (
+        <div className="w-full bg-white border-b border-slate-200 py-1 px-4">
+            <div className="max-w-6xl mx-auto">
+                <h2 className="text-sm font-bold text-slate-900 mb-1">{activeTournament.name}</h2>
+                {activeTournament.matches && activeTournament.matches.length > 0 && (
+                    <BracketView 
+                        matches={activeTournament.matches} 
+                        currentMatchIndex={currentMatchIndex} 
+                    />
+                )}
+            </div>
+        </div>
+      )}
+
+      <div className="flex flex-1 flex-col lg:flex-row">
       {/* Left Panel: Match Info */}
         <div className="flex w-full flex-col border-b border-slate-200 bg-white p-6 lg:w-64 lg:border-b-0 lg:border-r">
         <div className="mb-4">
@@ -373,17 +510,17 @@ const GameRoomPage = () => {
       </div>
 
       {/* Main Area: Game Canvas */}
-      <div className="relative flex flex-1 items-center justify-center bg-slate-100 p-4">
-        {/* Top score bar (moved from sidebar) */}
-        <div className="absolute top-4 left-1/2 z-20 w-full max-w-5xl -translate-x-1/2 transform px-4">
+      <div className="flex flex-1 flex-col items-center justify-center bg-slate-100 p-4">
+        {/* Top score bar */}
+        <div className="w-full max-w-5xl px-4 mb-4">
           <div className="mx-auto flex items-center justify-center gap-8 rounded-xl bg-white/80 py-2 px-4 text-center shadow">
             <div className="text-center">
-              <div className="text-xs uppercase tracking-wider text-slate-500">{players.p1} {playerSlot === 'p1' ? '(You)' : ''}</div>
+              <div className="text-xs uppercase tracking-wider text-slate-500">{players.p1} {searchParams.get('mode') !== 'local' && playerSlot === 'p1' ? '(You)' : ''}</div>
               <div className="text-2xl font-bold text-indigo-600">{scores.p1}</div>
             </div>
             <div className="text-sm font-medium text-slate-400">VS</div>
             <div className="text-center">
-              <div className="text-xs uppercase tracking-wider text-slate-500">{players.p2} {playerSlot === 'p2' ? '(You)' : ''}</div>
+              <div className="text-xs uppercase tracking-wider text-slate-500">{players.p2} {searchParams.get('mode') !== 'local' && playerSlot === 'p2' ? '(You)' : ''}</div>
               <div className="text-2xl font-bold text-rose-600">{scores.p2}</div>
             </div>
           </div>
@@ -429,21 +566,21 @@ const GameRoomPage = () => {
                   GAME OVER
                 </h3>
                 <div className="mb-6 text-3xl font-bold text-white">
-                  {winner === 'You' ? '🏆 You Won!' : '💀 You Lost'}
+                  {searchParams.get('mode') === 'local' ? `🏆 ${winner} Won!` : (winner === 'You' ? '🏆 You Won!' : '💀 You Lost')}
                 </div>
                 {/* Scores intentionally omitted from finished overlay per UX request */}
                 <div className="flex gap-4 justify-center">
                   <button 
                     onClick={() => {
                       if (id?.startsWith('local-')) {
-                        navigate('/tournament')
+                        handleNextMatch()
                       } else {
                         playAgain()
                       }
                     }}
                     className="rounded-full bg-white px-8 py-3 font-bold text-slate-900 hover:bg-indigo-50 transition-colors shadow-lg hover:shadow-xl transform hover:-translate-y-0.5"
                   >
-                    {id?.startsWith('local-') ? 'Back to Tournament' : 'Play Again'}
+                    {id?.startsWith('local-') ? (advanceToNextMatch(matchQueue, currentMatchIndex) === -1 ? 'View Results' : 'Next Match') : 'Play Again'}
                   </button>
                 </div>
               </div>
@@ -486,6 +623,7 @@ const GameRoomPage = () => {
             Chat unavailable in demo
           </div>
         </div>
+      </div>
       </div>
     </div>
   )

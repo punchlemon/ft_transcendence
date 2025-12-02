@@ -44,19 +44,24 @@ export class GameEngine {
 
   isWaitingForPlayers(): boolean {
     if (this.isAIEnabled) {
-      return this.state.status === 'WAITING' && !this.clients.p1;
+      // If AI is enabled, we are waiting if the OTHER slot is empty
+      const aiSlot = (this as any).aiSlot;
+      if (aiSlot === 'p1') return !this.clients.p2;
+      return !this.clients.p1;
     }
     return this.state.status === 'WAITING' && (!this.clients.p1 || !this.clients.p2);
   }
 
   addPlayer(socket: WebSocket, userId?: number, alias?: string): 'p1' | 'p2' | null {
-    if (!this.clients.p1) {
+    const aiSlot = (this as any).aiSlot;
+
+    if (!this.clients.p1 && aiSlot !== 'p1') {
       this.clients.p1 = socket;
       if (userId) this.players.p1 = userId;
       if (alias) this.playersAliases.p1 = alias;
       this.checkStart();
       return 'p1';
-    } else if (!this.clients.p2 && !this.isAIEnabled) {
+    } else if (!this.clients.p2 && aiSlot !== 'p2') {
       this.clients.p2 = socket;
       if (userId) this.players.p2 = userId;
       if (alias) this.playersAliases.p2 = alias;
@@ -66,12 +71,33 @@ export class GameEngine {
     return null; // Spectator?
   }
 
-  addAIPlayer(difficulty: AIDifficulty = 'NORMAL') {
-    if (this.clients.p2) return; // Slot taken
+  addAIPlayer(difficulty: AIDifficulty = 'NORMAL', preferredSlot?: 'p1' | 'p2') {
+    // Check if AI is already enabled
+    if (this.isAIEnabled) return;
+
+    // Determine slot for AI
+    let slot: 'p1' | 'p2' | null = null;
+
+    if (preferredSlot) {
+        if (preferredSlot === 'p1' && !this.clients.p1) slot = 'p1';
+        else if (preferredSlot === 'p2' && !this.clients.p2) slot = 'p2';
+    } else {
+        // Default: Prefer P2 (Standard User vs AI)
+        if (!this.clients.p2) slot = 'p2';
+        else if (!this.clients.p1) slot = 'p1';
+    }
+
+    if (!slot) return; // No slot available
+
     this.isAIEnabled = true;
     this.aiOpponent = new AIOpponent(this.config, difficulty);
-    // Label AI opponent with difficulty so it can be persisted/displayed
-    this.playersAliases.p2 = `AI (${difficulty})`;
+    
+    // Label AI opponent
+    this.playersAliases[slot] = `AI (${difficulty})`;
+    
+    // Store AI slot for tick processing
+    (this as any).aiSlot = slot;
+
     this.checkStart();
   }
 
@@ -90,8 +116,11 @@ export class GameEngine {
   }
 
   private checkStart() {
-    const p2Ready = this.clients.p2 || this.isAIEnabled;
-    if (this.clients.p1 && p2Ready && this.state.status === 'WAITING') {
+    // Check if both slots are filled (either by client or AI)
+    const p1Ready = this.clients.p1 || (this.isAIEnabled && (this as any).aiSlot === 'p1');
+    const p2Ready = this.clients.p2 || (this.isAIEnabled && (this as any).aiSlot === 'p2');
+
+    if (p1Ready && p2Ready && this.state.status === 'WAITING') {
       this.state.status = 'COUNTDOWN';
       this.broadcast({ event: 'match:event', payload: { type: 'COUNTDOWN', duration: 3 } });
       setTimeout(() => this.startGame(), 3000);
@@ -136,16 +165,16 @@ export class GameEngine {
     
     // AI Logic
     if (this.isAIEnabled && this.aiOpponent) {
+      const aiSlot = (this as any).aiSlot as 'p1' | 'p2' || 'p2'; // Default to p2 for backward compat
+
       // 1Hz Snapshot (every 120 ticks)
-      // We use modulo 120. If tick is 1, 121, 241...
-      // Or just check if tick % 120 === 0
       if (this.state.tick % 120 === 0) {
         this.aiOpponent.processSnapshot(this.state);
       }
       
       const aiInput = this.aiOpponent.getNextInput();
       if (aiInput) {
-        this.processInput('p2', aiInput);
+        this.processInput(aiSlot, aiInput);
       }
     }
 
