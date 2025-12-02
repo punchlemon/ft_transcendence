@@ -44,9 +44,9 @@ describe('App', () => {
     expect(screen.getByRole('link', { name: 'ft_transcendence' })).toBeInTheDocument()
   })
 
-  it('shows login link when user is not authenticated', () => {
+  it('redirects to login page when user is not authenticated', () => {
     render(<App />)
-    expect(screen.getByRole('link', { name: 'Login' })).toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: 'Login' })).toBeInTheDocument()
   })
 
   it('restores navbar state from sessionStorage snapshot', async () => {
