@@ -141,11 +141,6 @@ export type UserProfileResponse = {
     pointsScored: number
     pointsAgainst: number
   } | null
-  ladder: {
-    tier: string
-    division: number
-    mmr: number
-  } | null
   friendshipStatus: 'NONE' | 'FRIEND' | 'PENDING_SENT' | 'PENDING_RECEIVED'
   friendRequestId?: number
   isBlockedByViewer: boolean
@@ -331,11 +326,6 @@ export type UserSearchResponse = {
     login: string
     status: string
     avatarUrl: string | null
-    ladderProfile: {
-      mmr: number
-      tier: string
-      division: number
-    } | null
     mutualFriends: number
   }>
   meta: {
@@ -349,7 +339,7 @@ export type UserSearchParams = {
   page?: number
   limit?: number
   query?: string
-  sortBy?: 'displayName' | 'createdAt' | 'mmr'
+  sortBy?: 'displayName' | 'createdAt'
   order?: 'asc' | 'desc'
 }
 

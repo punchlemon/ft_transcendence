@@ -1,5 +1,5 @@
 import { FormEvent, useMemo, useState, useEffect } from 'react'
-import { useNavigate, useSearchParams } from 'react-router-dom'
+import { useNavigate, useSearchParams, Link } from 'react-router-dom'
 import { isAxiosError } from 'axios'
 import { login, fetchOAuthAuthorizationUrl, type OAuthProvider } from '../lib/api'
 import { resolveOAuthRedirectUri, saveOAuthRequestContext } from '../lib/oauth'
@@ -203,6 +203,13 @@ const LoginPage = () => {
             ))}
           </div>
           <p className="mt-3 text-xs text-slate-500">Please allow popups if the browser does not automatically redirect.</p>
+        </div>
+
+        <div className="mt-6 text-center text-sm text-slate-600">
+          Don&apos;t have an account?{' '}
+          <Link to="/register" className="font-medium text-indigo-600 hover:text-indigo-500">
+            Register here
+          </Link>
         </div>
       </section>
     </div>

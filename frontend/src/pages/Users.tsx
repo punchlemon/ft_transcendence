@@ -51,8 +51,8 @@ const UsersPage = () => {
     setParams((prev) => ({
       ...prev,
       sortBy,
-      // Toggle order if clicking the same sort field, otherwise default to asc (or desc for mmr/createdAt)
-      order: prev.sortBy === sortBy ? (prev.order === 'asc' ? 'desc' : 'asc') : (sortBy === 'mmr' || sortBy === 'createdAt' ? 'desc' : 'asc')
+      // Toggle order if clicking the same sort field, otherwise default to asc (or desc for createdAt)
+      order: prev.sortBy === sortBy ? (prev.order === 'asc' ? 'desc' : 'asc') : (sortBy === 'createdAt' ? 'desc' : 'asc')
     }))
   }
 
@@ -75,11 +75,11 @@ const UsersPage = () => {
   return (
     <div className="mx-auto max-w-5xl px-6 py-8">
       <div className="mb-8 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-        <h1 className="text-2xl font-bold text-slate-900">ユーザー検索</h1>
+        <h1 className="text-2xl font-bold text-slate-900">User Search</h1>
         <form onSubmit={handleSearch} className="flex gap-2">
           <input
             type="text"
-            placeholder="名前で検索..."
+            placeholder="Search by name..."
             className="rounded-md border border-slate-300 px-3 py-2 text-sm focus:border-indigo-500 focus:outline-none focus:ring-1 focus:ring-indigo-500"
             value={params.query ?? ''}
             onChange={(e) => setParams((prev) => ({ ...prev, query: e.target.value || undefined, page: 1 }))}
@@ -88,32 +88,25 @@ const UsersPage = () => {
       </div>
 
       <div className="mb-6 flex flex-wrap gap-2">
-        <span className="text-sm font-medium text-slate-700 self-center mr-2">並び替え:</span>
+        <span className="text-sm font-medium text-slate-700 self-center mr-2">Sort by:</span>
         <Button
           variant={params.sortBy === 'displayName' ? 'primary' : 'secondary'}
           onClick={() => handleSortChange('displayName')}
           className="text-xs"
         >
-          名前 {params.sortBy === 'displayName' && (params.order === 'asc' ? '↑' : '↓')}
-        </Button>
-        <Button
-          variant={params.sortBy === 'mmr' ? 'primary' : 'secondary'}
-          onClick={() => handleSortChange('mmr')}
-          className="text-xs"
-        >
-          MMR {params.sortBy === 'mmr' && (params.order === 'asc' ? '↑' : '↓')}
+          Name {params.sortBy === 'displayName' && (params.order === 'asc' ? '↑' : '↓')}
         </Button>
         <Button
           variant={params.sortBy === 'createdAt' ? 'primary' : 'secondary'}
           onClick={() => handleSortChange('createdAt')}
           className="text-xs"
         >
-          登録日 {params.sortBy === 'createdAt' && (params.order === 'asc' ? '↑' : '↓')}
+          Joined {params.sortBy === 'createdAt' && (params.order === 'asc' ? '↑' : '↓')}
         </Button>
       </div>
 
       {loading ? (
-        <div className="py-12 text-center text-slate-500">読み込み中...</div>
+        <div className="py-12 text-center text-slate-500">Loading...</div>
       ) : (
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
           {users?.map((user) => (
@@ -136,10 +129,9 @@ const UsersPage = () => {
               <div className="flex-1 min-w-0">
                 <h3 className="truncate font-medium text-slate-900">{user.displayName}</h3>
                 <div className="flex items-center gap-2 text-xs text-slate-500">
-                  <span>MMR: {user.ladderProfile?.mmr ?? 0}</span>
                   {user.mutualFriends > 0 && (
                     <span className="rounded-full bg-indigo-50 px-2 py-0.5 text-indigo-600">
-                      共通の友達 {user.mutualFriends}人
+                      {user.mutualFriends} mutual friends
                     </span>
                   )}
                 </div>
@@ -159,7 +151,7 @@ const UsersPage = () => {
       )}
 
       {users.length === 0 && !loading && (
-        <div className="py-12 text-center text-slate-500">ユーザーが見つかりませんでした</div>
+        <div className="py-12 text-center text-slate-500">No users found</div>
       )}
 
       <div className="mt-8 flex justify-center gap-2">
@@ -168,7 +160,7 @@ const UsersPage = () => {
           disabled={params.page === 1 || loading}
           onClick={() => handlePageChange((params.page || 1) - 1)}
         >
-          前へ
+          Previous
         </Button>
         <span className="flex items-center px-4 text-sm text-slate-600">
           {meta.page} / {Math.ceil(meta.total / meta.limit)}
@@ -178,7 +170,7 @@ const UsersPage = () => {
           disabled={meta.page * meta.limit >= meta.total || loading}
           onClick={() => handlePageChange((params.page || 1) + 1)}
         >
-          次へ
+          Next
         </Button>
       </div>
     </div>

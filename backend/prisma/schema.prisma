@@ -34,7 +34,6 @@ model User {
 
   inventory             InventoryItem[]
   wallet                Wallet?
-  ladderProfile         LadderProfile?
   stats                 UserStats?
   achievements          UserAchievement[]
   friendshipsA          Friendship[]        @relation("FriendshipA")
@@ -225,22 +224,6 @@ model InventoryItem {
   expiresAt DateTime?
 
   user      User      @relation(fields: [userId], references: [id])
-}
-
-model LadderProfile {
-  id             Int       @id @default(autoincrement())
-  userId         Int       @unique
-  mmr            Int       @default(1200)
-  tier           String    @default("BRONZE")
-  division       Int       @default(1)
-  placementGames Int       @default(0)
-  streak         Int       @default(0)
-  decayWarning   Boolean   @default(false)
-  lastMatchAt    DateTime?
-  createdAt      DateTime  @default(now())
-  updatedAt      DateTime  @updatedAt
-
-  user           User      @relation(fields: [userId], references: [id])
 }
 
 model UserStats {
@@ -442,7 +425,6 @@ model LadderEnrollment {
   ladderId  Int
   userId    Int
   rank      Int?
-  mmrDelta  Int      @default(0)
   joinedAt  DateTime @default(now())
   leftAt    DateTime?
 

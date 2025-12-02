@@ -23,13 +23,6 @@ const createUser = (prisma: PrismaClient, data: {
           pointsScored: 100,
           pointsAgainst: 50
         }
-      },
-      ladderProfile: {
-        create: {
-          mmr: 1500,
-          tier: 'GOLD',
-          division: 2
-        }
       }
     }
   })
@@ -94,7 +87,8 @@ describe('GET /api/users/:id', () => {
     await prisma.friendRequest.deleteMany()
     await prisma.friendship.deleteMany()
     await prisma.userStats.deleteMany()
-    await prisma.ladderProfile.deleteMany()
+    // await prisma.ladderProfile.deleteMany()
+    await prisma.ladderEnrollment.deleteMany()
     await prisma.user.deleteMany()
   })
 
@@ -117,9 +111,6 @@ describe('GET /api/users/:id', () => {
       stats: {
         wins: 10,
         losses: 5
-      },
-      ladder: {
-        tier: 'GOLD'
       },
       friendshipStatus: 'NONE',
       mutualFriends: 0

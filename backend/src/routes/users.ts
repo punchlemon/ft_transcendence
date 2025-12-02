@@ -15,7 +15,7 @@ const searchQuerySchema = z.object({
   page: z.coerce.number().int().min(1).default(1),
   limit: z.coerce.number().int().min(1).default(20),
   excludeFriendIds: z.string().optional(),
-  sortBy: z.enum(['displayName', 'createdAt', 'mmr']).default('displayName'),
+  sortBy: z.enum(['displayName', 'createdAt']).default('displayName'),
   order: z.enum(['asc', 'desc']).default('asc')
 })
 
@@ -147,13 +147,6 @@ const usersRoutes: FastifyPluginAsync = async (fastify) => {
             pointsScored: true,
             pointsAgainst: true
           }
-        },
-        ladderProfile: {
-          select: {
-            tier: true,
-            division: true,
-            mmr: true
-          }
         }
       }
     })
@@ -244,8 +237,6 @@ const usersRoutes: FastifyPluginAsync = async (fastify) => {
 
     return {
       ...user,
-      ladder: user.ladderProfile,
-      ladderProfile: undefined,
       friendshipStatus,
       friendRequestId,
       isBlockedByViewer,
@@ -481,11 +472,7 @@ const usersRoutes: FastifyPluginAsync = async (fastify) => {
 
     let orderBy: Prisma.UserOrderByWithRelationInput | Prisma.UserOrderByWithRelationInput[] = []
 
-    if (sortBy === 'mmr') {
-      orderBy = { ladderProfile: { mmr: order } }
-    } else {
-      orderBy = { [sortBy]: order }
-    }
+    orderBy = { [sortBy]: order }
 
     // Secondary sort to ensure stable pagination
     if (Array.isArray(orderBy)) {
@@ -504,10 +491,7 @@ const usersRoutes: FastifyPluginAsync = async (fastify) => {
           login: true,
           status: true,
           avatarUrl: true,
-          country: true,
-          ladderProfile: {
-            select: { mmr: true }
-          }
+          country: true
         },
         orderBy,
         skip,

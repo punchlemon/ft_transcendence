@@ -415,6 +415,7 @@ const authRoutes: FastifyPluginAsync = async (fastify) => {
       select: {
         id: true,
         displayName: true,
+        login: true,
         status: true
       }
     })
@@ -1256,6 +1257,7 @@ const authRoutes: FastifyPluginAsync = async (fastify) => {
         select: {
           id: true,
           displayName: true,
+          login: true,
           status: true
         }
       })
@@ -1305,6 +1307,7 @@ const authRoutes: FastifyPluginAsync = async (fastify) => {
           select: {
             id: true,
             displayName: true,
+            login: true,
             status: true
           }
         }

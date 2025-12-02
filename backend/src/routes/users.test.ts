@@ -87,7 +87,7 @@ describe('GET /api/users', () => {
     await prisma.blocklist.deleteMany()
     await prisma.friendRequest.deleteMany()
     await prisma.userStats.deleteMany()
-    await prisma.ladderProfile.deleteMany()
+    // await prisma.ladderProfile.deleteMany()
     await prisma.ladderEnrollment.deleteMany()
     await prisma.wallet.deleteMany()
     await prisma.inventoryItem.deleteMany()
@@ -235,30 +235,6 @@ describe('GET /api/users', () => {
     expect(body.data[0].id).toBe(user2.id)
     expect(body.data[1].id).toBe(user1.id)
   })
-
-  it('sorts users by mmr desc', async () => {
-    const viewer = await createUser(prisma, { login: 'viewer', email: 'viewer@example.com', displayName: 'Viewer' })
-    const token = await createSessionToken(server, prisma, viewer.id)
-
-    const weak = await createUser(prisma, { login: 'weak', email: 'weak@example.com', displayName: 'Weak' })
-    await prisma.ladderProfile.create({ data: { userId: weak.id, mmr: 1000, tier: 'BRONZE', division: 4 } })
-
-    const strong = await createUser(prisma, { login: 'strong', email: 'strong@example.com', displayName: 'Strong' })
-    await prisma.ladderProfile.create({ data: { userId: strong.id, mmr: 2000, tier: 'GOLD', division: 1 } })
-
-    const response = await server.inject({
-      method: 'GET',
-      url: '/api/users',
-      query: { sortBy: 'mmr', order: 'desc' },
-      headers: authHeader(token)
-    })
-
-    expect(response.statusCode).toBe(200)
-    const body = response.json<{ data: Array<{ id: number }> }>()
-    
-    expect(body.data[0].id).toBe(strong.id)
-    expect(body.data[1].id).toBe(weak.id)
-  })
 })
 
 describe('PATCH /api/users/:id', () => {
@@ -295,7 +271,7 @@ describe('PATCH /api/users/:id', () => {
     await prisma.blocklist.deleteMany()
     await prisma.friendRequest.deleteMany()
     await prisma.userStats.deleteMany()
-    await prisma.ladderProfile.deleteMany()
+    // await prisma.ladderProfile.deleteMany()
     await prisma.ladderEnrollment.deleteMany()
     await prisma.wallet.deleteMany()
     await prisma.inventoryItem.deleteMany()
