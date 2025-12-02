@@ -45,6 +45,12 @@ export default async function chatWsRoutes(fastify: FastifyInstance) {
   });
 
   fastify.get('/ws/chat', { websocket: true }, async (connection: any, req: any) => {
+    // Guard: if this route was reached without a websocket connection object
+    // (e.g. an accidental HTTP GET), avoid crashing the server.
+    if (!connection || !connection.socket) {
+      req.log && req.log.warn && req.log.warn('WebSocket handler invoked without a connection.socket')
+      return
+    }
     const token = (req.query as any).token;
     if (!token) {
       connection.socket.close(1008, 'Token required');

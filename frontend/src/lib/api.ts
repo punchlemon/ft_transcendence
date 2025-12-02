@@ -248,10 +248,12 @@ export type TournamentDetail = Tournament & {
     playerA: {
       participantId: number
       alias: string
+      inviteState: string
     } | null
     playerB: {
       participantId: number
       alias: string
+      inviteState: string
     } | null
     winnerId: number | null
     scoreA?: number | null

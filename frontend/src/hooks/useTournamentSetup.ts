@@ -1,4 +1,4 @@
-import { useState, FormEvent } from 'react'
+import { useState, FormEvent, useEffect } from 'react'
 import { normalizeAlias, aliasExists } from '../lib/tournament'
 import { createTournament, fetchTournament, TournamentDetail } from '../lib/api'
 import useAuthStore from '../stores/authStore'
@@ -10,6 +10,12 @@ export const useTournamentSetup = () => {
   const [errorMessage, setErrorMessage] = useState<string | null>(null)
   const [infoMessage, setInfoMessage] = useState<string | null>(null)
   const [isCreating, setIsCreating] = useState(false)
+
+  useEffect(() => {
+    if (user && players.length === 0) {
+      setPlayers([user.displayName])
+    }
+  }, [user, players.length])
 
   const handleRegisterPlayer = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault()
@@ -64,10 +70,15 @@ export const useTournamentSetup = () => {
 
     setIsCreating(true)
     try {
+      const finalPlayers = [...players]
+      if (finalPlayers.length % 2 !== 0) {
+        finalPlayers.push('AI')
+      }
+
       const res = await createTournament({
         name: `${user.displayName}'s Tournament ${new Date().toLocaleTimeString()}`,
         createdById: user.id,
-        participants: players.map(p => ({ alias: p }))
+        participants: finalPlayers.map(p => ({ alias: p }))
       })
       
       const detail = await fetchTournament(res.data.id)

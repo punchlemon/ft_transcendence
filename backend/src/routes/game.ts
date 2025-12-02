@@ -46,7 +46,7 @@ export default async function gameRoutes(fastify: FastifyInstance) {
     // Use GameManager to find/create game
     // In future, extract sessionId from req.query or token
     const manager = GameManager.getInstance();
-    const query = req.query as { mode?: string; difficulty?: string; sessionId?: string };
+    const query = req.query as { mode?: string; difficulty?: string; sessionId?: string; aiSlot?: string };
     
     let gameResult;
     if (query.sessionId) {
@@ -58,6 +58,10 @@ export default async function gameRoutes(fastify: FastifyInstance) {
       } else {
         // Create new game with this specific ID
         gameResult = { game: manager.createGame(query.sessionId), sessionId: query.sessionId };
+      }
+
+      if (query.mode === 'ai') {
+        gameResult.game.addAIPlayer((query.difficulty as any) || 'NORMAL', (query.aiSlot as any));
       }
     } else if (query.mode === 'ai') {
       gameResult = manager.createAIGame((query.difficulty as any) || 'NORMAL');

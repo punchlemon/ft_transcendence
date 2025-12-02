@@ -102,7 +102,17 @@ const tournamentsRoutes: FastifyPluginAsync = async (fastify) => {
       }
     })
 
-    // Generate Round 1 Matches
+    // Create a Placeholder Participant for empty slots
+    const placeholder = await fastify.prisma.tournamentParticipant.create({
+      data: {
+        tournamentId: tournament.id,
+        alias: 'TBD',
+        inviteState: 'PLACEHOLDER',
+        userId: null
+      }
+    })
+
+    // Generate Full Bracket
     if (tournament.participants.length >= 2) {
       // Sort participants by ID to ensure they are in the order of creation (which matches input order)
       // This is our "Seed Order" (Seed 1, Seed 2, ...)
@@ -112,6 +122,9 @@ const tournamentsRoutes: FastifyPluginAsync = async (fastify) => {
       const seededParticipants = tournamentService.padWithBye(sortedParticipants)
       
       const matchesToCreate = []
+      let currentRoundMatchesCount = 0
+
+      // Round 1
       for (let i = 0; i < seededParticipants.length; i += 2) {
         const playerA = seededParticipants[i];
         const playerB = seededParticipants[i+1]; // Can be null (Bye)
@@ -124,28 +137,63 @@ const tournamentsRoutes: FastifyPluginAsync = async (fastify) => {
             playerBId: playerB.id,
             status: 'PENDING'
           })
+          currentRoundMatchesCount++
         } else if (playerA && !playerB) {
-          // Player A gets a Bye
+          // Player A gets a Bye -> Replace with AI
+          const aiParticipant = await fastify.prisma.tournamentParticipant.create({
+            data: {
+              tournamentId: tournament.id,
+              alias: 'AI',
+              inviteState: 'AI',
+              userId: null
+            }
+          })
+
           matchesToCreate.push({
             tournamentId: tournament.id,
             round: 1,
             playerAId: playerA.id,
-            playerBId: null, // Bye
-            status: 'FINISHED',
-            winnerId: playerA.id
+            playerBId: aiParticipant.id,
+            status: 'PENDING'
           })
+          currentRoundMatchesCount++
         }
-        // Note: playerA should not be null because padWithBye puts nulls at the end of the seed list,
-        // and getSeededPlayerList distributes them.
-        // However, if getSeededPlayerList returns [null, P1], we might have an issue.
-        // But getSeededPlayerList logic pairs (0, 7), (3, 4) etc.
-        // If we have 6 players, padded to 8.
-        // Indices 6 and 7 are null.
-        // Pairs: (0, 7) -> P1 vs null. (3, 4) -> P4 vs P5. (1, 6) -> P2 vs null. (2, 5) -> P3 vs P6.
-        // So we will encounter pairs where playerB is null.
-        // We shouldn't encounter pairs where playerA is null, unless the tournament is empty or logic is weird.
-        // But for safety, we check playerA.
       }
+
+      // Generate subsequent rounds (empty placeholders)
+      let round = 2
+      let matchesInRound = currentRoundMatchesCount
+      
+      // If we have N matches in Round 1, we need N/2 matches in Round 2, etc.
+      // Wait, if we have Byes, the number of matches in Round 1 might be less than Size/2?
+      // No, padWithBye ensures size is power of 2.
+      // So seededParticipants.length is power of 2 (e.g. 4, 8, 16).
+      // Matches in Round 1 = Size / 2.
+      
+      matchesInRound = seededParticipants.length / 2
+      
+      while (matchesInRound > 1) {
+        matchesInRound /= 2
+        for (let i = 0; i < matchesInRound; i++) {
+            matchesToCreate.push({
+                tournamentId: tournament.id,
+                round: round,
+                playerAId: placeholder.id,
+                playerBId: placeholder.id,
+                status: 'PENDING'
+            })
+        }
+        round++
+      }
+      // Add Final Match (if not added by loop, e.g. if matchesInRound became 1)
+      // The loop condition `matchesInRound > 1` stops when matchesInRound becomes 1.
+      // But we need to create that 1 match.
+      // Example: 4 players. Round 1 has 2 matches.
+      // Loop: matchesInRound = 2.
+      // matchesInRound /= 2 => 1.
+      // Loop runs once. Creates 1 match for Round 2.
+      // Loop condition `1 > 1` is false. Stops.
+      // Correct.
 
       if (matchesToCreate.length > 0) {
         await fastify.prisma.tournamentMatch.createMany({
@@ -264,8 +312,8 @@ const tournamentsRoutes: FastifyPluginAsync = async (fastify) => {
         matches: {
           orderBy: [{ round: 'asc' }, { id: 'asc' }],
           include: {
-            playerA: { select: { id: true, alias: true } },
-            playerB: { select: { id: true, alias: true } }
+            playerA: { select: { id: true, alias: true, inviteState: true } },
+            playerB: { select: { id: true, alias: true, inviteState: true } }
           }
         }
       }
@@ -307,11 +355,13 @@ const tournamentsRoutes: FastifyPluginAsync = async (fastify) => {
           scheduledAt: match.scheduledAt ? match.scheduledAt.toISOString() : null,
           playerA: match.playerA ? {
             participantId: match.playerA.id,
-            alias: match.playerA.alias
+            alias: match.playerA.alias,
+            inviteState: match.playerA.inviteState
           } : null,
           playerB: match.playerB ? {
             participantId: match.playerB.id,
-            alias: match.playerB.alias
+            alias: match.playerB.alias,
+            inviteState: match.playerB.inviteState
           } : null,
           winnerId: match.winnerId,
           scoreA: match.scoreA,
@@ -352,6 +402,8 @@ const tournamentsRoutes: FastifyPluginAsync = async (fastify) => {
         reply.code(404).send({ error: { code: 'MATCH_NOT_FOUND', message: error.message } })
       } else if (error.message === 'Winner is not a participant of this match') {
         reply.code(400).send({ error: { code: 'INVALID_WINNER', message: error.message } })
+      } else if (error.message === 'SCORES_REQUIRED') {
+        reply.code(400).send({ error: { code: 'SCORES_REQUIRED', message: 'Both scoreA and scoreB must be provided' } })
       } else {
         request.log.error(error)
         reply.code(500).send({ error: { code: 'INTERNAL_SERVER_ERROR', message: 'Internal server error' } })

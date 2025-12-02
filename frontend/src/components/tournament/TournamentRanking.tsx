@@ -49,16 +49,9 @@ const TournamentRanking = ({ tournament, onClose }: TournamentRankingProps) => {
         const s = stats.get(m.playerB.participantId)
         if (s && m.round > s.maxRound) s.maxRound = m.round
       }
-
-      // Check winner of the tournament (last match winner)
-      // Actually, tournament.winnerId is set on the tournament object if completed.
-      // But we can also check if this is the final match.
     })
 
     // Determine winner from tournament object if available
-    // Note: tournament.winnerId refers to User ID, not Participant ID.
-    // We need to match via userId or check the final match.
-    // Let's use the final match logic.
     const maxRound = Math.max(...matches.map(m => m.round))
     const finalMatch = matches.find(m => m.round === maxRound)
     
@@ -67,17 +60,19 @@ const TournamentRanking = ({ tournament, onClose }: TournamentRankingProps) => {
         if (s) s.isWinner = true
     }
 
-    // Convert to array and sort
-    const rankedList = Array.from(stats.values()).sort((a, b) => {
-      if (a.isWinner) return -1
-      if (b.isWinner) return 1
-      
-      // Sort by max round (descending) - those who played later rounds rank higher
-      if (b.maxRound !== a.maxRound) return b.maxRound - a.maxRound
-      
-      // Sort by total score (descending)
-      return b.totalScore - a.totalScore
-    })
+    // Convert to array, filter out placeholders, and sort
+    const rankedList = Array.from(stats.values())
+      .filter(p => p.alias !== 'TBD') // Filter out placeholders
+      .sort((a, b) => {
+        if (a.isWinner) return -1
+        if (b.isWinner) return 1
+        
+        // Sort by max round (descending)
+        if (b.maxRound !== a.maxRound) return b.maxRound - a.maxRound
+        
+        // Sort by total score (descending)
+        return b.totalScore - a.totalScore
+      })
 
     // Assign ranks (handling ties)
     const result: RankedParticipant[] = []

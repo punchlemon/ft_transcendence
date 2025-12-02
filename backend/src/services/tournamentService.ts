@@ -3,6 +3,11 @@ import { Prisma } from '@prisma/client';
 
 export const tournamentService = {
   async handleMatchResult(matchId: number, winnerUserId: number, scoreA?: number, scoreB?: number) {
+    // Prevent saving a match result without both scores provided
+    if (typeof scoreA === 'undefined' || typeof scoreB === 'undefined') {
+      throw new Error('SCORES_REQUIRED')
+    }
+
     await prisma.$transaction(async (tx) => {
       // 1. Get the match with participants
       const match = await tx.tournamentMatch.findUnique({
@@ -19,11 +24,10 @@ export const tournamentService = {
       }
 
       if (match.status === 'FINISHED') {
-        // Already finished, maybe just return or throw
         return;
       }
 
-      // Lock the tournament to prevent race conditions
+      // Lock the tournament
       await tx.tournament.update({
         where: { id: match.tournamentId },
         data: { updatedAt: new Date() }
@@ -50,114 +54,83 @@ export const tournamentService = {
         }
       });
 
-      // 4. Check if all matches in the current round are finished
-      const currentRound = match.round;
-      const tournamentId = match.tournamentId;
-
-      const unfinishedMatches = await tx.tournamentMatch.count({
-        where: {
-          tournamentId,
-          round: currentRound,
-          status: { not: 'FINISHED' }
-        }
-      });
-
-      if (unfinishedMatches > 0) {
-        return; // Round not finished yet
-      }
-
-      // 5. Round finished, proceed to next round
-      await this.proceedToNextRound(tournamentId, currentRound, tx);
+      // 4. Advance winner to next round
+      await this.advanceWinner(match, winnerParticipantId, tx);
     });
   },
 
-  async proceedToNextRound(tournamentId: number, currentRound: number, tx: Prisma.TransactionClient) {
-    // Generate next round matches
-    const nextRound = currentRound + 1;
+  async advanceWinner(match: any, winnerId: number, tx: Prisma.TransactionClient) {
+    const tournamentId = match.tournamentId;
+    const currentRound = match.round;
 
-    // Check if next round matches already exist to prevent duplicates
-    const existingNextRoundMatches = await tx.tournamentMatch.count({
-      where: {
-        tournamentId,
-        round: nextRound
-      }
+    // Get all matches in the current round to determine index
+    const currentRoundMatches = await tx.tournamentMatch.findMany({
+      where: { tournamentId, round: currentRound },
+      orderBy: { id: 'asc' }
     });
 
-    if (existingNextRoundMatches > 0) {
+    const matchIndex = currentRoundMatches.findIndex(m => m.id === match.id);
+    if (matchIndex === -1) return;
+
+    // Calculate next match index
+    const nextMatchIndex = Math.floor(matchIndex / 2);
+    const isTopPosition = matchIndex % 2 === 0;
+
+    // Find the next round match
+    const nextRoundMatches = await tx.tournamentMatch.findMany({
+      where: { tournamentId, round: currentRound + 1 },
+      orderBy: { id: 'asc' }
+    });
+
+    if (nextRoundMatches.length === 0) {
+      // No next round matches -> Tournament Completed?
+      if (currentRoundMatches.length === 1) {
+         // Tournament Completed
+         const winnerParticipant = await tx.tournamentParticipant.findUnique({ where: { id: winnerId } });
+         if (winnerParticipant && winnerParticipant.userId) {
+             await tx.tournament.update({
+                 where: { id: tournamentId },
+                 data: {
+                     status: 'COMPLETED',
+                     winnerId: winnerParticipant.userId
+                 }
+             });
+         }
+      }
       return;
     }
 
-    // Get all matches from the current round to determine winners
-    const matches = await tx.tournamentMatch.findMany({
-      where: {
-        tournamentId,
-        round: currentRound
-      },
-      orderBy: {
-        id: 'asc' // Ensure consistent ordering for pairing
-      },
-      include: {
-        winner: true
-      }
-    });
-
-    const winners = [];
-    for (const m of matches) {
-      if (m.winner) {
-        winners.push(m.winner);
-      }
-    }
-
-    if (winners.length === 0) {
+    const targetMatch = nextRoundMatches[nextMatchIndex];
+    if (!targetMatch) {
         return;
     }
 
-    if (winners.length === 1) {
-      // Tournament Completed
-      const finalWinner = winners[0];
-      if (finalWinner && finalWinner.userId) {
-          await tx.tournament.update({
-            where: { id: tournamentId },
-            data: {
-              status: 'COMPLETED',
-              winnerId: finalWinner.userId
-            }
-          });
-      }
-      return;
+    // Update the target match
+    const updateData: any = {};
+    if (isTopPosition) {
+        updateData.playerAId = winnerId;
+    } else {
+        updateData.playerBId = winnerId;
     }
 
-    const nextRoundMatches = [];
+    const updatedMatch = await tx.tournamentMatch.update({
+        where: { id: targetMatch.id },
+        data: updateData,
+        include: { playerA: true, playerB: true }
+    });
 
-    for (let i = 0; i < winners.length; i += 2) {
-      const playerA = winners[i];
-      const playerB = winners[i+1]; // Can be undefined if odd number of winners
+    // Check if we can start the next match
+    const pA = updatedMatch.playerA;
+    const pB = updatedMatch.playerB;
 
-      if (playerB) {
-        nextRoundMatches.push({
-          tournamentId,
-          round: nextRound,
-          playerAId: playerA.id,
-          playerBId: playerB.id,
-          status: 'PENDING'
+    const isPlaceholderA = pA?.inviteState === 'PLACEHOLDER';
+    const isPlaceholderB = pB?.inviteState === 'PLACEHOLDER';
+
+    if (pA && pB && !isPlaceholderA && !isPlaceholderB) {
+        await tx.tournamentMatch.update({
+            where: { id: targetMatch.id },
+            data: { status: 'PENDING' }
         });
-      } else {
-        // Odd number of winners, last one gets a Bye
-        nextRoundMatches.push({
-          tournamentId,
-          round: nextRound,
-          playerAId: playerA.id,
-          playerBId: null, // Bye
-          status: 'FINISHED',
-          winnerId: playerA.id
-        });
-      }
-    }
-    
-    if (nextRoundMatches.length > 0) {
-      await tx.tournamentMatch.createMany({
-        data: nextRoundMatches
-      });
     }
   },
 

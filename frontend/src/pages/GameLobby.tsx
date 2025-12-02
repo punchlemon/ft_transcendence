@@ -281,6 +281,7 @@ const GameLobbyPage = () => {
                     matches={generatePreviewMatches(tournamentSetup.players) as any} 
                     currentMatchIndex={-1}
                     onRemovePlayer={tournamentSetup.handleRemovePlayer}
+                    currentUserAlias={user?.displayName}
                   />
                 </div>
               )}
