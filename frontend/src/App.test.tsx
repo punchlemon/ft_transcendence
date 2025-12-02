@@ -52,14 +52,14 @@ describe('App', () => {
   it('restores navbar state from sessionStorage snapshot', async () => {
     sessionStorage.setItem('ft_access_token', 'sample-access')
     sessionStorage.setItem('ft_refresh_token', 'sample-refresh')
-    sessionStorage.setItem('ft_user', JSON.stringify({ id: 9, displayName: 'Daisy', status: 'ONLINE' }))
+    sessionStorage.setItem('ft_user', JSON.stringify({ id: 9, login: 'daisy', displayName: 'Daisy', status: 'ONLINE' }))
 
     render(<App />)
 
     await waitFor(() => {
       expect(screen.getByTestId('navbar-auth-state')).toBeInTheDocument()
     })
-    expect(screen.getByText('Daisy')).toBeInTheDocument()
+    expect(screen.getByText(/Daisy/)).toBeInTheDocument()
   })
 
   it('renders 2FA route content', () => {
