@@ -27,7 +27,7 @@ const OAuthCallbackPage = () => {
   const navigate = useNavigate()
   const [searchParams] = useSearchParams()
   const [status, setStatus] = useState<CallbackStatus>('validating')
-  const [message, setMessage] = useState('OAuth プロバイダからの応答を検証しています。')
+  const [message, setMessage] = useState('Validating response from OAuth provider.')
   const [details, setDetails] = useState<string | null>(null)
   const [retryEnabled, setRetryEnabled] = useState(false)
   const [countdown, setCountdown] = useState(3)
@@ -56,8 +56,8 @@ const OAuthCallbackPage = () => {
         sessionStorage.setItem(MFA_CHALLENGE_KEY, response.challengeId)
       }
       setStatus('needsMfa')
-      setMessage('二段階認証を完了してください。')
-      setDetails('OAuth 連携は成功しました。続けてワンタイムコードを入力してください。')
+      setMessage('Please complete two-factor authentication.')
+      setDetails('OAuth connection successful. Please enter the one-time code.')
       setRetryEnabled(false)
     }
 
@@ -66,13 +66,13 @@ const OAuthCallbackPage = () => {
         return
       }
       if (!response.user || !response.tokens) {
-        fail('ログイン情報の確定に失敗しました。', 'もう一度ログインページから OAuth を実行してください。')
+        fail('Failed to finalize login information.', 'Please try OAuth again from the login page.')
         return
       }
       setSession({ user: response.user, tokens: response.tokens })
       setStatus('success')
-      setMessage(`${response.user.displayName} としてログインが完了しました。`)
-      setDetails('数秒後に自動でトップページへ移動します。')
+      setMessage(`Logged in as ${response.user.displayName}.`)
+      setDetails('Redirecting to home page in a few seconds.')
       setRetryEnabled(false)
       setCountdown(3)
     }
@@ -87,28 +87,28 @@ const OAuthCallbackPage = () => {
       const context = readOAuthRequestContext()
 
       if (errorParam) {
-        fail('OAuth 認証がキャンセルされました。', errorDescription ?? `エラーコード: ${errorParam}`)
+        fail('OAuth authentication cancelled.', errorDescription ?? `Error code: ${errorParam}`)
         return
       }
 
       if (!code || !stateParam) {
-        fail('認証コードまたは state が不足しています。', 'ブラウザを更新せず、最初からログインをやり直してください。')
+        fail('Missing authentication code or state.', 'Please restart login without refreshing the browser.')
         return
       }
 
       if (!context) {
-        fail('OAuth セッション情報を復元できませんでした。', 'ブラウザのストレージがクリアされた可能性があります。ログインから再試行してください。')
+        fail('Could not restore OAuth session information.', 'Browser storage may have been cleared. Please try logging in again.')
         return
       }
 
       if (context.state !== stateParam) {
-        fail('state の検証に失敗しました。', 'セッションが失効したか、リクエストが改ざんされた可能性があります。')
+        fail('State verification failed.', 'Session may have expired or request may have been tampered with.')
         return
       }
 
       const provider = context.provider ?? providerFromQuery
       if (!provider) {
-        fail('OAuth プロバイダを特定できませんでした。', 'ログイン画面から対象のプロバイダを選び直してください。')
+        fail('Could not identify OAuth provider.', 'Please select the provider again from the login screen.')
         return
       }
 
@@ -127,9 +127,9 @@ const OAuthCallbackPage = () => {
       } catch (error) {
         if (isAxiosError(error) && error.response?.data && 'error' in error.response.data) {
           const apiMessage = (error.response.data as { error?: { message?: string } }).error?.message
-          fail('OAuth コールバック処理に失敗しました。', apiMessage ?? '時間をおいて再試行してください。')
+          fail('OAuth callback processing failed.', apiMessage ?? 'Please try again later.')
         } else {
-          fail('OAuth コールバック処理に失敗しました。', 'ネットワーク状態を確認してから再試行してください。')
+          fail('OAuth callback processing failed.', 'Please check your network connection and try again.')
         }
       }
     }
@@ -161,10 +161,10 @@ const OAuthCallbackPage = () => {
     // This avoids immediately navigating away after this page itself calls
     // `setSession()` during a successful callback (which would prevent the
     // success message and countdown from being shown).
-    if (isHydrated && user && status !== 'validating') {
+    if (isHydrated && user && status !== 'validating' && status !== 'success') {
       navigate('/', { replace: true })
     }
-  }, [isHydrated, user, navigate])
+  }, [isHydrated, user, navigate, status])
 
   const renderActions = () => {
     if (status === 'success') {
@@ -174,7 +174,7 @@ const OAuthCallbackPage = () => {
           onClick={() => navigate('/', { replace: true })}
           className="rounded-lg border border-slate-300 px-4 py-2 text-sm font-semibold text-slate-800 hover:bg-slate-50"
         >
-          すぐにホームへ移動する
+          Go to Home immediately
         </button>
       )
     }
@@ -185,7 +185,7 @@ const OAuthCallbackPage = () => {
           onClick={() => navigate('/auth/2fa')}
           className="rounded-lg border border-indigo-300 bg-indigo-50 px-4 py-2 text-sm font-semibold text-indigo-800 hover:bg-indigo-100"
         >
-          2FA コード入力ページへ
+          Go to 2FA Code Entry
         </button>
       )
     }
@@ -196,7 +196,7 @@ const OAuthCallbackPage = () => {
           onClick={() => navigate('/login')}
           className="rounded-lg border border-slate-300 px-4 py-2 text-sm font-semibold text-slate-800 hover:bg-slate-50"
         >
-          ログイン画面に戻る
+          Return to Login
         </button>
       )
     }
@@ -206,8 +206,8 @@ const OAuthCallbackPage = () => {
   return (
     <div className="mx-auto flex max-w-3xl flex-col gap-8 px-6 py-10">
       <section className="rounded-2xl border border-slate-200 bg-white p-8 shadow-sm">
-        <h1 className="text-2xl font-bold text-slate-900">OAuth コールバック</h1>
-        <p className="mt-2 text-sm text-slate-600">OAuth プロバイダから戻ったリクエストを検証しています。</p>
+        <h1 className="text-2xl font-bold text-slate-900">OAuth Callback</h1>
+        <p className="mt-2 text-sm text-slate-600">Validating request returned from OAuth provider.</p>
 
         <div
           className={`mt-6 rounded-lg border px-4 py-3 text-sm ${
@@ -223,7 +223,7 @@ const OAuthCallbackPage = () => {
         >
           <p>{message}</p>
           {status === 'success' ? (
-            <p className="mt-2 text-xs">{countdown} 秒後にトップページへ移動します。</p>
+            <p className="mt-2 text-xs">Redirecting to home page in {countdown} seconds.</p>
           ) : null}
           {details ? <p className="mt-2 text-xs opacity-80">{details}</p> : null}
         </div>
@@ -235,22 +235,3 @@ const OAuthCallbackPage = () => {
 }
 
 export default OAuthCallbackPage
-
-/*
-解説:
-
-1) 状態管理
-  - OAuth コールバックの検証状態 (`status`)、メッセージ、詳細、リトライ可否、成功時のカウントダウン秒数を `useState` で管理し、UI と副作用を明確に分離している。
-
-2) validateAndSubmit()
-  - クエリパラメータ、`sessionStorage` に保存した state/provider を照合し、`completeOAuthCallback` を呼び出して JWT もしくは MFA チャレンジを受け取る。検証に失敗した場合は即座にエラーメッセージを表示し、再ログイン導線を提示する。
-
-3) handleSuccess / handleMfaRequired
-  - 成功時は `authStore.setSession()` を経由してセッションを保存し、自動リダイレクトのカウントダウンを開始。MFA が必要な場合はチャレンジ ID を保存して `/auth/2fa` へのボタンを表示する。
-
-4) renderActions()
-  - 成功/エラー/MFA で異なる CTA を描画し、利用者が次に取るべき行動を単一のボタンで示している。
-
-5) レイアウト
-  - 他の認証系ページと同じカードレイアウトで、状態に応じた配色 (緑/黄/赤) を用いたアラートを表示し、フィードバックを視覚的に把握しやすくしている。
-*/

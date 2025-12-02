@@ -1,11 +1,11 @@
 /**
- * なぜテストが必要か:
- * - OAuth コールバック処理が失敗すると、OAuth ログインユーザーがセッションを確立できなくなるため。
- * - state 検証や MFA 分岐、API エラーを網羅し再帰的な失敗を防ぐ必要がある。
+ * Why this test is needed:
+ * - To ensure OAuth callback processing works correctly, preventing login failures.
+ * - To cover state verification, MFA flows, and API errors, preventing regressions.
  */
 import { describe, it, expect, beforeEach, vi } from 'vitest'
 import { render, screen, waitFor } from '@testing-library/react'
-import { MemoryRouter } from 'react-router-dom'
+import { MemoryRouter, Route, Routes } from 'react-router-dom'
 import { AxiosError, type AxiosResponse } from 'axios'
 import OAuthCallbackPage from './OAuthCallback'
 import { completeOAuthCallback } from '../lib/api'
@@ -26,7 +26,9 @@ const mockedComplete = vi.mocked(completeOAuthCallback)
 const renderWithRouter = (url: string) =>
   render(
     <MemoryRouter initialEntries={[url]}>
-      <OAuthCallbackPage />
+      <Routes>
+        <Route path="/oauth/callback" element={<OAuthCallbackPage />} />
+      </Routes>
     </MemoryRouter>
   )
 
@@ -54,7 +56,7 @@ describe('OAuthCallbackPage', () => {
   it('completes OAuth login and stores tokens', async () => {
     saveOAuthRequestContext({ state: 'state-1', provider: 'fortytwo', codeChallenge: null })
     const apiResponse: CallbackResponse = {
-      user: { id: 1, displayName: 'Alice', status: 'ONLINE' },
+      user: { id: 1, displayName: 'Alice', login: 'alice', status: 'ONLINE' },
       tokens: { access: 'access-token', refresh: 'refresh-token' },
       mfaRequired: false,
       challengeId: null,
@@ -74,11 +76,11 @@ describe('OAuthCallbackPage', () => {
       })
     })
 
-    expect(await screen.findByText('Alice としてログインが完了しました。')).toBeInTheDocument()
+    expect(await screen.findByText('Logged in as Alice.')).toBeInTheDocument()
     expect(sessionStorage.getItem('ft_access_token')).toBe('access-token')
     expect(sessionStorage.getItem('ft_refresh_token')).toBe('refresh-token')
     expect(sessionStorage.getItem('ft_user')).toBe(
-      JSON.stringify({ id: 1, displayName: 'Alice', status: 'ONLINE' })
+      JSON.stringify({ id: 1, displayName: 'Alice', login: 'alice', status: 'ONLINE' })
     )
   })
 
@@ -94,9 +96,9 @@ describe('OAuthCallbackPage', () => {
 
     renderWithRouter('/oauth/callback?code=zzz&state=state-2')
 
-    expect(await screen.findByText('二段階認証を完了してください。')).toBeInTheDocument()
+    expect(await screen.findByText('Please complete two-factor authentication.')).toBeInTheDocument()
     expect(sessionStorage.getItem('ft_mfa_challenge_id')).toBe('challenge-xyz')
-    expect(screen.getByRole('button', { name: '2FA コード入力ページへ' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Go to 2FA Code Entry' })).toBeInTheDocument()
   })
 
   it('shows error when state does not match storage', async () => {
@@ -105,10 +107,10 @@ describe('OAuthCallbackPage', () => {
     renderWithRouter('/oauth/callback?code=abc&state=other-state')
 
     expect(
-      await screen.findByText('state の検証に失敗しました。', { selector: 'p' })
+      await screen.findByText('State verification failed.', { selector: 'p' })
     ).toBeInTheDocument()
     expect(mockedComplete).not.toHaveBeenCalled()
-    expect(screen.getByRole('button', { name: 'ログイン画面に戻る' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Return to Login' })).toBeInTheDocument()
   })
 
   it('surfaced API error message when backend returns failure', async () => {
@@ -121,7 +123,7 @@ describe('OAuthCallbackPage', () => {
 
     renderWithRouter('/oauth/callback?code=abc&state=state-3')
 
-    expect(await screen.findByText('OAuth コールバック処理に失敗しました。')).toBeInTheDocument()
+    expect(await screen.findByText('OAuth callback processing failed.')).toBeInTheDocument()
     expect(screen.getByText('state expired')).toBeInTheDocument()
   })
 })

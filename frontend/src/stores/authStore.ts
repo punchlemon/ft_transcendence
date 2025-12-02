@@ -3,7 +3,9 @@ import { create } from 'zustand'
 export type AuthUserSnapshot = {
   id: number
   displayName: string
+  login: string
   status: string
+  avatarUrl?: string
 }
 
 type AuthTokens = {

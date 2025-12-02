@@ -17,7 +17,7 @@ vi.mock('react-router-dom', async () => {
 describe('GameLobbyPage', () => {
   beforeEach(() => {
     // set a logged-in user so lobby actions are enabled during tests
-    useAuthStore.setState({ user: { id: 1, displayName: 'Test', status: 'ONLINE' } })
+    useAuthStore.setState({ user: { id: 1, displayName: 'Test', login: 'test', status: 'ONLINE' } })
     mockNavigate.mockClear()
   })
 

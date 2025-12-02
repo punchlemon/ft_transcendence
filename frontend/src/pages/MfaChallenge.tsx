@@ -65,7 +65,7 @@ const MfaChallengePage = () => {
 
     if (!challengeId) {
       setChallengeMissing(true)
-      setErrorMessage('チャレンジ ID が見つかりません。再度ログインしてください。')
+      setErrorMessage('Challenge ID not found. Please log in again.')
       return
     }
 
@@ -76,7 +76,7 @@ const MfaChallengePage = () => {
     }
 
     if (!payload.code && !payload.backupCode) {
-      setErrorMessage('コードを入力してください。')
+      setErrorMessage('Please enter the code.')
       return
     }
 
@@ -85,7 +85,7 @@ const MfaChallengePage = () => {
       const response = await submitMfaChallenge(payload)
       setSession({ user: response.user, tokens: response.tokens })
       sessionStorage.removeItem('ft_mfa_challenge_id')
-      setStatusMessage(`${response.user.displayName} としてログインが完了しました。`)
+      setStatusMessage(`Logged in as ${response.user.displayName}.`)
       setChallengeMissing(false)
       setCode('')
       setBackupCode('')
@@ -98,17 +98,17 @@ const MfaChallengePage = () => {
           sessionStorage.removeItem('ft_mfa_challenge_id')
           setChallengeId(null)
           setChallengeMissing(true)
-          setErrorMessage('チャレンジの有効期限が切れました。もう一度ログインしてください。')
+          setErrorMessage('Challenge expired. Please log in again.')
           return
         }
 
         if (data?.error?.code === 'MFA_BACKUP_CODES_EXHAUSTED') {
-          setErrorMessage('バックアップコードがすべて使用済みです。TOTP を入力してください。')
+          setErrorMessage('All backup codes have been used. Please enter TOTP.')
         } else {
-          setErrorMessage(data?.error?.message ?? 'コードの検証に失敗しました。')
+          setErrorMessage(data?.error?.message ?? 'Failed to verify code.')
         }
       } else {
-        setErrorMessage('コードの検証に失敗しました。時間をおいて再試行してください。')
+        setErrorMessage('Failed to verify code. Please try again later.')
       }
     } finally {
       setIsSubmitting(false)
@@ -120,22 +120,22 @@ const MfaChallengePage = () => {
   return (
     <div className="mx-auto flex max-w-xl flex-col gap-8 px-6 py-10">
       <section className="rounded-2xl border border-slate-200 bg-white p-8 shadow-sm">
-        <h1 className="text-2xl font-bold text-slate-900">二段階認証</h1>
-        <p className="mt-2 text-sm text-slate-600">認証アプリの 6 桁コード、またはバックアップコードを入力してください。</p>
+        <h1 className="text-2xl font-bold text-slate-900">Two-Factor Authentication</h1>
+        <p className="mt-2 text-sm text-slate-600">Please enter the 6-digit code from your authenticator app or a backup code.</p>
 
         {challengeMissing ? (
           <div role="alert" className="mt-6 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
-            <p>有効なチャレンジ ID が見つかりません。再度ログインを実行してください。</p>
-            <p className="mt-2 text-xs text-amber-800">ログインページでメールアドレスとパスワードを入力し直した後、この画面に戻ってください。</p>
+            <p>Valid challenge ID not found. Please log in again.</p>
+            <p className="mt-2 text-xs text-amber-800">Please return to this screen after re-entering your email and password on the login page.</p>
             <a href="/login" className="mt-3 inline-flex text-xs text-indigo-600 underline">
-              ログインページを開く
+              Open Login Page
             </a>
             <button
               type="button"
               className="mt-3 inline-flex items-center rounded-md border border-slate-300 px-3 py-1 text-xs font-medium text-slate-700 hover:bg-slate-50"
               onClick={refreshChallengeId}
             >
-              チャレンジ ID を再読み込み
+              Reload Challenge ID
             </button>
           </div>
         ) : null}
@@ -164,12 +164,12 @@ const MfaChallengePage = () => {
               }}
               disabled={disableForm}
             />
-            バックアップコードを使用する
+            Use backup code
           </label>
 
           {useBackupCode ? (
             <label className="flex flex-col gap-2 text-sm font-medium text-slate-700">
-              バックアップコード
+              Backup Code
               <input
                 type="text"
                 className="rounded-lg border border-slate-300 px-4 py-2 text-base text-slate-900 focus:border-indigo-500 focus:outline-none"
@@ -182,7 +182,7 @@ const MfaChallengePage = () => {
             </label>
           ) : (
             <label className="flex flex-col gap-2 text-sm font-medium text-slate-700">
-              6桁コード
+              6-digit Code
               <input
                 type="text"
                 inputMode="numeric"
@@ -201,7 +201,7 @@ const MfaChallengePage = () => {
             className="mt-2 inline-flex items-center justify-center rounded-lg bg-indigo-600 px-4 py-2 font-semibold text-white hover:bg-indigo-500 disabled:cursor-not-allowed disabled:bg-slate-400"
             disabled={disableForm || isSubmitDisabled()}
           >
-            {isSubmitting ? '送信中...' : 'コードを送信'}
+            {isSubmitting ? 'Submitting...' : 'Submit Code'}
           </button>
         </form>
       </section>
@@ -210,19 +210,3 @@ const MfaChallengePage = () => {
 }
 
 export default MfaChallengePage
-
-/*
-解説:
-
-1) challengeId のハイドレーション
-  - `sessionStorage` の `ft_mfa_challenge_id` を読み込み、存在しない場合はフォームをロックして再ログインを促す。
-
-2) バリデーションと状態管理
-  - TOTP/バックアップコードそれぞれで入力ルールを分岐し、6 桁の数字や `ABCD-EFGH` 形式に制限してから API を呼び出す。
-
-3) submitMfaChallenge
-  - `/auth/mfa/challenge` を呼び出し、成功時は `authStore.setSession()` とステータスメッセージを更新、失敗時は HTTP ステータスごとにエラーメッセージを出し分ける。
-
-4) UI 表示
-  - アラートカードでエラー/成功を表示し、チャレンジ ID 欠落時はログインページへのリンクと再読み込みボタンを提供する。
-*/

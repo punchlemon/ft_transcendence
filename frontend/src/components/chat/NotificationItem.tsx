@@ -1,0 +1,106 @@
+import { useState } from 'react'
+import { useNavigate } from 'react-router-dom'
+import { useNotificationStore, type Notification } from '../../stores/notificationStore'
+import { acceptFriendRequest } from '../../lib/api'
+
+const NotificationItem = ({ notification }: { notification: Notification }) => {
+  const markAsRead = useNotificationStore((state) => state.markAsRead)
+  const deleteNotification = useNotificationStore((state) => state.deleteNotification)
+  const navigate = useNavigate()
+  const [actionStatus, setActionStatus] = useState<'idle' | 'loading' | 'success' | 'error'>('idle')
+
+  const handleClick = () => {
+    if (!notification.read) {
+      markAsRead(notification.id)
+    }
+  }
+
+  const handleAcceptFriend = async () => {
+    if (!notification.data?.requestId) return
+    setActionStatus('loading')
+    try {
+      await acceptFriendRequest(notification.data.requestId)
+      setActionStatus('success')
+      deleteNotification(notification.id)
+    } catch (error) {
+      console.error(error)
+      setActionStatus('error')
+    }
+  }
+
+  const handleDeclineFriend = async () => {
+    deleteNotification(notification.id)
+  }
+
+  const handleGameInvite = () => {
+    const gameId = notification.data?.gameId || notification.data?.sessionId
+    if (gameId) {
+      navigate(`/game/${gameId}`)
+    }
+  }
+
+  return (
+    <div
+      className={`flex flex-col gap-2 border-b border-slate-100 p-4 transition-colors hover:bg-slate-50 ${
+        !notification.read ? 'bg-indigo-50/40' : ''
+      }`}
+      onClick={handleClick}
+    >
+      <div className="flex justify-between gap-4">
+        <p className="text-sm text-slate-800">{notification.message}</p>
+        <button
+          onClick={(e) => {
+            e.stopPropagation()
+            deleteNotification(notification.id)
+          }}
+          className="shrink-0 text-slate-400 hover:text-slate-600"
+          title="Delete"
+        >
+          ×
+        </button>
+      </div>
+      <span className="text-xs text-slate-500">{new Date(notification.createdAt).toLocaleString()}</span>
+
+      {notification.type === 'FRIEND_REQUEST' && actionStatus !== 'success' && (
+        <div className="mt-2 flex gap-2">
+          <button
+            onClick={(e) => {
+              e.stopPropagation()
+              handleAcceptFriend()
+            }}
+            disabled={actionStatus === 'loading'}
+            className="rounded bg-indigo-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-indigo-500 disabled:opacity-50"
+          >
+            Accept
+          </button>
+          <button
+            onClick={(e) => {
+              e.stopPropagation()
+              handleDeclineFriend()
+            }}
+            disabled={actionStatus === 'loading'}
+            className="rounded border border-slate-300 bg-white px-3 py-1.5 text-xs font-medium text-slate-700 hover:bg-slate-50 disabled:opacity-50"
+          >
+            Decline
+          </button>
+        </div>
+      )}
+
+      {notification.type === 'MATCH_INVITE' ? (
+        <div className="mt-2 flex gap-2">
+          <button
+            onClick={(e) => {
+              e.stopPropagation()
+              handleGameInvite()
+            }}
+            className="rounded bg-emerald-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-emerald-500"
+          >
+            Join
+          </button>
+        </div>
+      ) : null}
+    </div>
+  )
+}
+
+export default NotificationItem

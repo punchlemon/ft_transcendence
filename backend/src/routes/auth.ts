@@ -154,6 +154,28 @@ const oauthCallbackSchema = z.object({
   redirectUri: z.string().url()
 })
 
+const RESERVED_USERNAMES = [
+  'admin',
+  'login',
+  'api',
+  'help',
+  'profile',
+  'settings',
+  'dashboard',
+  'auth',
+  'users',
+  'game',
+  'chat',
+  'notifications',
+  'register',
+  'logout',
+  'home',
+  'about',
+  'contact',
+  'terms',
+  'privacy'
+]
+
 const registerSchema = z.object({
   email: z
     .string()
@@ -165,8 +187,11 @@ const registerSchema = z.object({
     .string()
     .trim()
     .min(3)
-    .max(32)
-    .regex(/^[a-zA-Z0-9_-]+$/, { message: 'Only letters, numbers, _ and - are allowed' }),
+    .max(30)
+    .regex(/^[a-zA-Z0-9_]+$/, { message: 'Only letters, numbers and _ are allowed' })
+    .refine((val) => !RESERVED_USERNAMES.includes(val.toLowerCase()), {
+      message: 'This username is reserved'
+    }),
   password: z
     .string()
     .min(8)

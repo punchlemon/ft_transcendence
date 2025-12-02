@@ -119,7 +119,7 @@ const UsersPage = () => {
           {users?.map((user) => (
             <Link
               key={user.id}
-              to={`/profile/${user.id}`}
+              to={`/${user.login}`}
               className="flex items-center gap-4 rounded-lg border border-slate-200 bg-white p-4 transition-shadow hover:shadow-md"
             >
               <div className="h-12 w-12 flex-shrink-0 overflow-hidden rounded-full bg-slate-100">

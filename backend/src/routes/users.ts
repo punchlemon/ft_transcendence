@@ -33,16 +33,19 @@ const parseExcludeIds = (excludeFriendIds?: string) => {
 const updateProfileSchema = z.object({
   displayName: z.string().trim().min(1).max(32).optional(),
   bio: z.string().trim().max(255).optional(),
-  avatarUrl: z.string().trim().url().optional()
+  avatarUrl: z.union([z.string().trim().url(), z.literal('')]).optional()
 })
 
 const usersRoutes: FastifyPluginAsync = async (fastify) => {
   const paramsSchema = z.object({
-    id: z.coerce.number().int().positive()
+    id: z.union([
+      z.coerce.number().int().positive(),
+      z.string().trim().min(3)
+    ])
   })
 
   fastify.patch('/users/:id', { preHandler: fastify.authenticate }, async (request, reply) => {
-    const paramsParsed = paramsSchema.safeParse(request.params)
+    const paramsParsed = z.object({ id: z.coerce.number().int().positive() }).safeParse(request.params)
     if (!paramsParsed.success) {
       reply.code(400)
       return { error: { code: 'INVALID_PARAMS', message: 'Invalid user ID' } }
@@ -68,7 +71,8 @@ const usersRoutes: FastifyPluginAsync = async (fastify) => {
       }
     }
 
-    const { displayName, bio, avatarUrl } = bodyParsed.data
+    const { displayName, bio, avatarUrl: rawAvatarUrl } = bodyParsed.data
+    const avatarUrl = rawAvatarUrl === '' ? null : rawAvatarUrl
 
     // Check if displayName is taken (if changed)
     if (displayName) {
@@ -109,14 +113,23 @@ const usersRoutes: FastifyPluginAsync = async (fastify) => {
     const parsed = paramsSchema.safeParse(request.params)
     if (!parsed.success) {
       reply.code(400)
-      return { error: { code: 'INVALID_PARAMS', message: 'Invalid user ID' } }
+      return { error: { code: 'INVALID_PARAMS', message: 'Invalid user ID or username' } }
     }
 
-    const { id: targetId } = parsed.data
+    const { id: paramId } = parsed.data
     const viewerId = request.user.userId
 
+    let whereInput: Prisma.UserWhereUniqueInput
+    if (typeof paramId === 'number') {
+      whereInput = { id: paramId, deletedAt: null }
+    } else if (/^\d+$/.test(paramId)) {
+      whereInput = { id: Number(paramId), deletedAt: null }
+    } else {
+      whereInput = { login: paramId, deletedAt: null }
+    }
+
     const user = await fastify.prisma.user.findUnique({
-      where: { id: targetId, deletedAt: null },
+      where: whereInput,
       select: {
         id: true,
         displayName: true,
@@ -149,6 +162,8 @@ const usersRoutes: FastifyPluginAsync = async (fastify) => {
       reply.code(404)
       return { error: { code: 'USER_NOT_FOUND', message: 'User not found' } }
     }
+
+    const targetId = user.id
 
     // Friendship Status
     let friendshipStatus: 'NONE' | 'FRIEND' | 'PENDING_SENT' | 'PENDING_RECEIVED' = 'NONE'
@@ -240,10 +255,16 @@ const usersRoutes: FastifyPluginAsync = async (fastify) => {
   })
 
   fastify.get('/users/:id/matches', { preHandler: fastify.authenticate }, async (request, reply) => {
-    const paramsParsed = paramsSchema.safeParse(request.params)
+    const paramsParsed = z.object({
+      id: z.union([
+        z.coerce.number().int().positive(),
+        z.string().trim().min(3)
+      ])
+    }).safeParse(request.params)
+
     if (!paramsParsed.success) {
       reply.code(400)
-      return { error: { code: 'INVALID_PARAMS', message: 'Invalid user ID' } }
+      return { error: { code: 'INVALID_PARAMS', message: 'Invalid user ID or username' } }
     }
 
     const querySchema = z.object({
@@ -257,9 +278,26 @@ const usersRoutes: FastifyPluginAsync = async (fastify) => {
       return { error: { code: 'INVALID_QUERY', message: 'Invalid query parameters' } }
     }
 
-    const { id: userId } = paramsParsed.data
+    const { id: paramId } = paramsParsed.data
     const { page, limit } = queryParsed.data
     const skip = (page - 1) * limit
+
+    let userId: number
+    if (typeof paramId === 'number') {
+      userId = paramId
+    } else if (/^\d+$/.test(paramId)) {
+      userId = Number(paramId)
+    } else {
+      const user = await fastify.prisma.user.findUnique({
+        where: { login: paramId },
+        select: { id: true }
+      })
+      if (!user) {
+        reply.code(404)
+        return { error: { code: 'USER_NOT_FOUND', message: 'User not found' } }
+      }
+      userId = user.id
+    }
 
     const [total, matches] = await fastify.prisma.$transaction([
       fastify.prisma.match.count({
@@ -351,13 +389,36 @@ const usersRoutes: FastifyPluginAsync = async (fastify) => {
   })
 
   fastify.get('/users/:id/friends', { preHandler: fastify.authenticate }, async (request, reply) => {
-    const parsed = paramsSchema.safeParse(request.params)
-    if (!parsed.success) {
+    const paramsParsed = z.object({
+      id: z.union([
+        z.coerce.number().int().positive(),
+        z.string().trim().min(3)
+      ])
+    }).safeParse(request.params)
+
+    if (!paramsParsed.success) {
       reply.code(400)
-      return { error: { code: 'INVALID_PARAMS', message: 'Invalid user ID' } }
+      return { error: { code: 'INVALID_PARAMS', message: 'Invalid user ID or username' } }
     }
 
-    const { id: userId } = parsed.data
+    const { id: paramId } = paramsParsed.data
+    
+    let userId: number
+    if (typeof paramId === 'number') {
+      userId = paramId
+    } else if (/^\d+$/.test(paramId)) {
+      userId = Number(paramId)
+    } else {
+      const user = await fastify.prisma.user.findUnique({
+        where: { login: paramId },
+        select: { id: true }
+      })
+      if (!user) {
+        reply.code(404)
+        return { error: { code: 'USER_NOT_FOUND', message: 'User not found' } }
+      }
+      userId = user.id
+    }
 
     const friendships = await fastify.prisma.friendship.findMany({
       where: {

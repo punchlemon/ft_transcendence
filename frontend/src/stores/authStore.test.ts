@@ -15,21 +15,21 @@ describe('authStore', () => {
   it('stores tokens and user snapshot when setSession is called', () => {
     const store = useAuthStore.getState()
     store.setSession({
-      user: { id: 1, displayName: 'Alice', status: 'ONLINE' },
+      user: { id: 1, displayName: 'Alice', login: 'alice', status: 'ONLINE' },
       tokens: { access: 'access-token', refresh: 'refresh-token' }
     })
 
     const latest = useAuthStore.getState()
     expect(latest.user?.displayName).toBe('Alice')
     expect(latest.accessToken).toBe('access-token')
-    expect(sessionStorage.getItem('ft_user')).toBe(JSON.stringify({ id: 1, displayName: 'Alice', status: 'ONLINE' }))
+    expect(sessionStorage.getItem('ft_user')).toBe(JSON.stringify({ id: 1, displayName: 'Alice', login: 'alice', status: 'ONLINE' }))
     expect(latest.isHydrated).toBe(true)
   })
 
   it('hydrates state from sessionStorage exactly once', () => {
     sessionStorage.setItem('ft_access_token', 'stored-access')
     sessionStorage.setItem('ft_refresh_token', 'stored-refresh')
-    sessionStorage.setItem('ft_user', JSON.stringify({ id: 2, displayName: 'Bob', status: 'OFFLINE' }))
+    sessionStorage.setItem('ft_user', JSON.stringify({ id: 2, displayName: 'Bob', login: 'bob', status: 'OFFLINE' }))
 
     const store = useAuthStore.getState()
     store.hydrateFromStorage()
@@ -45,7 +45,7 @@ describe('authStore', () => {
   it('clears state and storage when clearSession is called', () => {
     const store = useAuthStore.getState()
     store.setSession({
-      user: { id: 3, displayName: 'Carol', status: 'ONLINE' },
+      user: { id: 3, displayName: 'Carol', login: 'carol', status: 'ONLINE' },
       tokens: { access: 'acc', refresh: 'ref' }
     })
 

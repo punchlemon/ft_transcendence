@@ -25,32 +25,32 @@ const RegisterPage = () => {
   const validateInput = (): boolean => {
     const normalizedEmail = email.trim().toLowerCase()
     if (!normalizedEmail) {
-      setErrorMessage('メールアドレスを入力してください。')
+      setErrorMessage('Please enter your email address.')
       return false
     }
     const emailPattern = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
     if (!emailPattern.test(normalizedEmail)) {
-      setErrorMessage('有効なメールアドレスを入力してください。')
+      setErrorMessage('Please enter a valid email address.')
       return false
     }
     if (!username || username.length < 3) {
-      setErrorMessage('ユーザー名は3文字以上で入力してください。')
+      setErrorMessage('Username must be at least 3 characters.')
       return false
     }
     if (!/^[a-zA-Z0-9_-]+$/.test(username)) {
-      setErrorMessage('ユーザー名は半角英数字、アンダースコア(_)、ハイフン(-)のみ使用できます。')
+      setErrorMessage('Username can only contain alphanumeric characters, underscores, and hyphens.')
       return false
     }
     if (!displayName || displayName.length < 3) {
-      setErrorMessage('表示名は3文字以上で入力してください。')
+      setErrorMessage('Display name must be at least 3 characters.')
       return false
     }
     if (!password || password.length < 8) {
-      setErrorMessage('パスワードは8文字以上で入力してください。')
+      setErrorMessage('Password must be at least 8 characters.')
       return false
     }
     if (!/[A-Za-z]/.test(password) || !/\d/.test(password)) {
-      setErrorMessage('パスワードは英字と数字の両方を含める必要があります。')
+      setErrorMessage('Password must contain both letters and numbers.')
       return false
     }
     return true
@@ -77,7 +77,7 @@ const RegisterPage = () => {
     } catch (error) {
       if (isAxiosError(error) && error.response?.data && 'error' in error.response.data) {
         const errorData = error.response.data as { error?: { message?: string; details?: Record<string, string[]> } }
-        let message = errorData.error?.message ?? '登録に失敗しました。'
+        let message = errorData.error?.message ?? 'Registration failed.'
 
         if (errorData.error?.details) {
           const details = Object.values(errorData.error.details).flat().join(' ')
@@ -87,7 +87,7 @@ const RegisterPage = () => {
         }
         setErrorMessage(message)
       } else {
-        setErrorMessage('登録に失敗しました。時間をおいて再試行してください。')
+        setErrorMessage('Registration failed. Please try again later.')
       }
     } finally {
       setIsSubmitting(false)
@@ -97,9 +97,9 @@ const RegisterPage = () => {
   return (
     <div className="mx-auto flex max-w-3xl flex-col gap-8 px-6 py-10">
       <section className="rounded-2xl border border-slate-200 bg-white p-8 shadow-sm">
-        <h1 className="text-2xl font-bold text-slate-900">新規登録</h1>
+        <h1 className="text-2xl font-bold text-slate-900">Register</h1>
         <p className="mt-2 text-sm text-slate-600">
-          アカウントを作成してゲームに参加しましょう。
+          Create an account to join the game.
         </p>
 
         {errorMessage ? (
@@ -110,7 +110,7 @@ const RegisterPage = () => {
 
         <form className="mt-6 flex flex-col gap-4" onSubmit={handleSubmit} noValidate>
           <label className="flex flex-col gap-2 text-sm font-medium text-slate-700">
-            メールアドレス
+            Email Address
             <input
               type="email"
               className="rounded-lg border border-slate-300 px-4 py-2 text-base text-slate-900 focus:border-indigo-500 focus:outline-none"
@@ -123,39 +123,39 @@ const RegisterPage = () => {
           </label>
 
           <label className="flex flex-col gap-2 text-sm font-medium text-slate-700">
-            ユーザー名 (ID)
+            Username (ID)
             <input
               type="text"
               className="rounded-lg border border-slate-300 px-4 py-2 text-base text-slate-900 focus:border-indigo-500 focus:outline-none"
               value={username}
               onChange={(event) => setUsername(event.target.value)}
-              placeholder="半角英数字"
+              placeholder="Alphanumeric"
               disabled={isSubmitting}
               required
             />
           </label>
 
           <label className="flex flex-col gap-2 text-sm font-medium text-slate-700">
-            表示名
+            Display Name
             <input
               type="text"
               className="rounded-lg border border-slate-300 px-4 py-2 text-base text-slate-900 focus:border-indigo-500 focus:outline-none"
               value={displayName}
               onChange={(event) => setDisplayName(event.target.value)}
-              placeholder="ゲーム内で表示される名前"
+              placeholder="Name displayed in game"
               disabled={isSubmitting}
               required
             />
           </label>
 
           <label className="flex flex-col gap-2 text-sm font-medium text-slate-700">
-            パスワード
+            Password
             <input
               type="password"
               className="rounded-lg border border-slate-300 px-4 py-2 text-base text-slate-900 focus:border-indigo-500 focus:outline-none"
               value={password}
               onChange={(event) => setPassword(event.target.value)}
-              placeholder="8文字以上"
+              placeholder="8+ characters"
               disabled={isSubmitting}
               required
             />
@@ -166,14 +166,14 @@ const RegisterPage = () => {
             className="mt-2 inline-flex items-center justify-center rounded-lg bg-indigo-600 px-4 py-2 font-semibold text-white hover:bg-indigo-500 disabled:cursor-not-allowed disabled:bg-slate-400"
             disabled={isSubmitting}
           >
-            {isSubmitting ? '登録中...' : 'アカウント作成'}
+            {isSubmitting ? 'Registering...' : 'Create Account'}
           </button>
         </form>
 
         <div className="mt-6 text-center text-sm text-slate-600">
-          すでにアカウントをお持ちですか？{' '}
+          Already have an account?{' '}
           <Link to="/login" className="font-medium text-indigo-600 hover:text-indigo-500">
-            ログインはこちら
+            Login here
           </Link>
         </div>
       </section>

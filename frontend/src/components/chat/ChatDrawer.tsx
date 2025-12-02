@@ -2,8 +2,10 @@ import { useState, useEffect, useRef, useMemo } from 'react'
 import { useNavigate } from 'react-router-dom'
 import useAuthStore from '../../stores/authStore'
 import { useChatStore } from '../../stores/chatStore'
+import { useNotificationStore } from '../../stores/notificationStore'
 import { connectChatWs, disconnectChatWs } from '../../lib/chatWs'
 import { inviteToGame } from '../../lib/api'
+import NotificationItem from './NotificationItem'
 
 const ChatDrawer = () => {
   const [isOpen, setIsOpen] = useState(false)
@@ -22,6 +24,7 @@ const ChatDrawer = () => {
     selectThread, 
     sendMessage 
   } = useChatStore()
+  const { notifications, fetchNotifications } = useNotificationStore()
 
   // Ensure threads is always an array to avoid test/runtime errors when store is uninitialized
   const threadsArr = threads ?? []
@@ -31,11 +34,12 @@ const ChatDrawer = () => {
     if (user) {
       connectChatWs()
       fetchThreads()
+      fetchNotifications()
     }
     return () => {
       disconnectChatWs()
     }
-  }, [user, fetchThreads])
+  }, [user, fetchThreads, fetchNotifications])
 
   const activeMessages = useMemo(() => {
     return activeThreadId ? (messages?.[activeThreadId] || []) : []
@@ -241,8 +245,16 @@ const ChatDrawer = () => {
                     </div>
                   )
                 ) : (
-                  <div className="p-4 text-center text-sm text-slate-500">
-                    No system notifications
+                  <div className="divide-y divide-slate-100">
+                    {notifications.length > 0 ? (
+                      notifications.map((notification) => (
+                        <NotificationItem key={notification.id} notification={notification} />
+                      ))
+                    ) : (
+                      <div className="p-4 text-center text-sm text-slate-500">
+                        No system notifications
+                      </div>
+                    )}
                   </div>
                 )}
               </div>

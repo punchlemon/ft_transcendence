@@ -159,6 +159,10 @@
 - [x] **User Search Implementation**
     - [x] Implement backend sorting/filtering
     - [x] Create `Users` page with search/sort UI
+- [x] **Navigation Bar Cleanup**
+    - [x] Create `UserMenu` dropdown component
+    - [x] Group Profile/Settings/Logout into dropdown
+    - [x] Update `App.tsx` and add tests
 
 ## Development Commands (Docker)
 - **Reset Database**: `docker compose exec backend npm run db:reset` (Clears all data in container)

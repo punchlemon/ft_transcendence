@@ -1,7 +1,7 @@
 /**
- * なぜテストが必要か:
- * - 2FA チャレンジ画面が誤動作すると、MFA 有効ユーザーがログインできなくなるため。
- * - TOTP/バックアップコードやチャレンジ失効時の分岐を網羅しておくことで回帰を防ぐ。
+ * Why this test is needed:
+ * - To ensure 2FA challenge screen works correctly, preventing lockout for MFA users.
+ * - To cover TOTP/backup code flows and challenge expiration, preventing regressions.
  */
 import { describe, it, expect, beforeEach, vi } from 'vitest'
 import { render, screen, waitFor } from '@testing-library/react'
@@ -40,14 +40,14 @@ describe('MfaChallengePage', () => {
 
   it('shows warning when challenge id is missing', () => {
     render(<MfaChallengePage />)
-    expect(screen.getByText('有効なチャレンジ ID が見つかりません。再度ログインを実行してください。')).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: 'コードを送信' })).toBeDisabled()
+    expect(screen.getByText('Valid challenge ID not found. Please log in again.')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Submit Code' })).toBeDisabled()
   })
 
   it('submits totp code successfully and stores tokens', async () => {
     sessionStorage.setItem('ft_mfa_challenge_id', 'challenge-123')
     const apiResponse: MfaResponse = {
-      user: { id: 1, displayName: 'Alice', status: 'ONLINE' },
+      user: { id: 1, displayName: 'Alice', login: 'alice', status: 'ONLINE' },
       tokens: { access: 'access-token', refresh: 'refresh-token' },
       mfaRequired: false
     }
@@ -56,15 +56,15 @@ describe('MfaChallengePage', () => {
     const user = userEvent.setup()
     render(<MfaChallengePage />)
 
-    await user.type(screen.getByLabelText('6桁コード'), '123456')
-    await user.click(screen.getByRole('button', { name: 'コードを送信' }))
+    await user.type(screen.getByLabelText('6-digit Code'), '123456')
+    await user.click(screen.getByRole('button', { name: 'Submit Code' }))
 
     await waitFor(() => {
       expect(mockedSubmit).toHaveBeenCalledWith({ challengeId: 'challenge-123', code: '123456', backupCode: undefined })
     })
     expect(sessionStorage.getItem('ft_access_token')).toBe('access-token')
     expect(sessionStorage.getItem('ft_refresh_token')).toBe('refresh-token')
-    expect(sessionStorage.getItem('ft_user')).toBe(JSON.stringify({ id: 1, displayName: 'Alice', status: 'ONLINE' }))
+    expect(sessionStorage.getItem('ft_user')).toBe(JSON.stringify({ id: 1, displayName: 'Alice', login: 'alice', status: 'ONLINE' }))
     expect(sessionStorage.getItem('ft_mfa_challenge_id')).toBeNull()
   })
 
@@ -74,26 +74,26 @@ describe('MfaChallengePage', () => {
 
     render(<MfaChallengePage />)
 
-    await user.click(screen.getByLabelText('バックアップコードを使用する'))
-    await user.type(screen.getByLabelText('バックアップコード'), 'abcd-efgh')
-    expect(screen.getByLabelText('バックアップコード')).toHaveValue('ABCD-EFGH')
+    await user.click(screen.getByLabelText('Use backup code'))
+    await user.type(screen.getByLabelText('Backup Code'), 'abcd-efgh')
+    expect(screen.getByLabelText('Backup Code')).toHaveValue('ABCD-EFGH')
   })
 
   it('shows validation error when API reports invalid code', async () => {
     sessionStorage.setItem('ft_mfa_challenge_id', 'challenge-789')
     mockedSubmit.mockRejectedValue(
       createAxiosError(400, {
-        error: { code: 'INVALID_MFA_CODE', message: 'コードが一致しません' }
+        error: { code: 'INVALID_MFA_CODE', message: 'Invalid code' }
       })
     )
 
     const user = userEvent.setup()
     render(<MfaChallengePage />)
 
-    await user.type(screen.getByLabelText('6桁コード'), '654321')
-    await user.click(screen.getByRole('button', { name: 'コードを送信' }))
+    await user.type(screen.getByLabelText('6-digit Code'), '654321')
+    await user.click(screen.getByRole('button', { name: 'Submit Code' }))
 
-    expect(await screen.findByText('コードが一致しません')).toBeInTheDocument()
+    expect(await screen.findByText('Invalid code')).toBeInTheDocument()
     expect(sessionStorage.getItem('ft_mfa_challenge_id')).toBe('challenge-789')
   })
 
@@ -108,10 +108,10 @@ describe('MfaChallengePage', () => {
     const user = userEvent.setup()
     render(<MfaChallengePage />)
 
-    await user.type(screen.getByLabelText('6桁コード'), '111111')
-    await user.click(screen.getByRole('button', { name: 'コードを送信' }))
+    await user.type(screen.getByLabelText('6-digit Code'), '111111')
+    await user.click(screen.getByRole('button', { name: 'Submit Code' }))
 
-    expect(await screen.findByText('チャレンジの有効期限が切れました。もう一度ログインしてください。')).toBeInTheDocument()
+    expect(await screen.findByText('Challenge expired. Please log in again.')).toBeInTheDocument()
     expect(sessionStorage.getItem('ft_mfa_challenge_id')).toBeNull()
   })
 })
