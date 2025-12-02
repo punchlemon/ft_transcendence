@@ -10,6 +10,8 @@ async function main() {
       email: true,
       displayName: true,
       createdAt: true,
+      deletedAt: true,
+      status: true,
     },
   });
 

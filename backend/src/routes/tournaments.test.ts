@@ -50,7 +50,7 @@ describe('Tournaments API', () => {
     await server.prisma.friendRequest.deleteMany()
     await server.prisma.notification.deleteMany()
     await server.prisma.ladderEnrollment.deleteMany()
-    await server.prisma.ladderProfile.deleteMany()
+    // await server.prisma.ladderProfile.deleteMany()
     await server.prisma.userStats.deleteMany()
     await server.prisma.userAchievement.deleteMany()
     await server.prisma.inventoryItem.deleteMany()

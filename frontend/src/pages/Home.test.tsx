@@ -26,7 +26,7 @@ describe('HomePage', () => {
   it('renders hero title, description, and navigation buttons', () => {
     render(<HomePage />)
     expect(screen.getByRole('heading', { name: 'ft_transcendence' })).toBeInTheDocument()
-    expect(screen.getByText('Pong ベースのゲームへようこそ。ログインして対戦を始めましょう。')).toBeInTheDocument()
+    expect(screen.getByText('Welcome to the Pong-based game. Please login to start playing.')).toBeInTheDocument()
     // Game lobby is embedded on the home page — verify mode options are present
     expect(screen.getByText('Local 1v1')).toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Start Game' })).toBeInTheDocument()

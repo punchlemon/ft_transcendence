@@ -52,7 +52,7 @@ const App = () => {
               ft_transcendence
             </Link>
             <nav className="flex flex-wrap items-center gap-4 text-sm text-slate-600">
-              <Link to="/">Home</Link>
+              {user && <Link to="/">Home</Link>}
               {user ? (
                 <>
                   <Link to="/users">Users</Link>
@@ -62,22 +62,7 @@ const App = () => {
                 <div className="flex items-center gap-3" data-testid="navbar-auth-state">
                   <UserMenu />
                 </div>
-              ) : (
-                <div className="flex items-center gap-2">
-                  <Link
-                    to="/login"
-                    className="rounded-md border border-slate-300 px-3 py-1 text-xs font-medium text-slate-700 hover:bg-slate-50"
-                  >
-                    Login
-                  </Link>
-                  <Link
-                    to="/register"
-                    className="rounded-md bg-indigo-600 px-3 py-1 text-xs font-medium text-white hover:bg-indigo-500"
-                  >
-                    Register
-                  </Link>
-                </div>
-              )}
+              ) : null}
             </nav>
           </div>
         </header>

@@ -95,7 +95,11 @@ describe('User History & Friends API', () => {
     await prisma.friendship.deleteMany()
     await prisma.session.deleteMany()
     await prisma.userStats.deleteMany()
-    await prisma.ladderProfile.deleteMany()
+    // await prisma.ladderProfile.deleteMany()
+    await prisma.ladderEnrollment.deleteMany()
+    await prisma.transaction.deleteMany()
+    await prisma.wallet.deleteMany()
+    await prisma.inventoryItem.deleteMany()
     await prisma.user.deleteMany()
   })
 
