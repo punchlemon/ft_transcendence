@@ -102,16 +102,6 @@ const tournamentsRoutes: FastifyPluginAsync = async (fastify) => {
       }
     })
 
-    // Create a Placeholder Participant for empty slots
-    const placeholder = await fastify.prisma.tournamentParticipant.create({
-      data: {
-        tournamentId: tournament.id,
-        alias: 'TBD',
-        inviteState: 'PLACEHOLDER',
-        userId: null
-      }
-    })
-
     // Generate Full Bracket
     if (tournament.participants.length >= 2) {
       // Sort participants by ID to ensure they are in the order of creation (which matches input order)
@@ -121,6 +111,20 @@ const tournamentsRoutes: FastifyPluginAsync = async (fastify) => {
       // Reorder participants based on seeding logic, padding with Byes (nulls)
       const seededParticipants = tournamentService.padWithBye(sortedParticipants)
       
+      // Create a Placeholder Participant for empty slots if needed (only for tournaments with > 1 round)
+      let placeholderId: number | null = null
+      if (seededParticipants.length > 2) {
+        const placeholder = await fastify.prisma.tournamentParticipant.create({
+          data: {
+            tournamentId: tournament.id,
+            alias: 'TBD',
+            inviteState: 'PLACEHOLDER',
+            userId: null
+          }
+        })
+        placeholderId = placeholder.id
+      }
+
       const matchesToCreate = []
       let currentRoundMatchesCount = 0
 
@@ -165,35 +169,35 @@ const tournamentsRoutes: FastifyPluginAsync = async (fastify) => {
       let matchesInRound = currentRoundMatchesCount
       
       // If we have N matches in Round 1, we need N/2 matches in Round 2, etc.
-      // Wait, if we have Byes, the number of matches in Round 1 might be less than Size/2?
-      // No, padWithBye ensures size is power of 2.
-      // So seededParticipants.length is power of 2 (e.g. 4, 8, 16).
-      // Matches in Round 1 = Size / 2.
       
       matchesInRound = seededParticipants.length / 2
       
       while (matchesInRound > 1) {
+        if (!placeholderId) {
+            // This should theoretically not happen if logic is correct, but for safety
+             const placeholder = await fastify.prisma.tournamentParticipant.create({
+                data: {
+                    tournamentId: tournament.id,
+                    alias: 'TBD',
+                    inviteState: 'PLACEHOLDER',
+                    userId: null
+                }
+             })
+             placeholderId = placeholder.id
+        }
+
         matchesInRound /= 2
         for (let i = 0; i < matchesInRound; i++) {
             matchesToCreate.push({
                 tournamentId: tournament.id,
                 round: round,
-                playerAId: placeholder.id,
-                playerBId: placeholder.id,
+                playerAId: placeholderId,
+                playerBId: placeholderId,
                 status: 'PENDING'
             })
         }
         round++
       }
-      // Add Final Match (if not added by loop, e.g. if matchesInRound became 1)
-      // The loop condition `matchesInRound > 1` stops when matchesInRound becomes 1.
-      // But we need to create that 1 match.
-      // Example: 4 players. Round 1 has 2 matches.
-      // Loop: matchesInRound = 2.
-      // matchesInRound /= 2 => 1.
-      // Loop runs once. Creates 1 match for Round 2.
-      // Loop condition `1 > 1` is false. Stops.
-      // Correct.
 
       if (matchesToCreate.length > 0) {
         await fastify.prisma.tournamentMatch.createMany({
@@ -201,6 +205,8 @@ const tournamentsRoutes: FastifyPluginAsync = async (fastify) => {
         })
       }
     }
+
+
 
     reply.code(201)
     return {
