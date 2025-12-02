@@ -12,6 +12,7 @@ import UsersPage from './pages/Users'
 import GameRoomPage from './pages/GameRoom'
 import ChatDrawer from './components/chat/ChatDrawer'
 import NotificationBell from './components/ui/NotificationBell'
+import UserMenu from './components/ui/UserMenu'
 import useAuthStore from './stores/authStore'
 import RequireAuth from './components/auth/RequireAuth'
 
@@ -62,19 +63,7 @@ const App = () => {
               {user ? (
                 <div className="flex items-center gap-3" data-testid="navbar-auth-state">
                   <NotificationBell />
-                  <Link to={`/profile/${user.id}`} className="hover:underline">
-                    {user.displayName}
-                  </Link>
-                  <Link to="/settings/account" className="text-xs text-slate-500 hover:text-slate-800">
-                    Settings
-                  </Link>
-                  <button
-                    type="button"
-                    onClick={clearSession}
-                    className="rounded-md border border-slate-300 px-3 py-1 text-xs font-medium text-slate-700 hover:bg-slate-50"
-                  >
-                    ログアウト
-                  </button>
+                  <UserMenu />
                 </div>
               ) : (
                 <div className="flex items-center gap-2">

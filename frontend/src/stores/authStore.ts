@@ -4,6 +4,7 @@ export type AuthUserSnapshot = {
   id: number
   displayName: string
   status: string
+  avatarUrl?: string
 }
 
 type AuthTokens = {
