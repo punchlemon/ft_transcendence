@@ -105,14 +105,16 @@ describe('ChatDrawer', () => {
       .mockResolvedValueOnce({ data: { data: [] } }) // fetchNotifications
       .mockResolvedValueOnce({ data: mockMessages }) // fetchMessages (select thread)
 
-    vi.mocked(api.post).mockResolvedValueOnce({ data: {
-      id: 2,
-      channelId: 1,
-      userId: 1,
-      content: 'New message',
-      sentAt: new Date().toISOString(),
-      user: { id: 1, displayName: 'Me', avatarUrl: null }
-    } })
+    vi.mocked(api.post)
+      .mockResolvedValueOnce({ data: {} }) // markAsRead
+      .mockResolvedValueOnce({ data: {
+        id: 2,
+        channelId: 1,
+        userId: 1,
+        content: 'New message',
+        sentAt: new Date().toISOString(),
+        user: { id: 1, displayName: 'Me', avatarUrl: null }
+      } })
 
     render(<ChatDrawer />)
     
