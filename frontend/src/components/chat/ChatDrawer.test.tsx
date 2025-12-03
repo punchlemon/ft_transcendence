@@ -1,7 +1,7 @@
 import { render, screen, fireEvent, waitFor } from '@testing-library/react'
 import { describe, it, expect, vi, beforeAll, beforeEach } from 'vitest'
 import ChatDrawer from './ChatDrawer'
-import { api, inviteToGame } from '../../lib/api'
+import { api, inviteToGame, fetchBlockedUsers } from '../../lib/api'
 import { useChatStore } from '../../stores/chatStore'
 
 const mockNavigate = vi.fn()
@@ -15,9 +15,10 @@ vi.mock('react-router-dom', () => ({
 vi.mock('../../lib/api', () => ({
   api: {
     get: vi.fn(),
-    post: vi.fn()
+    post: vi.fn().mockResolvedValue({ data: {} })
   },
   inviteToGame: vi.fn(),
+  fetchBlockedUsers: vi.fn().mockResolvedValue({ data: [] }),
   baseURL: 'http://localhost:3000'
 }))
 
@@ -40,11 +41,13 @@ describe('ChatDrawer', () => {
   beforeEach(() => {
     vi.clearAllMocks()
     vi.mocked(api.get).mockResolvedValue({ data: [] })
+    vi.mocked(fetchBlockedUsers).mockResolvedValue({ data: [] })
     useChatStore.setState({
       threads: [],
       activeThreadId: null,
       messages: {},
-      isLoading: false
+      isLoading: false,
+      isDrawerOpen: false
     })
   })
 
@@ -99,11 +102,12 @@ describe('ChatDrawer', () => {
       }
     ]
 
-    vi.mocked(api.get).mockResolvedValue({ data: [] }) // Default fallback
-    vi.mocked(api.get)
-      .mockResolvedValueOnce({ data: mockThreads }) // fetchThreads (initial)
-      .mockResolvedValueOnce({ data: { data: [] } }) // fetchNotifications
-      .mockResolvedValueOnce({ data: mockMessages }) // fetchMessages (select thread)
+    vi.mocked(api.get).mockImplementation((url) => {
+      if (url === '/chat/threads') return Promise.resolve({ data: mockThreads })
+      if (url === '/notifications') return Promise.resolve({ data: { data: [] } })
+      if (url.includes('/messages')) return Promise.resolve({ data: mockMessages })
+      return Promise.resolve({ data: [] })
+    })
 
     vi.mocked(api.post)
       .mockResolvedValueOnce({ data: {} }) // markAsRead
@@ -154,11 +158,12 @@ describe('ChatDrawer', () => {
     ]
     const mockMessages: any[] = []
 
-    vi.mocked(api.get).mockResolvedValue({ data: [] })
-    vi.mocked(api.get)
-      .mockResolvedValueOnce({ data: mockThreads }) // fetchThreads
-      .mockResolvedValueOnce({ data: { data: [] } }) // fetchNotifications
-      .mockResolvedValueOnce({ data: mockMessages }) // fetchMessages
+    vi.mocked(api.get).mockImplementation((url) => {
+      if (url === '/chat/threads') return Promise.resolve({ data: mockThreads })
+      if (url === '/notifications') return Promise.resolve({ data: { data: [] } })
+      if (url.includes('/messages')) return Promise.resolve({ data: mockMessages })
+      return Promise.resolve({ data: [] })
+    })
 
     vi.mocked(inviteToGame).mockResolvedValue({ sessionId: 'sess-123' })
 

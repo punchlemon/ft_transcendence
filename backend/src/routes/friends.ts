@@ -12,6 +12,15 @@ const friendRoutes: FastifyPluginAsync = async (fastify) => {
     return { data: friends };
   });
 
+  // List blocked users
+  fastify.get('/blocks', {
+    onRequest: [fastify.authenticate],
+  }, async (request, reply) => {
+    const userId = request.user.userId;
+    const blockedUsers = await friendService.getBlockedUsers(userId);
+    return { data: blockedUsers };
+  });
+
   // List sent friend requests
   fastify.get('/friends/requests/sent', {
     onRequest: [fastify.authenticate],

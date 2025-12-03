@@ -13,13 +13,28 @@ export default async function gameRoutes(fastify: FastifyInstance) {
       return reply.code(400).send({ error: 'targetUserId is required' });
     }
 
-    const inviter = await fastify.prisma.user.findUnique({
-      where: { id: user.userId },
-      select: { displayName: true }
+    // Check for blocks
+    const blocked = await fastify.prisma.blocklist.findFirst({
+      where: {
+        OR: [
+          { blockerId: targetUserId, blockedId: user.userId }, // Target blocked sender
+          { blockerId: user.userId, blockedId: targetUserId }  // Sender blocked target
+        ]
+      }
     });
 
     const manager = GameManager.getInstance();
     const { sessionId } = manager.createPrivateGame();
+
+    if (blocked) {
+      // Stealth block: Return success but do not send notification
+      return { sessionId };
+    }
+
+    const inviter = await fastify.prisma.user.findUnique({
+      where: { id: user.userId },
+      select: { displayName: true }
+    });
 
     await notificationService.createNotification(
       targetUserId,

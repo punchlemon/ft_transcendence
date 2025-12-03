@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
-import { fetchUsers, fetchUserFriends, fetchSentFriendRequests, cancelFriendRequest, type UserSearchResponse, type UserSearchParams, api } from '../lib/api'
+import { fetchUsers, fetchUserFriends, fetchSentFriendRequests, fetchBlockedUsers, type UserSearchResponse, type UserSearchParams } from '../lib/api'
+import { onChatWsEvent } from '../lib/chatWs'
 import Button from '../components/ui/Button'
 import useAuthStore from '../stores/authStore'
 
@@ -18,6 +19,43 @@ const UsersPage = () => {
   const { user: currentUser } = useAuthStore()
   const [myFriends, setMyFriends] = useState<number[]>([])
   const [sentRequests, setSentRequests] = useState<number[]>([])
+  const [blockedUsers, setBlockedUsers] = useState<number[]>([])
+
+  useEffect(() => {
+    const unsubscribeFriend = onChatWsEvent('friend_update', (data) => {
+      if (data.status === 'FRIEND') {
+        setMyFriends(prev => {
+          if (prev.includes(data.friendId)) return prev
+          return [...prev, data.friendId]
+        })
+        setSentRequests(prev => prev.filter(id => id !== data.friendId))
+      } else if (data.status === 'PENDING_SENT') {
+        setSentRequests(prev => {
+          if (prev.includes(data.friendId)) return prev
+          return [...prev, data.friendId]
+        })
+      } else if (data.status === 'NONE') {
+        setMyFriends(prev => prev.filter(id => id !== data.friendId))
+        setSentRequests(prev => prev.filter(id => id !== data.friendId))
+      }
+    })
+
+    const unsubscribeRelationship = onChatWsEvent('relationship_update', (data) => {
+      if (data.status === 'BLOCKING') {
+        setBlockedUsers(prev => {
+          if (prev.includes(data.userId)) return prev
+          return [...prev, data.userId]
+        })
+      } else if (data.status === 'NONE') {
+        setBlockedUsers(prev => prev.filter(id => id !== data.userId))
+      }
+    })
+
+    return () => {
+      unsubscribeFriend()
+      unsubscribeRelationship()
+    }
+  }, [])
 
   useEffect(() => {
     if (currentUser) {
@@ -27,6 +65,10 @@ const UsersPage = () => {
 
       fetchSentFriendRequests().then(res => {
         setSentRequests(res.data?.map(r => r.receiver?.id).filter((id): id is number => !!id) || [])
+      }).catch(console.error)
+
+      fetchBlockedUsers().then(res => {
+        setBlockedUsers(res.data?.map(u => u.id) || [])
       }).catch(console.error)
     }
   }, [currentUser])
@@ -63,30 +105,6 @@ const UsersPage = () => {
 
   const handlePageChange = (newPage: number) => {
     setParams((prev) => ({ ...prev, page: newPage }))
-  }
-
-  const handleAddFriend = async (e: React.MouseEvent, userId: number) => {
-    e.preventDefault()
-    e.stopPropagation()
-    try {
-      await api.post(`/friends/${userId}`)
-      setSentRequests(prev => [...prev, userId])
-    } catch (err) {
-      console.error(err)
-      alert('Failed to send request')
-    }
-  }
-
-  const handleCancelRequest = async (e: React.MouseEvent, userId: number) => {
-    e.preventDefault()
-    e.stopPropagation()
-    try {
-      await cancelFriendRequest(userId)
-      setSentRequests(prev => prev.filter(id => id !== userId))
-    } catch (err) {
-      console.error(err)
-      alert('Failed to cancel request')
-    }
   }
 
   return (
@@ -132,46 +150,48 @@ const UsersPage = () => {
               to={`/${user.login}`}
               className="flex items-center gap-4 rounded-lg border border-slate-200 bg-white p-4 transition-shadow hover:shadow-md"
             >
-              <div className="h-12 w-12 flex-shrink-0 overflow-hidden rounded-full bg-slate-100">
-                {user.avatarUrl ? (
-                  <img src={user.avatarUrl} alt={user.displayName} className="h-full w-full object-cover" />
-                ) : (
-                  <div className="flex h-full w-full items-center justify-center text-slate-400">
-                    <svg className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
-                    </svg>
-                  </div>
-                )}
+              <div className="relative h-12 w-12 flex-shrink-0">
+                <div className="h-full w-full overflow-hidden rounded-full bg-slate-100">
+                  {user.avatarUrl ? (
+                    <img src={user.avatarUrl} alt={user.displayName} className="h-full w-full object-cover" />
+                  ) : (
+                    <div className="flex h-full w-full items-center justify-center text-slate-400">
+                      <svg className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+                      </svg>
+                    </div>
+                  )}
+                </div>
+                <span className={`absolute bottom-0 right-0 block h-3 w-3 rounded-full ring-2 ring-white ${
+                  user.status === 'ONLINE' ? 'bg-green-500' : 
+                  user.status === 'IN_MATCH' ? 'bg-yellow-500' : 'bg-slate-300'
+                }`} />
               </div>
               <div className="flex-1 min-w-0">
                 <h3 className="truncate font-medium text-slate-900">{user.displayName}</h3>
                 <div className="flex items-center gap-2 text-xs text-slate-500">
-                  {user.mutualFriends > 0 && (
-                    <span className="rounded-full bg-indigo-50 px-2 py-0.5 text-indigo-600">
-                      {user.mutualFriends} mutual friends
+                  {currentUser?.id === user.id && (
+                    <span className="rounded-full bg-slate-100 px-2 py-0.5 text-slate-600 font-medium">
+                      You
+                    </span>
+                  )}
+                  {myFriends.includes(user.id) && (
+                    <span className="rounded-full bg-green-100 px-2 py-0.5 text-green-700 font-medium">
+                      Friend
+                    </span>
+                  )}
+                  {sentRequests.includes(user.id) && (
+                    <span className="rounded-full bg-blue-100 px-2 py-0.5 text-blue-700 font-medium">
+                      Request Sent
+                    </span>
+                  )}
+                  {blockedUsers.includes(user.id) && (
+                    <span className="rounded-full bg-red-100 px-2 py-0.5 text-red-700 font-medium">
+                      Blocked
                     </span>
                   )}
                 </div>
               </div>
-              {currentUser && currentUser.id !== user.id && !myFriends.includes(user.id) && (
-                sentRequests.includes(user.id) ? (
-                  <Button 
-                    variant="secondary" 
-                    className="text-xs ml-2 text-red-600 hover:bg-red-50"
-                    onClick={(e) => handleCancelRequest(e, user.id)}
-                  >
-                    Cancel
-                  </Button>
-                ) : (
-                  <Button 
-                    variant="secondary" 
-                    className="text-xs ml-2"
-                    onClick={(e) => handleAddFriend(e, user.id)}
-                  >
-                    Add
-                  </Button>
-                )
-              )}
             </Link>
           ))}
         </div>

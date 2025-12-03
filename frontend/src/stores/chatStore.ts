@@ -1,5 +1,6 @@
 import { create } from 'zustand';
 import { api } from '../lib/api';
+import useAuthStore from './authStore';
 
 export interface ChatUser {
   id: number;
@@ -33,7 +34,10 @@ interface ChatState {
   activeThreadId: number | null;
   messages: Record<number, ChatMessage[]>; // channelId -> messages
   isLoading: boolean;
+  initialLastReadAt: string | null;
+  isDrawerOpen: boolean;
   
+  setDrawerOpen: (isOpen: boolean) => void;
   fetchThreads: () => Promise<void>;
   selectThread: (threadId: number | null) => Promise<void>;
   createThread: (type: 'DM' | 'PUBLIC', targetIdOrName: string | number) => Promise<void>;
@@ -41,6 +45,7 @@ interface ChatState {
   addMessage: (message: ChatMessage) => void;
   markAsRead: (threadId: number) => Promise<void>;
   handleReadReceipt: (data: { channelId: number, userId: number, lastReadAt: string }) => void;
+  reset: () => void;
 }
 
 export const useChatStore = create<ChatState>((set, get) => ({
@@ -48,6 +53,26 @@ export const useChatStore = create<ChatState>((set, get) => ({
   activeThreadId: null,
   messages: {},
   isLoading: false,
+  initialLastReadAt: null,
+  isDrawerOpen: false,
+
+  setDrawerOpen: (isOpen) => {
+    set({ isDrawerOpen: isOpen });
+    if (!isOpen) {
+      get().selectThread(null);
+    }
+  },
+
+  reset: () => {
+    set({
+      threads: [],
+      activeThreadId: null,
+      messages: {},
+      isLoading: false,
+      initialLastReadAt: null,
+      isDrawerOpen: false,
+    });
+  },
 
   fetchThreads: async () => {
     set({ isLoading: true });
@@ -64,7 +89,24 @@ export const useChatStore = create<ChatState>((set, get) => ({
 
   selectThread: async (threadId) => {
     set({ activeThreadId: threadId });
-    if (!threadId) return;
+    if (!threadId) {
+      set({ initialLastReadAt: null });
+      return;
+    }
+    
+    // Capture lastReadAt before marking as read
+    const state = get();
+    const thread = state.threads.find(t => t.id === threadId);
+    const userId = useAuthStore.getState().user?.id;
+    
+    let lastReadAt = null;
+    if (thread && userId) {
+        const member = thread.members.find(m => m.id === userId);
+        if (member && member.lastReadAt) {
+            lastReadAt = member.lastReadAt;
+        }
+    }
+    set({ initialLastReadAt: lastReadAt });
     
     // Mark as read
     get().markAsRead(threadId);
@@ -94,6 +136,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
     const newThreadId = created?.id ?? null;
     await get().fetchThreads();
     await get().selectThread(newThreadId);
+    set({ isDrawerOpen: true });
   },
 
   sendMessage: async (content) => {

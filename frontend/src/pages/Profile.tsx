@@ -1,6 +1,9 @@
 import { useEffect, useState, useCallback } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import useAuthStore from '../stores/authStore'
+import { useChatStore } from '../stores/chatStore'
+import { useNotificationStore } from '../stores/notificationStore'
+import { onChatWsEvent } from '../lib/chatWs'
 import { 
   fetchUserProfile, 
   fetchUserMatches, 
@@ -60,7 +63,16 @@ const ProfilePage = () => {
   const navigate = useNavigate()
   const currentUser = useAuthStore((state) => state.user)
   const clearSession = useAuthStore((state) => state.clearSession)
+  const resetChat = useChatStore((state) => state.reset)
+  const createThread = useChatStore((state) => state.createThread)
+  const resetNotifications = useNotificationStore((state) => state.reset)
   const isOwnProfile = currentUser?.login === username
+
+  const handleLogout = () => {
+    clearSession()
+    resetChat()
+    resetNotifications()
+  }
 
   const [profile, setProfile] = useState<UserProfile | null>(null)
   const [stats, setStats] = useState<UserStats | null>(null)
@@ -143,6 +155,60 @@ const ProfilePage = () => {
     fetchProfileData()
   }, [fetchProfileData])
 
+  useEffect(() => {
+    const unsubscribeFriend = onChatWsEvent('friend_update', (data) => {
+      if (data.status === 'FRIEND') {
+        // If we are viewing the profile of the person we just became friends with
+        if (profile && Number(profile.id) === data.friendId) {
+           setProfile(prev => prev ? { ...prev, friendshipStatus: 'FRIEND' } : null)
+        }
+        // If we are viewing our own profile, refresh to show new friend in list
+        if (isOwnProfile) {
+           fetchProfileData()
+        }
+      } else if (data.status === 'PENDING_SENT') {
+        if (profile && Number(profile.id) === data.friendId) {
+           setProfile(prev => prev ? { ...prev, friendshipStatus: 'PENDING_SENT' } : null)
+        }
+      } else if (data.status === 'PENDING_RECEIVED') {
+        if (profile && Number(profile.id) === data.friendId) {
+           setProfile(prev => prev ? { ...prev, friendshipStatus: 'PENDING_RECEIVED', friendRequestId: data.requestId } : null)
+        }
+      } else if (data.status === 'NONE') {
+        if (profile && Number(profile.id) === data.friendId) {
+           setProfile(prev => prev ? { ...prev, friendshipStatus: 'NONE' } : null)
+        }
+        if (isOwnProfile) {
+           fetchProfileData()
+        }
+      }
+    })
+
+    const unsubscribeRelationship = onChatWsEvent('relationship_update', (data) => {
+      if (!profile) return
+      const targetId = Number(profile.id)
+      
+      if (data.userId === targetId) {
+        if (data.status === 'BLOCKING') {
+          setProfile(prev => prev ? { ...prev, isBlockedByViewer: true } : null)
+        } else if (data.status === 'BLOCKED_BY') {
+          setProfile(prev => prev ? { ...prev, isBlockingViewer: true } : null)
+        } else if (data.status === 'NONE') {
+          setProfile(prev => prev ? { 
+            ...prev, 
+            isBlockedByViewer: false, 
+            isBlockingViewer: false
+          } : null)
+        }
+      }
+    })
+
+    return () => {
+      unsubscribeFriend()
+      unsubscribeRelationship()
+    }
+  }, [profile, isOwnProfile, fetchProfileData])
+
   const handleFriendAction = async (action: 'add' | 'remove' | 'cancel' | 'accept' | 'block' | 'unblock') => {
     if (!profile) return
     setIsActionLoading(true)
@@ -173,6 +239,19 @@ const ProfilePage = () => {
     } catch (err) {
       console.error(err)
       setError('Failed to invite user')
+    } finally {
+      setIsActionLoading(false)
+    }
+  }
+
+  const handleSendMessage = async () => {
+    if (!profile) return
+    setIsActionLoading(true)
+    try {
+      await createThread('DM', Number(profile.id))
+    } catch (err) {
+      console.error(err)
+      setError('Failed to create chat')
     } finally {
       setIsActionLoading(false)
     }
@@ -235,7 +314,7 @@ const ProfilePage = () => {
                   Edit Profile
                 </button>
                 <button
-                  onClick={clearSession}
+                  onClick={handleLogout}
                   className="rounded-md border border-red-200 bg-white px-4 py-2 text-sm font-medium text-red-600 hover:bg-red-50"
                 >
                   Logout
@@ -243,45 +322,48 @@ const ProfilePage = () => {
               </>
             ) : (
               <>
-                {!profile.isBlockedByViewer && !profile.isBlockingViewer && (
-                  <>
-                    {profile.friendshipStatus === 'NONE' && (
-                      <button
-                        onClick={() => handleFriendAction('add')}
-                        disabled={isActionLoading}
-                        className="rounded-md bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-500 disabled:opacity-50"
-                      >
-                        Add Friend
-                      </button>
-                    )}
-                    {profile.friendshipStatus === 'PENDING_SENT' && (
-                      <button
-                        onClick={() => handleFriendAction('cancel')}
-                        disabled={isActionLoading}
-                        className="rounded-md bg-slate-100 px-4 py-2 text-sm font-medium text-slate-600 hover:bg-slate-200 hover:text-red-600 disabled:opacity-50"
-                      >
-                        Cancel Request
-                      </button>
-                    )}
-                    {profile.friendshipStatus === 'PENDING_RECEIVED' && (
-                      <button
-                        onClick={() => handleFriendAction('accept')}
-                        disabled={isActionLoading}
-                        className="rounded-md bg-green-600 px-4 py-2 text-sm font-medium text-white hover:bg-green-500 disabled:opacity-50"
-                      >
-                        Accept Request
-                      </button>
-                    )}
-                    {profile.friendshipStatus === 'FRIEND' && (
-                      <button
-                        onClick={() => handleFriendAction('remove')}
-                        disabled={isActionLoading}
-                        className="rounded-md border border-slate-300 bg-white px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50 disabled:opacity-50"
-                      >
-                        Unfriend
-                      </button>
-                    )}
-                  </>
+                <button
+                  onClick={handleSendMessage}
+                  disabled={isActionLoading}
+                  className="rounded-md bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-500 disabled:opacity-50"
+                >
+                  Send Message
+                </button>
+                {profile.friendshipStatus === 'NONE' && (
+                  <button
+                    onClick={() => handleFriendAction('add')}
+                    disabled={isActionLoading}
+                    className="rounded-md bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-500 disabled:opacity-50"
+                  >
+                    Add Friend
+                  </button>
+                )}
+                {profile.friendshipStatus === 'PENDING_SENT' && (
+                  <button
+                    onClick={() => handleFriendAction('cancel')}
+                    disabled={isActionLoading}
+                    className="rounded-md bg-slate-100 px-4 py-2 text-sm font-medium text-slate-600 hover:bg-slate-200 hover:text-red-600 disabled:opacity-50"
+                  >
+                    Cancel Request
+                  </button>
+                )}
+                {profile.friendshipStatus === 'PENDING_RECEIVED' && (
+                  <button
+                    onClick={() => handleFriendAction('accept')}
+                    disabled={isActionLoading}
+                    className="rounded-md bg-green-600 px-4 py-2 text-sm font-medium text-white hover:bg-green-500 disabled:opacity-50"
+                  >
+                    Accept Request
+                  </button>
+                )}
+                {profile.friendshipStatus === 'FRIEND' && (
+                  <button
+                    onClick={() => handleFriendAction('remove')}
+                    disabled={isActionLoading}
+                    className="rounded-md border border-slate-300 bg-white px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50 disabled:opacity-50"
+                  >
+                    Unfriend
+                  </button>
                 )}
                 
                 {profile.isBlockedByViewer ? (

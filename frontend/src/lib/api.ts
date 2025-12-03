@@ -249,6 +249,11 @@ export const fetchUserFriends = async (userId: string) => {
   return response.data as FriendResponse
 }
 
+export const fetchBlockedUsers = async () => {
+  const response = await apiClient.get('/blocks')
+  return response.data as FriendResponse // Reusing FriendResponse structure as it's similar
+}
+
 export type Tournament = {
   id: number
   name: string

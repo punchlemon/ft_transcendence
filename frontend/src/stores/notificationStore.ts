@@ -19,13 +19,23 @@ interface NotificationState {
   markAsRead: (id: number) => Promise<void>;
   markAllAsRead: () => Promise<void>;
   addNotification: (notification: Notification) => void;
+  removeNotification: (id: number) => void;
   deleteNotification: (id: number) => Promise<void>;
+  reset: () => void;
 }
 
 export const useNotificationStore = create<NotificationState>((set, get) => ({
   notifications: [],
   unreadCount: 0,
   isLoading: false,
+
+  reset: () => {
+    set({
+      notifications: [],
+      unreadCount: 0,
+      isLoading: false,
+    });
+  },
 
   fetchNotifications: async () => {
     set({ isLoading: true });
@@ -77,10 +87,37 @@ export const useNotificationStore = create<NotificationState>((set, get) => ({
   },
 
   addNotification: (notification) => {
-    set((state) => ({
-      notifications: [notification, ...state.notifications],
-      unreadCount: state.unreadCount + 1,
-    }));
+    const n = notification as any;
+    const processed: Notification = {
+      id: n.id,
+      type: n.type,
+      createdAt: n.createdAt,
+      message: n.body || n.title || n.message,
+      read: !!n.readAt || !!n.read,
+      data: typeof n.data === 'string' ? JSON.parse(n.data) : n.data
+    };
+    set((state) => {
+      const exists = state.notifications.some((item) => item.id === processed.id);
+      if (exists) {
+        return {
+          notifications: state.notifications.map((item) =>
+            item.id === processed.id ? processed : item
+          ),
+        };
+      }
+      return {
+        notifications: [processed, ...state.notifications],
+        unreadCount: state.unreadCount + 1,
+      };
+    });
+  },
+
+  removeNotification: (id) => {
+    set((state) => {
+      const notifications = state.notifications.filter((n) => n.id !== id);
+      const unreadCount = notifications.filter((n) => !n.read).length;
+      return { notifications, unreadCount };
+    });
   },
 
   deleteNotification: async (id) => {
