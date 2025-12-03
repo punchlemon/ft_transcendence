@@ -1,10 +1,25 @@
 import { prisma } from '../utils/prisma';
 import { notificationService } from './notification';
 import { chatService } from './chat';
+import { EventEmitter } from 'events';
 
-export class FriendService {
+export class FriendService extends EventEmitter {
   async sendFriendRequest(senderId: number, receiverId: number) {
     if (senderId === receiverId) throw new Error("Cannot friend yourself");
+
+    // Check if blocked
+    const block = await prisma.blocklist.findFirst({
+      where: {
+        OR: [
+          { blockerId: receiverId, blockedId: senderId },
+          { blockerId: senderId, blockedId: receiverId },
+        ],
+      },
+    });
+
+    if (block) {
+      throw new Error("Cannot send friend request: User is blocked");
+    }
 
     // Check if already friends
     const existingFriendship = await prisma.friendship.findFirst({
@@ -21,17 +36,6 @@ export class FriendService {
       // If pending, maybe resend or ignore
     }
 
-    // Check if blocked
-    const blocked = await prisma.blocklist.findFirst({
-      where: {
-        OR: [
-          { blockerId: senderId, blockedId: receiverId },
-          { blockerId: receiverId, blockedId: senderId },
-        ],
-      },
-    });
-    if (blocked) throw new Error("Cannot send request due to block");
-
     // Check existing request
     const existingRequest = await prisma.friendRequest.findUnique({
       where: {
@@ -41,18 +45,30 @@ export class FriendService {
         }
       }
     });
+
+    let request;
+
     if (existingRequest) {
         if (existingRequest.status === 'PENDING') throw new Error("Request already pending");
-        // If rejected/expired, maybe allow new one
+        
+        // Update existing request
+        request = await prisma.friendRequest.update({
+          where: { id: existingRequest.id },
+          data: {
+            status: 'PENDING',
+            createdAt: new Date(), // Refresh timestamp
+          },
+        });
+    } else {
+        // Create new request
+        request = await prisma.friendRequest.create({
+          data: {
+            senderId,
+            receiverId,
+            status: 'PENDING',
+          },
+        });
     }
-
-    const request = await prisma.friendRequest.create({
-      data: {
-        senderId,
-        receiverId,
-        status: 'PENDING',
-      },
-    });
 
     const sender = await prisma.user.findUnique({ where: { id: senderId } });
     await notificationService.createNotification(
@@ -62,6 +78,12 @@ export class FriendService {
       `${sender?.displayName} sent you a friend request`,
       { requestId: request.id, senderId }
     );
+
+    this.emit('friend_request_sent', { 
+      senderId, 
+      receiverId, 
+      requestId: request.id 
+    });
 
     return request;
   }
@@ -101,6 +123,11 @@ export class FriendService {
 
     // Remove notification from receiver
     await notificationService.deleteNotificationByRequestId(requestId);
+
+    this.emit('friend_accepted', { 
+      requesterId: request.senderId, 
+      addresseeId: request.receiverId 
+    });
   }
 
   async declineFriendRequest(requestId: number, userId: number) {
@@ -109,13 +136,18 @@ export class FriendService {
     if (request.receiverId !== userId) throw new Error("Not authorized");
     if (request.status !== 'PENDING') throw new Error("Request not pending");
 
-    await prisma.friendRequest.update({
+    await prisma.friendRequest.delete({
       where: { id: requestId },
-      data: { status: 'DECLINED' },
     });
 
     // Remove notification from receiver
     await notificationService.deleteNotificationByRequestId(requestId);
+
+    this.emit('friend_request_declined', { 
+      senderId: request.senderId, 
+      receiverId: request.receiverId, 
+      requestId 
+    });
   }
 
   async removeFriend(userId: number, friendId: number) {
@@ -140,31 +172,26 @@ export class FriendService {
       `${actor?.displayName} removed you from their friends list`,
       { friendId: userId }
     );
+
+    this.emit('friend_removed', { requesterId: userId, addresseeId: friendId });
   }
 
   async blockUser(blockerId: number, blockedId: number) {
     if (blockerId === blockedId) throw new Error("Cannot block yourself");
 
-    // Remove friendship if exists
-    const friendship = await prisma.friendship.findFirst({
-      where: {
-        OR: [
-          { requesterId: blockerId, addresseeId: blockedId },
-          { requesterId: blockedId, addresseeId: blockerId },
-        ],
-      },
-    });
+    // Create block entry
+    // Note: We do NOT remove friendship here anymore, as requested.
+    // Friend state and Block state are decoupled.
 
-    if (friendship) {
-      await prisma.friendship.delete({ where: { id: friendship.id } });
-    }
-
-    return prisma.blocklist.create({
+    const block = await prisma.blocklist.create({
       data: {
         blockerId,
         blockedId,
       },
     });
+
+    this.emit('user_blocked', { blockerId, blockedId });
+    return block;
   }
 
   async unblockUser(blockerId: number, blockedId: number) {
@@ -179,7 +206,22 @@ export class FriendService {
 
     if (!block) throw new Error("Block not found");
 
-    return prisma.blocklist.delete({ where: { id: block.id } });
+    await prisma.blocklist.delete({ where: { id: block.id } });
+    this.emit('user_unblocked', { blockerId, blockedId });
+    return block;
+  }
+
+  async getBlockedUsers(userId: number) {
+    const blocks = await prisma.blocklist.findMany({
+      where: {
+        blockerId: userId,
+      },
+      include: {
+        blocked: { select: { id: true, displayName: true, avatarUrl: true } },
+      },
+    });
+
+    return blocks.map(b => b.blocked);
   }
 
   async getFriends(userId: number) {
@@ -240,8 +282,14 @@ export class FriendService {
       where: { id: request.id }
     });
 
-    // Remove notification from receiver
-    await notificationService.deleteNotificationByRequestId(request.id);
+    // Update notification for receiver to remove buttons
+    await notificationService.cancelFriendRequestNotification(request.id);
+
+    this.emit('friend_request_cancelled', { 
+      senderId, 
+      receiverId, 
+      requestId: request.id 
+    });
   }
 }
 

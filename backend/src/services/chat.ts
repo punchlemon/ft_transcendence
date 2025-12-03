@@ -4,6 +4,7 @@ import { EventEmitter } from 'events';
 
 export class ChatService extends EventEmitter {
   async getOrCreateDmChannel(userId1: number, userId2: number) {
+    console.log(`getOrCreateDmChannel: ${userId1}, ${userId2}`);
     const [minId, maxId] = [userId1, userId2].sort((a, b) => a - b);
     const slug = `dm-${minId}-${maxId}`;
 
@@ -13,22 +14,31 @@ export class ChatService extends EventEmitter {
     });
 
     if (!channel) {
-      channel = await prisma.channel.create({
-        data: {
-          name: `DM`,
-          slug,
-          type: 'DM',
-          visibility: 'PRIVATE',
-          ownerId: minId, // Arbitrary owner for DM
-          members: {
-            create: [
-              { userId: minId, role: 'MEMBER' },
-              { userId: maxId, role: 'MEMBER' },
-            ],
+      console.log(`Creating new DM channel: ${slug}`);
+      try {
+        channel = await prisma.channel.create({
+          data: {
+            name: `DM`,
+            slug,
+            type: 'DM',
+            visibility: 'PRIVATE',
+            ownerId: minId, // Arbitrary owner for DM
+            members: {
+              create: [
+                { userId: minId, role: 'MEMBER' },
+                { userId: maxId, role: 'MEMBER' },
+              ],
+            },
           },
-        },
-        include: { members: { include: { user: true } } },
-      });
+          include: { members: { include: { user: true } } },
+        });
+        this.emit('channel_created', channel);
+      } catch (e) {
+        console.error('Failed to create DM channel:', e);
+        throw e;
+      }
+    } else {
+      console.log(`Found existing DM channel: ${channel.id}`);
     }
 
     return channel;
@@ -79,6 +89,50 @@ export class ChatService extends EventEmitter {
 
     if (member.mutedUntil && member.mutedUntil > new Date()) {
       throw new Error('User is muted');
+    }
+
+    // Check for blocks in DM
+    const channel = await prisma.channel.findUnique({
+      where: { id: channelId },
+      include: { members: true }
+    });
+
+    if (channel?.type === 'DM') {
+      const otherMember = channel.members.find(m => m.userId !== userId);
+      if (otherMember) {
+        const blocked = await prisma.blocklist.findFirst({
+          where: {
+            blockerId: otherMember.userId,
+            blockedId: userId
+          }
+        });
+        if (blocked) {
+          // Stealth block: Return fake message, do not save, do not emit
+          const sender = await prisma.user.findUnique({ where: { id: userId } });
+          return {
+            id: -Math.floor(Math.random() * 1000000), // Fake ID
+            channelId,
+            userId,
+            content,
+            sentAt: new Date(),
+            user: {
+              id: sender?.id || userId,
+              displayName: sender?.displayName || 'You',
+              avatarUrl: sender?.avatarUrl || null,
+            },
+          } as any;
+        }
+        // Also check if sender blocked the recipient (optional, but usually you can't DM someone you blocked either)
+        const blocking = await prisma.blocklist.findFirst({
+          where: {
+            blockerId: userId,
+            blockedId: otherMember.userId
+          }
+        });
+        if (blocking) {
+          throw new Error('Cannot send message: You have blocked this user');
+        }
+      }
     }
 
     const message = await prisma.message.create({

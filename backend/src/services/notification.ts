@@ -98,6 +98,35 @@ export class NotificationService extends EventEmitter {
 
     if (target) {
       await prisma.notification.delete({ where: { id: target.id } });
+      this.emit('notification_deleted', { id: target.id, userId: target.userId });
+    }
+  }
+
+  async cancelFriendRequestNotification(requestId: number) {
+    const notifications = await prisma.notification.findMany({
+      where: {
+        type: 'FRIEND_REQUEST',
+      },
+    });
+
+    const target = notifications.find(n => {
+      try {
+        const data = n.data ? JSON.parse(n.data) : {};
+        return data.requestId === requestId;
+      } catch {
+        return false;
+      }
+    });
+
+    if (target) {
+      const updatedNotification = await prisma.notification.update({
+        where: { id: target.id },
+        data: {
+          type: 'SYSTEM',
+          body: (target.body || target.title) + ' (Cancelled)',
+        },
+      });
+      this.emit('notification', updatedNotification);
     }
   }
 }

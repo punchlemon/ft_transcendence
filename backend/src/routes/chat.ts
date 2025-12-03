@@ -3,6 +3,12 @@ import { z } from 'zod'
 import { chatService } from '../services/chat'
 
 export default async function chatRoutes(fastify: FastifyInstance) {
+  fastify.log.info('Registering chat routes...');
+
+  fastify.get('/ping', async () => {
+    return { status: 'pong' };
+  });
+
   // List threads (channels)
   fastify.get('/threads', {
     onRequest: [fastify.authenticate]

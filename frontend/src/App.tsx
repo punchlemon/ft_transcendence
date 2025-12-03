@@ -12,11 +12,21 @@ import GameRoomPage from './pages/GameRoom'
 import ChatDrawer from './components/chat/ChatDrawer'
 import UserMenu from './components/ui/UserMenu'
 import useAuthStore from './stores/authStore'
+import { useChatStore } from './stores/chatStore'
+import { useNotificationStore } from './stores/notificationStore'
 import RequireAuth from './components/auth/RequireAuth'
 
 const App = () => {
   const user = useAuthStore((state) => state.user)
   const clearSession = useAuthStore((state) => state.clearSession)
+  const resetChat = useChatStore((state) => state.reset)
+  const resetNotifications = useNotificationStore((state) => state.reset)
+
+  const handleLogout = () => {
+    clearSession()
+    resetChat()
+    resetNotifications()
+  }
 
   useEffect(() => {
     useAuthStore.getState().hydrateFromStorage()
@@ -62,7 +72,7 @@ const App = () => {
                 <div className="flex items-center gap-3" data-testid="navbar-auth-state">
                   <UserMenu />
                   <button
-                    onClick={clearSession}
+                    onClick={handleLogout}
                     className="rounded-md border border-slate-300 bg-white px-3 py-1.5 text-sm font-medium text-slate-700 hover:bg-slate-50 hover:text-slate-900 transition-colors"
                   >
                     Logout
