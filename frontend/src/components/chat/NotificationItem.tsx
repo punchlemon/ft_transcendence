@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useNotificationStore, type Notification } from '../../stores/notificationStore'
-import { acceptFriendRequest } from '../../lib/api'
+import { acceptFriendRequest, declineFriendRequest } from '../../lib/api'
 
 const NotificationItem = ({ notification }: { notification: Notification }) => {
   const markAsRead = useNotificationStore((state) => state.markAsRead)
@@ -29,6 +29,13 @@ const NotificationItem = ({ notification }: { notification: Notification }) => {
   }
 
   const handleDeclineFriend = async () => {
+    if (notification.data?.requestId) {
+      try {
+        await declineFriendRequest(notification.data.requestId)
+      } catch (error) {
+        console.error('Failed to decline friend request', error)
+      }
+    }
     deleteNotification(notification.id)
   }
 
@@ -51,7 +58,11 @@ const NotificationItem = ({ notification }: { notification: Notification }) => {
         <button
           onClick={(e) => {
             e.stopPropagation()
-            deleteNotification(notification.id)
+            if (notification.type === 'FRIEND_REQUEST') {
+              handleDeclineFriend()
+            } else {
+              deleteNotification(notification.id)
+            }
           }}
           className="shrink-0 text-slate-400 hover:text-slate-600"
           title="Delete"

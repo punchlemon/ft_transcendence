@@ -1,5 +1,6 @@
 import { prisma } from '../utils/prisma';
 import { notificationService } from './notification';
+import { chatService } from './chat';
 
 export class FriendService {
   async sendFriendRequest(senderId: number, receiverId: number) {
@@ -86,6 +87,9 @@ export class FriendService {
       }),
     ]);
 
+    // Automatically create DM channel
+    await chatService.getOrCreateDmChannel(request.senderId, request.receiverId);
+
     const receiver = await prisma.user.findUnique({ where: { id: userId } });
     await notificationService.createNotification(
       request.senderId,
@@ -94,6 +98,24 @@ export class FriendService {
       `${receiver?.displayName} accepted your friend request`,
       { friendId: userId }
     );
+
+    // Remove notification from receiver
+    await notificationService.deleteNotificationByRequestId(requestId);
+  }
+
+  async declineFriendRequest(requestId: number, userId: number) {
+    const request = await prisma.friendRequest.findUnique({ where: { id: requestId } });
+    if (!request) throw new Error("Request not found");
+    if (request.receiverId !== userId) throw new Error("Not authorized");
+    if (request.status !== 'PENDING') throw new Error("Request not pending");
+
+    await prisma.friendRequest.update({
+      where: { id: requestId },
+      data: { status: 'DECLINED' },
+    });
+
+    // Remove notification from receiver
+    await notificationService.deleteNotificationByRequestId(requestId);
   }
 
   async removeFriend(userId: number, friendId: number) {
@@ -108,7 +130,16 @@ export class FriendService {
 
     if (!friendship) throw new Error("Friendship not found");
 
-    return prisma.friendship.delete({ where: { id: friendship.id } });
+    await prisma.friendship.delete({ where: { id: friendship.id } });
+
+    const actor = await prisma.user.findUnique({ where: { id: userId } });
+    await notificationService.createNotification(
+      friendId,
+      'SYSTEM',
+      'Friend Removed',
+      `${actor?.displayName} removed you from their friends list`,
+      { friendId: userId }
+    );
   }
 
   async blockUser(blockerId: number, blockedId: number) {
@@ -166,6 +197,51 @@ export class FriendService {
     });
 
     return friendships.map(f => f.requesterId === userId ? f.addressee : f.requester);
+  }
+
+  async getSentRequests(userId: number) {
+    return prisma.friendRequest.findMany({
+      where: {
+        senderId: userId,
+        status: 'PENDING',
+      },
+      include: {
+        receiver: { select: { id: true, displayName: true, avatarUrl: true } },
+      },
+    });
+  }
+
+  async getReceivedRequests(userId: number) {
+    return prisma.friendRequest.findMany({
+      where: {
+        receiverId: userId,
+        status: 'PENDING',
+      },
+      include: {
+        sender: { select: { id: true, displayName: true, avatarUrl: true } },
+      },
+    });
+  }
+
+  async cancelFriendRequest(senderId: number, receiverId: number) {
+    const request = await prisma.friendRequest.findUnique({
+      where: {
+        senderId_receiverId: {
+          senderId,
+          receiverId
+        }
+      }
+    });
+
+    if (!request) throw new Error("Request not found");
+    if (request.status !== 'PENDING') throw new Error("Request not pending");
+
+    await prisma.friendRequest.delete({
+      where: { id: request.id }
+    });
+
+    // Remove notification from receiver
+    await notificationService.deleteNotificationByRequestId(request.id);
   }
 }
 

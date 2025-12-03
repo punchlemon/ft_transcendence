@@ -7,6 +7,7 @@ import {
   fetchUserFriends,
   sendFriendRequest,
   removeFriend,
+  cancelFriendRequest,
   acceptFriendRequest,
   blockUser,
   unblockUser,
@@ -142,13 +143,14 @@ const ProfilePage = () => {
     fetchProfileData()
   }, [fetchProfileData])
 
-  const handleFriendAction = async (action: 'add' | 'remove' | 'accept' | 'block' | 'unblock') => {
+  const handleFriendAction = async (action: 'add' | 'remove' | 'cancel' | 'accept' | 'block' | 'unblock') => {
     if (!profile) return
     setIsActionLoading(true)
     try {
       const userId = Number(profile.id)
       if (action === 'add') await sendFriendRequest(userId)
       if (action === 'remove') await removeFriend(userId)
+      if (action === 'cancel') await cancelFriendRequest(userId)
       if (action === 'accept' && profile.friendRequestId) await acceptFriendRequest(profile.friendRequestId)
       if (action === 'block') await blockUser(userId)
       if (action === 'unblock') await unblockUser(userId)
@@ -243,13 +245,6 @@ const ProfilePage = () => {
               <>
                 {!profile.isBlockedByViewer && !profile.isBlockingViewer && (
                   <>
-                    <button
-                      onClick={handleInvite}
-                      disabled={isActionLoading}
-                      className="rounded-md bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-500 disabled:opacity-50"
-                    >
-                      Invite to Game
-                    </button>
                     {profile.friendshipStatus === 'NONE' && (
                       <button
                         onClick={() => handleFriendAction('add')}
@@ -261,10 +256,11 @@ const ProfilePage = () => {
                     )}
                     {profile.friendshipStatus === 'PENDING_SENT' && (
                       <button
-                        disabled
-                        className="rounded-md bg-slate-100 px-4 py-2 text-sm font-medium text-slate-500 cursor-not-allowed"
+                        onClick={() => handleFriendAction('cancel')}
+                        disabled={isActionLoading}
+                        className="rounded-md bg-slate-100 px-4 py-2 text-sm font-medium text-slate-600 hover:bg-slate-200 hover:text-red-600 disabled:opacity-50"
                       >
-                        Request Sent
+                        Cancel Request
                       </button>
                     )}
                     {profile.friendshipStatus === 'PENDING_RECEIVED' && (

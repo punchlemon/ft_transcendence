@@ -35,6 +35,7 @@ export const useNotificationStore = create<NotificationState>((set, get) => ({
       
       const list = rawList.map((n: any) => ({
         ...n,
+        message: n.body || n.title,
         read: !!n.readAt,
         data: typeof n.data === 'string' ? JSON.parse(n.data) : n.data
       }));
@@ -83,13 +84,15 @@ export const useNotificationStore = create<NotificationState>((set, get) => ({
   },
 
   deleteNotification: async (id) => {
+    // Optimistic update
+    set((state) => {
+      const notifications = state.notifications.filter((n) => n.id !== id);
+      const unreadCount = notifications.filter((n) => !n.read).length;
+      return { notifications, unreadCount };
+    });
+
     try {
       await api.delete(`/notifications/${id}`);
-      set((state) => {
-        const notifications = state.notifications.filter((n) => n.id !== id);
-        const unreadCount = notifications.filter((n) => !n.read).length;
-        return { notifications, unreadCount };
-      });
     } catch (error) {
       console.error('Failed to delete notification', error);
     }

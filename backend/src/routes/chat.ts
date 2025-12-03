@@ -10,7 +10,7 @@ export default async function chatRoutes(fastify: FastifyInstance) {
     const userId = req.user.userId
     const channels = await chatService.getUserChannels(userId)
 
-    const threads = channels.map(channel => {
+    const threads = await Promise.all(channels.map(async channel => {
       // For DMs, we might want to compute a display name based on the other participant
       let name = channel.name
       if (channel.type === 'DM') {
@@ -20,23 +20,44 @@ export default async function chatRoutes(fastify: FastifyInstance) {
         }
       }
 
+      const unreadCount = await chatService.getUnreadCount(channel.id, userId);
+
       return {
         id: channel.id,
         name,
         type: channel.type,
         updatedAt: channel.updatedAt,
         lastMessage: channel.messages[0] || null,
+        unreadCount,
         members: channel.members.map(mem => ({
           id: mem.user.id,
           displayName: mem.user.displayName,
           avatarUrl: mem.user.avatarUrl,
           status: mem.user.status,
-          role: mem.role
+          role: mem.role,
+          lastReadAt: mem.lastReadAt
         }))
       }
-    })
+    }))
 
     return { data: threads }
+  })
+
+  // Mark thread as read
+  fastify.post('/threads/:id/read', {
+    onRequest: [fastify.authenticate]
+  }, async (req, reply) => {
+    const { id } = req.params as { id: string }
+    const channelId = parseInt(id)
+    const userId = req.user.userId
+
+    try {
+      await chatService.markAsRead(channelId, userId)
+      return { success: true }
+    } catch (error: any) {
+      req.log.error(error)
+      return reply.status(400).send({ error: { code: 'UPDATE_FAILED', message: error.message } })
+    }
   })
 
   // Create thread (DM or Group)

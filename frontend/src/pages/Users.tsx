@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
-import { fetchUsers, fetchUserFriends, type UserSearchResponse, type UserSearchParams, api } from '../lib/api'
+import { fetchUsers, fetchUserFriends, fetchSentFriendRequests, cancelFriendRequest, type UserSearchResponse, type UserSearchParams, api } from '../lib/api'
 import Button from '../components/ui/Button'
 import useAuthStore from '../stores/authStore'
 
@@ -17,11 +17,16 @@ const UsersPage = () => {
   })
   const { user: currentUser } = useAuthStore()
   const [myFriends, setMyFriends] = useState<number[]>([])
+  const [sentRequests, setSentRequests] = useState<number[]>([])
 
   useEffect(() => {
     if (currentUser) {
       fetchUserFriends(currentUser.id.toString()).then(res => {
         setMyFriends(res.data?.map(f => f.id) || [])
+      }).catch(console.error)
+
+      fetchSentFriendRequests().then(res => {
+        setSentRequests(res.data?.map(r => r.receiver?.id).filter((id): id is number => !!id) || [])
       }).catch(console.error)
     }
   }, [currentUser])
@@ -65,10 +70,22 @@ const UsersPage = () => {
     e.stopPropagation()
     try {
       await api.post(`/friends/${userId}`)
-      alert('Friend request sent!')
+      setSentRequests(prev => [...prev, userId])
     } catch (err) {
       console.error(err)
       alert('Failed to send request')
+    }
+  }
+
+  const handleCancelRequest = async (e: React.MouseEvent, userId: number) => {
+    e.preventDefault()
+    e.stopPropagation()
+    try {
+      await cancelFriendRequest(userId)
+      setSentRequests(prev => prev.filter(id => id !== userId))
+    } catch (err) {
+      console.error(err)
+      alert('Failed to cancel request')
     }
   }
 
@@ -137,13 +154,23 @@ const UsersPage = () => {
                 </div>
               </div>
               {currentUser && currentUser.id !== user.id && !myFriends.includes(user.id) && (
-                <Button 
-                  variant="secondary" 
-                  className="text-xs ml-2"
-                  onClick={(e) => handleAddFriend(e, user.id)}
-                >
-                  Add
-                </Button>
+                sentRequests.includes(user.id) ? (
+                  <Button 
+                    variant="secondary" 
+                    className="text-xs ml-2 text-red-600 hover:bg-red-50"
+                    onClick={(e) => handleCancelRequest(e, user.id)}
+                  >
+                    Cancel
+                  </Button>
+                ) : (
+                  <Button 
+                    variant="secondary" 
+                    className="text-xs ml-2"
+                    onClick={(e) => handleAddFriend(e, user.id)}
+                  >
+                    Add
+                  </Button>
+                )
               )}
             </Link>
           ))}

@@ -32,6 +32,26 @@ export default async function chatWsRoutes(fastify: FastifyInstance) {
     }
   });
 
+  chatService.on('read', async (event) => {
+    const members = await fastify.prisma.channelMember.findMany({
+      where: { channelId: event.channelId },
+      select: { userId: true }
+    });
+
+    const payload = JSON.stringify({ type: 'read', data: event });
+
+    for (const member of members) {
+      const userConns = connections.get(member.userId);
+      if (userConns) {
+        for (const ws of userConns) {
+          if (ws.readyState === WebSocket.OPEN) {
+            ws.send(payload);
+          }
+        }
+      }
+    }
+  });
+
   notificationService.on('notification', (notification) => {
     const userConns = connections.get(notification.userId);
     if (userConns) {
@@ -48,7 +68,7 @@ export default async function chatWsRoutes(fastify: FastifyInstance) {
     // Guard: if this route was reached without a websocket connection object
     // (e.g. an accidental HTTP GET), avoid crashing the server.
     if (!connection || !connection.socket) {
-      req.log && req.log.warn && req.log.warn('WebSocket handler invoked without a connection.socket')
+      req.log && req.log.warn && req.log.warn({ headers: req.headers }, 'WebSocket handler invoked without a connection.socket')
       return
     }
     const token = (req.query as any).token;
