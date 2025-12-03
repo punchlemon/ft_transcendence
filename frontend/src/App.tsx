@@ -61,6 +61,12 @@ const App = () => {
               {user ? (
                 <div className="flex items-center gap-3" data-testid="navbar-auth-state">
                   <UserMenu />
+                  <button
+                    onClick={clearSession}
+                    className="rounded-md border border-slate-300 bg-white px-3 py-1.5 text-sm font-medium text-slate-700 hover:bg-slate-50 hover:text-slate-900 transition-colors"
+                  >
+                    Logout
+                  </button>
                 </div>
               ) : null}
             </nav>

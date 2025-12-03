@@ -35,6 +35,8 @@ export const connectChatWs = () => {
       const payload = JSON.parse(event.data);
       if (payload.type === 'message') {
         useChatStore.getState().addMessage(payload.data);
+      } else if (payload.type === 'read') {
+        useChatStore.getState().handleReadReceipt(payload.data);
       } else if (payload.type === 'notification') {
         useNotificationStore.getState().addNotification(payload.data);
       }

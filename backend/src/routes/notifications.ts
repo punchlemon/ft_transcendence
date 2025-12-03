@@ -38,6 +38,29 @@ const notificationsRoutes: FastifyPluginAsync = async (fastify) => {
     await notificationService.markAllAsRead(userId);
     return { success: true };
   });
+
+  fastify.delete('/:id', { preHandler: fastify.authenticate }, async (request, reply) => {
+    const paramsSchema = z.object({
+      id: z.coerce.number().int().positive(),
+    });
+
+    const parsed = paramsSchema.safeParse(request.params);
+    if (!parsed.success) {
+      reply.code(400);
+      return { error: { code: 'INVALID_PARAMS', message: 'Invalid notification ID' } };
+    }
+
+    const { id } = parsed.data;
+    const userId = request.user.userId;
+
+    try {
+      await notificationService.deleteNotification(id, userId);
+      return { success: true };
+    } catch (error) {
+      reply.code(404);
+      return { error: { code: 'NOT_FOUND', message: 'Notification not found' } };
+    }
+  });
 };
 
 export default notificationsRoutes;

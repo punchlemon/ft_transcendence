@@ -38,7 +38,8 @@ const jwtPlugin: FastifyPluginAsync = async (fastify) => {
   fastify.decorate('authenticate', async (request: FastifyRequest, reply: FastifyReply) => {
     try {
       await request.jwtVerify()
-    } catch {
+    } catch (err) {
+      request.log.error(err)
       reply.code(401)
       return reply.send({
         error: {

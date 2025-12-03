@@ -39,11 +39,11 @@ export const buildServer = async () => {
   await server.register(tournamentsRoutes, { prefix: '/api' })
   await server.register(gameRoutes)
   await server.register(gameRoutes, { prefix: '/api' })
-  await server.register(chatRoutes, { prefix: '/chat' })
+  await server.register(chatRoutes, { prefix: '/api/chat' })
   await server.register(chatWsRoutes)
   await server.register(chatWsRoutes, { prefix: '/api' })
-  await server.register(friendRoutes)
-  await server.register(notificationsRoutes, { prefix: '/notifications' })
+  await server.register(friendRoutes, { prefix: '/api' })
+  await server.register(notificationsRoutes, { prefix: '/api/notifications' })
 
   server.get('/api/health', async () => {
     return { status: 'ok', timestamp: new Date().toISOString() }

@@ -63,6 +63,43 @@ export class NotificationService extends EventEmitter {
       data: { readAt: new Date() },
     });
   }
+
+  async deleteNotification(id: number, userId: number) {
+    const notification = await prisma.notification.findUnique({
+      where: { id },
+    });
+
+    if (!notification || notification.userId !== userId) {
+      throw new Error('Notification not found or unauthorized');
+    }
+
+    return prisma.notification.delete({
+      where: { id },
+    });
+  }
+
+  async deleteNotificationByRequestId(requestId: number) {
+    // Find notifications with type FRIEND_REQUEST and data containing the requestId
+    const notifications = await prisma.notification.findMany({
+      where: {
+        type: 'FRIEND_REQUEST',
+      },
+    });
+
+    // Filter in memory because data is JSON string
+    const target = notifications.find(n => {
+      try {
+        const data = n.data ? JSON.parse(n.data) : {};
+        return data.requestId === requestId;
+      } catch {
+        return false;
+      }
+    });
+
+    if (target) {
+      await prisma.notification.delete({ where: { id: target.id } });
+    }
+  }
 }
 
 export const notificationService = new NotificationService();

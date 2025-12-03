@@ -86,7 +86,7 @@ describe('Friend Routes', () => {
   it('should send friend request', async () => {
     const res = await server.inject({
       method: 'POST',
-      url: `/friends/${user2Id}`,
+      url: `/api/friends/${user2Id}`,
       headers: { Authorization: `Bearer ${user1Token}` },
     });
     expect(res.statusCode).toBe(200);
@@ -98,7 +98,7 @@ describe('Friend Routes', () => {
     // Send request
     const reqRes = await server.inject({
       method: 'POST',
-      url: `/friends/${user2Id}`,
+      url: `/api/friends/${user2Id}`,
       headers: { Authorization: `Bearer ${user1Token}` },
     });
     const requestId = JSON.parse(reqRes.payload).data.id;
@@ -106,7 +106,7 @@ describe('Friend Routes', () => {
     // Accept
     const res = await server.inject({
       method: 'PATCH',
-      url: `/friends/${requestId}`,
+      url: `/api/friends/${requestId}`,
       headers: { Authorization: `Bearer ${user2Token}` },
       payload: { action: 'ACCEPT' },
     });
@@ -115,7 +115,7 @@ describe('Friend Routes', () => {
     // Check friendship
     const friendsRes = await server.inject({
       method: 'GET',
-      url: '/friends',
+      url: '/api/friends',
       headers: { Authorization: `Bearer ${user1Token}` },
     });
     const friends = JSON.parse(friendsRes.payload).data;
@@ -126,7 +126,7 @@ describe('Friend Routes', () => {
   it('should block user', async () => {
     const res = await server.inject({
       method: 'POST',
-      url: `/blocks/${user2Id}`,
+      url: `/api/blocks/${user2Id}`,
       headers: { Authorization: `Bearer ${user1Token}` },
     });
     expect(res.statusCode).toBe(200);
@@ -134,9 +134,40 @@ describe('Friend Routes', () => {
     // Try to send friend request (should fail)
     const reqRes = await server.inject({
       method: 'POST',
-      url: `/friends/${user1Id}`,
+      url: `/api/friends/${user1Id}`,
       headers: { Authorization: `Bearer ${user2Token}` },
     });
     expect(reqRes.statusCode).toBe(400);
+  });
+
+  it('should list sent and received friend requests', async () => {
+    // Send request from U1 to U2
+    await server.inject({
+      method: 'POST',
+      url: `/api/friends/${user2Id}`,
+      headers: { Authorization: `Bearer ${user1Token}` },
+    });
+
+    // Check U1 sent requests
+    const sentRes = await server.inject({
+      method: 'GET',
+      url: '/api/friends/requests/sent',
+      headers: { Authorization: `Bearer ${user1Token}` },
+    });
+    expect(sentRes.statusCode).toBe(200);
+    const sentData = JSON.parse(sentRes.payload).data;
+    expect(sentData).toHaveLength(1);
+    expect(sentData[0].receiver.id).toBe(user2Id);
+
+    // Check U2 received requests
+    const receivedRes = await server.inject({
+      method: 'GET',
+      url: '/api/friends/requests/received',
+      headers: { Authorization: `Bearer ${user2Token}` },
+    });
+    expect(receivedRes.statusCode).toBe(200);
+    const receivedData = JSON.parse(receivedRes.payload).data;
+    expect(receivedData).toHaveLength(1);
+    expect(receivedData[0].sender.id).toBe(user1Id);
   });
 });

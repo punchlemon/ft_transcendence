@@ -24,10 +24,14 @@ const ChatDrawer = () => {
     selectThread, 
     sendMessage 
   } = useChatStore()
-  const { notifications, fetchNotifications } = useNotificationStore()
+  const { notifications, fetchNotifications, unreadCount } = useNotificationStore()
 
   // Ensure threads is always an array to avoid test/runtime errors when store is uninitialized
   const threadsArr = threads ?? []
+
+  const totalUnreadMessages = useMemo(() => {
+    return threadsArr.reduce((acc, t) => acc + (t.unreadCount || 0), 0);
+  }, [threadsArr]);
 
   // Connect WS on mount if user is logged in
   useEffect(() => {
@@ -79,6 +83,24 @@ const ChatDrawer = () => {
 
   const activeThread = threadsArr.find(t => t.id === activeThreadId)
 
+  const formatTime = (dateStr: string) => {
+    return new Date(dateStr).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+  }
+
+  const isMessageRead = (msg: any) => {
+    if (!activeThread || !activeThread.members) return false
+    // Filter out self
+    const otherMembers = activeThread.members.filter((m: any) => m.id !== user?.id)
+    if (otherMembers.length === 0) return false
+
+    const msgTime = new Date(msg.sentAt).getTime()
+    // Considered read if ALL other members have read it (or just one for DM)
+    return otherMembers.every((m: any) => {
+      if (!m.lastReadAt) return false
+      return new Date(m.lastReadAt).getTime() >= msgTime
+    })
+  }
+
   const handleInvite = async () => {
     if (!activeThread || activeThread.type !== 'DM') return
     
@@ -107,6 +129,11 @@ const ChatDrawer = () => {
       >
         <div className="flex items-center gap-2">
           <span className="font-semibold">Chat</span>
+          {(unreadCount > 0 || totalUnreadMessages > 0) && !isOpen && (
+            <span className="flex h-5 w-5 items-center justify-center rounded-full bg-red-500 text-xs font-bold">
+              {(unreadCount + totalUnreadMessages) > 9 ? '9+' : (unreadCount + totalUnreadMessages)}
+            </span>
+          )}
         </div>
         <button className="text-slate-300 hover:text-white">
           {isOpen ? '▼' : '▲'}
@@ -157,21 +184,38 @@ const ChatDrawer = () => {
                 )}
               </div>
 
-              <div className="flex-1 overflow-y-auto bg-slate-50 p-4 space-y-4">
-                {activeMessages.slice().reverse().map((msg) => (
-                  <div key={msg.id} className={`flex ${msg.userId === user?.id ? 'justify-end' : 'justify-start'}`}>
-                    <div className={`max-w-[80%] rounded-lg px-3 py-2 text-sm ${
-                      msg.userId === user?.id 
-                        ? 'bg-indigo-600 text-white rounded-br-none' 
-                        : 'bg-white border border-slate-200 text-slate-800 rounded-bl-none'
-                    }`}>
-                      {msg.userId !== user?.id && (
-                        <div className="mb-1 text-xs font-bold opacity-75">{msg.user.displayName}</div>
+              <div className="flex-1 overflow-y-auto bg-slate-50 p-4">
+                {activeMessages.map((msg, index) => {
+                  const isMe = msg.userId === user?.id;
+                  const isSameUser = index > 0 && activeMessages[index - 1].userId === msg.userId;
+                  const showDisplayName = !isMe && !isSameUser && activeThread?.type !== 'DM';
+
+                  return (
+                    <div key={msg.id} className={`flex ${isMe ? 'justify-end' : 'justify-start'} items-end gap-2 ${isSameUser ? 'mt-1' : 'mt-4'}`}>
+                      {isMe ? (
+                        <>
+                          <div className="flex flex-col items-end text-[10px] text-slate-500 mb-1">
+                            {isMessageRead(msg) && <span className="font-bold text-indigo-600">Read</span>}
+                            <span>{formatTime(msg.sentAt)}</span>
+                          </div>
+                          <div className="max-w-[70%] rounded-lg px-3 py-2 text-sm bg-indigo-600 text-white rounded-br-none">
+                            {msg.content}
+                          </div>
+                        </>
+                      ) : (
+                        <>
+                          <div className="max-w-[70%] rounded-lg px-3 py-2 text-sm bg-white border border-slate-200 text-slate-800 rounded-bl-none">
+                            {showDisplayName && (
+                              <div className="mb-1 text-xs font-bold opacity-75">{msg.user.displayName}</div>
+                            )}
+                            {msg.content}
+                          </div>
+                          <span className="text-[10px] text-slate-500 mb-1">{formatTime(msg.sentAt)}</span>
+                        </>
                       )}
-                      {msg.content}
                     </div>
-                  </div>
-                ))}
+                  );
+                })}
                 <div ref={messagesEndRef} />
               </div>
 
@@ -199,16 +243,26 @@ const ChatDrawer = () => {
             <>
               <div className="flex border-b border-slate-200">
                 <button
-                  className={`flex-1 py-2 text-sm font-medium ${activeTab === 'dm' ? 'border-b-2 border-indigo-600 text-indigo-600' : 'text-slate-500 hover:text-slate-700'}`}
+                  className={`flex-1 py-2 text-sm font-medium relative ${activeTab === 'dm' ? 'border-b-2 border-indigo-600 text-indigo-600' : 'text-slate-500 hover:text-slate-700'}`}
                   onClick={() => setActiveTab('dm')}
                 >
                   Messages
+                  {totalUnreadMessages > 0 && (
+                    <span className="absolute top-1 right-4 flex h-4 w-4 items-center justify-center rounded-full bg-red-500 text-[10px] font-bold text-white">
+                      {totalUnreadMessages > 9 ? '9+' : totalUnreadMessages}
+                    </span>
+                  )}
                 </button>
                 <button
-                  className={`flex-1 py-2 text-sm font-medium ${activeTab === 'system' ? 'border-b-2 border-indigo-600 text-indigo-600' : 'text-slate-500 hover:text-slate-700'}`}
+                  className={`flex-1 py-2 text-sm font-medium relative ${activeTab === 'system' ? 'border-b-2 border-indigo-600 text-indigo-600' : 'text-slate-500 hover:text-slate-700'}`}
                   onClick={() => setActiveTab('system')}
                 >
                   System
+                  {unreadCount > 0 && (
+                    <span className="absolute top-1 right-4 flex h-4 w-4 items-center justify-center rounded-full bg-red-500 text-[10px] font-bold text-white">
+                      {unreadCount > 9 ? '9+' : unreadCount}
+                    </span>
+                  )}
                 </button>
               </div>
 
@@ -230,8 +284,13 @@ const ChatDrawer = () => {
                           }`} />
                         </div>
                         <div className="flex-1 overflow-hidden">
-                          <div className="flex justify-between">
+                          <div className="flex justify-between items-center">
                             <span className="font-medium text-slate-900">{thread.name}</span>
+                            {thread.unreadCount > 0 && (
+                                <span className="flex h-5 w-5 items-center justify-center rounded-full bg-red-500 text-[10px] font-bold text-white">
+                                    {thread.unreadCount > 9 ? '9+' : thread.unreadCount}
+                                </span>
+                            )}
                           </div>
                           <div className="truncate text-xs text-slate-500">
                             {thread.lastMessage?.content || 'No messages yet'}

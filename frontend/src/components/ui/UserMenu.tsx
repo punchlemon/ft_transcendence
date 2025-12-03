@@ -1,4 +1,3 @@
-import { useEffect } from 'react'
 import { Link } from 'react-router-dom'
 import useAuthStore from '../../stores/authStore'
 import { useNotificationStore } from '../../stores/notificationStore'
@@ -7,11 +6,6 @@ import Avatar from './Avatar'
 const UserMenu = () => {
   const user = useAuthStore((state) => state.user)
   const unreadCount = useNotificationStore((state) => state.unreadCount)
-  const fetchNotifications = useNotificationStore((state) => state.fetchNotifications)
-
-  useEffect(() => {
-    fetchNotifications()
-  }, [fetchNotifications])
 
   if (!user) return null
 
@@ -24,7 +18,7 @@ const UserMenu = () => {
       <div className="relative">
         <Avatar src={user.avatarUrl} alt={user.displayName} size="sm" />
         {unreadCount > 0 && (
-          <span className="absolute -right-1 -top-1 flex h-4 w-4 items-center justify-center rounded-full bg-red-500 text-[10px] font-bold text-white ring-2 ring-white">
+          <span className="absolute -top-1 -right-1 flex h-4 w-4 items-center justify-center rounded-full bg-red-500 text-[10px] font-bold text-white">
             {unreadCount > 9 ? '9+' : unreadCount}
           </span>
         )}

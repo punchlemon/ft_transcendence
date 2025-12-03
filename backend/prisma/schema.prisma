@@ -488,6 +488,7 @@ model ChannelMember {
   userId     Int
   role       String   @default("MEMBER")
   joinedAt   DateTime @default(now())
+  lastReadAt DateTime @default(now())
   mutedUntil DateTime?
 
   channel    Channel   @relation(fields: [channelId], references: [id])

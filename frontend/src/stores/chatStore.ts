@@ -6,6 +6,7 @@ export interface ChatUser {
   displayName: string;
   avatarUrl?: string;
   status: string;
+  lastReadAt?: string;
 }
 
 export interface ChatMessage {
@@ -24,6 +25,7 @@ export interface ChatThread {
   updatedAt: string;
   lastMessage?: ChatMessage;
   members: ChatUser[];
+  unreadCount: number;
 }
 
 interface ChatState {
@@ -37,6 +39,8 @@ interface ChatState {
   createThread: (type: 'DM' | 'PUBLIC', targetIdOrName: string | number) => Promise<void>;
   sendMessage: (content: string) => Promise<void>;
   addMessage: (message: ChatMessage) => void;
+  markAsRead: (threadId: number) => Promise<void>;
+  handleReadReceipt: (data: { channelId: number, userId: number, lastReadAt: string }) => void;
 }
 
 export const useChatStore = create<ChatState>((set, get) => ({
@@ -62,6 +66,9 @@ export const useChatStore = create<ChatState>((set, get) => ({
     set({ activeThreadId: threadId });
     if (!threadId) return;
     
+    // Mark as read
+    get().markAsRead(threadId);
+
     // Fetch messages
     try {
         const res = await api.get(`/chat/threads/${threadId}/messages`);
@@ -98,24 +105,68 @@ export const useChatStore = create<ChatState>((set, get) => ({
     if (created) get().addMessage(created as ChatMessage);
   },
 
+  markAsRead: async (threadId) => {
+    // Optimistic update
+    set((state) => ({
+      threads: state.threads.map(t => 
+        t.id === threadId ? { ...t, unreadCount: 0 } : t
+      )
+    }));
+
+    try {
+      await api.post(`/chat/threads/${threadId}/read`);
+    } catch (error) {
+      console.error("Failed to mark as read", error);
+    }
+  },
+
   addMessage: (message) => {
     set((state) => {
       const channelMessages = state.messages[message.channelId] || [];
       // Avoid duplicates
       if (channelMessages.find(m => m.id === message.id)) return state;
       
+      const isUnread = state.activeThreadId !== message.channelId;
+
       return {
         messages: {
           ...state.messages,
-          [message.channelId]: [message, ...channelMessages], // Prepend (newest first)
+          [message.channelId]: [...channelMessages, message], // Append (oldest first)
         },
         // Update last message in thread list
         threads: state.threads.map(t => 
           t.id === message.channelId 
-            ? { ...t, lastMessage: message, updatedAt: message.sentAt } 
+            ? { 
+                ...t, 
+                lastMessage: message, 
+                updatedAt: message.sentAt,
+                unreadCount: isUnread ? (t.unreadCount || 0) + 1 : 0
+              } 
             : t
         ).sort((a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime())
       };
     });
+
+    // If we are in the thread, mark as read on server so it doesn't show as unread on refresh
+    const { activeThreadId } = get();
+    if (activeThreadId === message.channelId) {
+        api.post(`/chat/threads/${message.channelId}/read`).catch(console.error);
+    }
+  },
+
+  handleReadReceipt: (data) => {
+    set((state) => ({
+      threads: state.threads.map(t => {
+        if (t.id !== data.channelId) return t;
+        return {
+          ...t,
+          members: t.members.map(m => 
+            m.id === data.userId 
+              ? { ...m, lastReadAt: data.lastReadAt } 
+              : m
+          )
+        };
+      })
+    }));
   },
 }));

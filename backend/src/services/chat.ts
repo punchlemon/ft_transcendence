@@ -186,6 +186,53 @@ export class ChatService extends EventEmitter {
           }
       });
   }
+
+  async markAsRead(channelId: number, userId: number) {
+    const member = await prisma.channelMember.findFirst({
+      where: {
+        channelId,
+        userId,
+      },
+    });
+
+    if (!member) {
+      throw new Error('Member not found');
+    }
+
+    const updated = await prisma.channelMember.update({
+      where: {
+        id: member.id,
+      },
+      data: {
+        lastReadAt: new Date(),
+      },
+    });
+
+    this.emit('read', { channelId, userId, lastReadAt: updated.lastReadAt });
+    return updated;
+  }
+
+  async getUnreadCount(channelId: number, userId: number) {
+    const member = await prisma.channelMember.findUnique({
+      where: {
+        channelId_userId: {
+          channelId,
+          userId,
+        },
+      },
+    });
+
+    if (!member) return 0;
+
+    return prisma.message.count({
+      where: {
+        channelId,
+        sentAt: {
+          gt: member.lastReadAt,
+        },
+      },
+    });
+  }
 }
 
 export const chatService = new ChatService();

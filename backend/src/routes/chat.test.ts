@@ -83,7 +83,7 @@ describe('Chat Routes', () => {
 
     const res = await server.inject({
       method: 'POST',
-      url: '/chat/threads',
+      url: '/api/chat/threads',
       headers: { authorization: `Bearer ${user1.tokens.access}` },
       payload: {
         type: 'DM',
@@ -110,7 +110,7 @@ describe('Chat Routes', () => {
     // First create
     const res1 = await server.inject({
       method: 'POST',
-      url: '/chat/threads',
+      url: '/api/chat/threads',
       headers: { authorization: `Bearer ${user1.tokens.access}` },
       payload: { type: 'DM', targetUserId: user2.user.id }
     })
@@ -119,7 +119,7 @@ describe('Chat Routes', () => {
     // Second create
     const res2 = await server.inject({
       method: 'POST',
-      url: '/chat/threads',
+      url: '/api/chat/threads',
       headers: { authorization: `Bearer ${user1.tokens.access}` },
       payload: { type: 'DM', targetUserId: user2.user.id }
     })
@@ -135,7 +135,7 @@ describe('Chat Routes', () => {
 
     const res = await server.inject({
       method: 'POST',
-      url: '/chat/threads',
+      url: '/api/chat/threads',
       headers: { authorization: `Bearer ${user1.tokens.access}` },
       payload: {
         type: 'PUBLIC',
@@ -162,14 +162,14 @@ describe('Chat Routes', () => {
     // Create DM
     await server.inject({
       method: 'POST',
-      url: '/chat/threads',
+      url: '/api/chat/threads',
       headers: { authorization: `Bearer ${user1.tokens.access}` },
       payload: { type: 'DM', targetUserId: user2.user.id }
     })
 
     const res = await server.inject({
       method: 'GET',
-      url: '/chat/threads',
+      url: '/api/chat/threads',
       headers: { authorization: `Bearer ${user1.tokens.access}` }
     })
 
@@ -188,7 +188,7 @@ describe('Chat Routes', () => {
     // Create DM
     const createRes = await server.inject({
       method: 'POST',
-      url: '/chat/threads',
+      url: '/api/chat/threads',
       headers: { authorization: `Bearer ${user1.tokens.access}` },
       payload: { type: 'DM', targetUserId: user2.user.id }
     })
@@ -197,7 +197,7 @@ describe('Chat Routes', () => {
     // Send message
     const sendRes = await server.inject({
       method: 'POST',
-      url: `/chat/threads/${channelId}/messages`,
+      url: `/api/chat/threads/${channelId}/messages`,
       headers: { authorization: `Bearer ${user1.tokens.access}` },
       payload: { content: 'Hello Bob!' }
     })
@@ -206,7 +206,7 @@ describe('Chat Routes', () => {
     // Get messages
     const getRes = await server.inject({
       method: 'GET',
-      url: `/chat/threads/${channelId}/messages`,
+      url: `/api/chat/threads/${channelId}/messages`,
       headers: { authorization: `Bearer ${user2.tokens.access}` }
     })
     expect(getRes.statusCode).toBe(200)
@@ -224,7 +224,7 @@ describe('Chat Routes', () => {
     // Create DM between Alice and Bob
     const createRes = await server.inject({
       method: 'POST',
-      url: '/chat/threads',
+      url: '/api/chat/threads',
       headers: { authorization: `Bearer ${user1.tokens.access}` },
       payload: { type: 'DM', targetUserId: user2.user.id }
     })
@@ -233,7 +233,7 @@ describe('Chat Routes', () => {
     // Eve tries to read messages
     const res = await server.inject({
       method: 'GET',
-      url: `/chat/threads/${channelId}/messages`,
+      url: `/api/chat/threads/${channelId}/messages`,
       headers: { authorization: `Bearer ${user3.tokens.access}` }
     })
     expect(res.statusCode).toBe(403)

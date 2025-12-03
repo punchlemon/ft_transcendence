@@ -157,20 +157,55 @@ export const sendFriendRequest = async (userId: number) => {
   await apiClient.post(`/friends/${userId}`)
 }
 
+export const cancelFriendRequest = async (userId: number) => {
+  await apiClient.delete(`/friends/requests/${userId}`)
+}
+
 export const removeFriend = async (userId: number) => {
   await apiClient.delete(`/friends/${userId}`)
 }
 
 export const acceptFriendRequest = async (requestId: number) => {
-  await apiClient.patch(`/friends/requests/${requestId}/accept`)
+  await apiClient.patch(`/friends/${requestId}`, { action: 'ACCEPT' })
+}
+
+export const declineFriendRequest = async (requestId: number) => {
+  await apiClient.patch(`/friends/${requestId}`, { action: 'DECLINE' })
 }
 
 export const blockUser = async (userId: number) => {
-  await apiClient.post(`/friends/${userId}/block`)
+  await apiClient.post(`/blocks/${userId}`)
 }
 
 export const unblockUser = async (userId: number) => {
-  await apiClient.delete(`/friends/${userId}/block`)
+  await apiClient.delete(`/blocks/${userId}`)
+}
+
+export type FriendRequestResponse = {
+  data: Array<{
+    id: number
+    status: string
+    sender?: {
+      id: number
+      displayName: string
+      avatarUrl: string | null
+    }
+    receiver?: {
+      id: number
+      displayName: string
+      avatarUrl: string | null
+    }
+  }>
+}
+
+export const fetchSentFriendRequests = async () => {
+  const response = await apiClient.get('/friends/requests/sent')
+  return response.data as FriendRequestResponse
+}
+
+export const fetchReceivedFriendRequests = async () => {
+  const response = await apiClient.get('/friends/requests/received')
+  return response.data as FriendRequestResponse
 }
 
 export type MatchHistoryResponse = {
