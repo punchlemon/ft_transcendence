@@ -726,10 +726,10 @@ describe('OAuth flow', () => {
     )
     const profileResponse = new undici.Response(
       JSON.stringify({
-        id: 77,
+        sub: '77',
         email: 'oauth-user@example.com',
-        usual_full_name: 'OAuth User',
-        login: 'oauthuser'
+        name: 'OAuth User',
+        picture: 'https://cdn.example.com/avatar.png'
       }),
       { status: 200, headers: { 'content-type': 'application/json' } }
     )
