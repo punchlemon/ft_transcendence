@@ -18,7 +18,7 @@ const CODE_VERIFIER_BYTE_LENGTH = 32
 const PKCE_METHOD = 'S256'
 const DEFAULT_REDIRECT_URI = 'http://localhost:5173/oauth/callback'
 
-type OAuthProviderKey = 'fortytwo' | 'google'
+type OAuthProviderKey = 'google'
 
 type ProviderProfile = {
   providerUserId: string
@@ -66,31 +66,6 @@ const getAllowedRedirects = () => {
 }
 
 const oauthProviderStaticConfigs: Record<OAuthProviderKey, OAuthProviderStaticConfig> = {
-  fortytwo: {
-    authorizeUrl: 'https://api.intra.42.fr/oauth/authorize',
-    tokenUrl: 'https://api.intra.42.fr/oauth/token',
-    profileUrl: 'https://api.intra.42.fr/v2/me',
-    scope: ['public'],
-    pkce: false,
-    mapProfile: (raw) => {
-      const data = raw as {
-        id?: number
-        email?: string
-        login?: string
-        usual_full_name?: string
-        image?: { link?: string | null }
-      }
-      if (!data?.id || !data.email) {
-        return null
-      }
-      return {
-        providerUserId: String(data.id),
-        email: data.email.toLowerCase(),
-        displayName: data.usual_full_name?.trim() || data.login || data.email,
-        avatarUrl: data.image?.link ?? null
-      }
-    }
-  },
   google: {
     authorizeUrl: 'https://accounts.google.com/o/oauth2/v2/auth',
     tokenUrl: 'https://oauth2.googleapis.com/token',
@@ -134,17 +109,10 @@ const sanitizeCredential = (value?: string) => {
 
 const resolveProviderConfig = (providerKey: OAuthProviderKey): OAuthProviderConfig => {
   const base = oauthProviderStaticConfigs[providerKey]
-  const credentials =
-    providerKey === 'fortytwo'
-      ? {
-          clientId: sanitizeCredential(process.env.FORTYTWO_OAUTH_CLIENT_ID),
-          clientSecret: sanitizeCredential(process.env.FORTYTWO_OAUTH_CLIENT_SECRET)
-        }
-      : {
-          clientId: sanitizeCredential(process.env.GOOGLE_OAUTH_CLIENT_ID),
-          clientSecret: sanitizeCredential(process.env.GOOGLE_OAUTH_CLIENT_SECRET)
-        }
-
+  const credentials = {
+    clientId: sanitizeCredential(process.env.GOOGLE_OAUTH_CLIENT_ID),
+    clientSecret: sanitizeCredential(process.env.GOOGLE_OAUTH_CLIENT_SECRET)
+  }
   return {
     ...base,
     ...credentials
@@ -288,8 +256,7 @@ const deriveCodeChallenge = (codeVerifier: string) => toBase64Url(createHash('sh
 
 const isRedirectAllowed = (redirectUri: string) => getAllowedRedirects().includes(redirectUri)
 
-const isSupportedProvider = (provider?: string): provider is OAuthProviderKey =>
-  provider === 'fortytwo' || provider === 'google'
+const isSupportedProvider = (provider?: string): provider is OAuthProviderKey => provider === 'google'
 
 const sanitizeClientMetadata = (metadata?: SessionClientMetadata) => {
   const ipAddress = typeof metadata?.ipAddress === 'string' ? metadata.ipAddress.slice(0, 128) : null

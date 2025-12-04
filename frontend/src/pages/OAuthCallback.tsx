@@ -17,8 +17,7 @@ const MFA_CHALLENGE_KEY = 'ft_mfa_challenge_id'
 
 type CallbackStatus = 'validating' | 'success' | 'needsMfa' | 'error'
 
-const isOAuthProvider = (value: string | null): value is OAuthProvider =>
-  value === 'fortytwo' || value === 'google'
+const isOAuthProvider = (value: string | null): value is OAuthProvider => value === 'google'
 
 const OAuthCallbackPage = () => {
   const setSession = useAuthStore((state) => state.setSession)

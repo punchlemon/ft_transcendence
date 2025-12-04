@@ -54,13 +54,13 @@ describe('OAuthCallbackPage', () => {
   })
 
   it('completes OAuth login and stores tokens', async () => {
-    saveOAuthRequestContext({ state: 'state-1', provider: 'fortytwo', codeChallenge: null })
+    saveOAuthRequestContext({ state: 'state-1', provider: 'google', codeChallenge: null })
     const apiResponse: CallbackResponse = {
       user: { id: 1, displayName: 'Alice', login: 'alice', status: 'ONLINE' },
       tokens: { access: 'access-token', refresh: 'refresh-token' },
       mfaRequired: false,
       challengeId: null,
-      oauthProvider: 'fortytwo'
+      oauthProvider: 'google'
     }
     mockedComplete.mockResolvedValue(apiResponse)
 
@@ -69,7 +69,7 @@ describe('OAuthCallbackPage', () => {
     renderWithRouter('/oauth/callback?code=abc&state=state-1')
 
     await waitFor(() => {
-      expect(mockedComplete).toHaveBeenCalledWith('fortytwo', {
+      expect(mockedComplete).toHaveBeenCalledWith('google', {
         code: 'abc',
         state: 'state-1',
         redirectUri: expectedRedirectUri
@@ -102,7 +102,7 @@ describe('OAuthCallbackPage', () => {
   })
 
   it('shows error when state does not match storage', async () => {
-    saveOAuthRequestContext({ state: 'state-original', provider: 'fortytwo', codeChallenge: null })
+    saveOAuthRequestContext({ state: 'state-original', provider: 'google', codeChallenge: null })
 
     renderWithRouter('/oauth/callback?code=abc&state=other-state')
 

@@ -86,12 +86,10 @@ Docker を使わず `npm run dev` で起動している場合は以下を使用�
   ```
 
 ## OAuth 設定
-OAuth 認証（42, Google 等）を利用するには、`.env` に以下の変数を設定してください。
+OAuth 認証（Google）を利用するには、`.env` に以下の変数を設定してください。
 
 ```env
 # OAuth Configuration (Backend)
-FORTYTWO_OAUTH_CLIENT_ID=your-42-client-id
-FORTYTWO_OAUTH_CLIENT_SECRET=your-42-client-secret
 GOOGLE_OAUTH_CLIENT_ID=your-google-client-id
 GOOGLE_OAUTH_CLIENT_SECRET=your-google-client-secret
 OAUTH_REDIRECT_WHITELIST=http://localhost:5173/oauth/callback
@@ -100,6 +98,6 @@ OAUTH_REDIRECT_WHITELIST=http://localhost:5173/oauth/callback
 VITE_OAUTH_REDIRECT_URI=http://localhost:5173/oauth/callback
 ```
 
-**重要:** Google/42 の開発者コンソールで Web アプリ用 OAuth クライアントを作成し、`Authorized redirect URI` に `http://localhost:5173/oauth/callback` を必ず登録してください。上記プレースホルダー値のままでは Google 側で `invalid_client` エラーになります。
+**重要:** Google の開発者コンソールで Web アプリ用 OAuth クライアントを作成し、`Authorized redirect URI` に `http://localhost:5173/oauth/callback` を必ず登録してください。上記プレースホルダー値のままでは Google 側で `invalid_client` エラーになります。
 
 プロバイダを追加する場合は `backend/src/routes/auth.ts` と `frontend/src/pages/Login.tsx` を拡張してください。

@@ -139,13 +139,13 @@ describe('LoginPage', () => {
       </MemoryRouter>
     )
 
-    await user.click(screen.getByRole('button', { name: 'Login with 42' }))
+    await user.click(screen.getByRole('button', { name: 'Login with Google' }))
 
     await waitFor(() => {
       expect(mockedFetchOAuthUrl).toHaveBeenCalled()
     })
     expect(sessionStorage.getItem(stateKey)).toBe('state-1')
-    expect(sessionStorage.getItem(providerKey)).toBe('fortytwo')
+    expect(sessionStorage.getItem(providerKey)).toBe('google')
     expect(sessionStorage.getItem(codeChallengeKey)).toBe('challenge-abc')
     expect(openSpy).toHaveBeenCalledWith('https://oauth.example/authorize', '_self')
   })

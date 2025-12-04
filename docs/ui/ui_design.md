@@ -84,7 +84,7 @@ Authenticated Routes (Layout 配下)
 - **トークン保存**: 成功時は `sessionStorage` の `ft_access_token` / `ft_refresh_token` に保存し、将来の `authStore` 実装に備える。
 
 ### 0.2 OAuth ボタン挙動
-- プロバイダは `fortytwo`, `google` の 2 種。環境変数 `VITE_OAUTH_REDIRECT_URI` (未指定時は `window.location.origin + /oauth/callback`) をクエリ `redirectUri` に添付。
+- プロバイダは `google` のみ。環境変数 `VITE_OAUTH_REDIRECT_URI` (未指定時は `window.location.origin + /oauth/callback`) をクエリ `redirectUri` に添付。
 - `/auth/oauth/:provider/url` から取得した `authorizationUrl`, `state`, `codeChallenge` を sessionStorage に保存 (`ft_oauth_state`, `ft_oauth_code_challenge`) し、`window.location.assign()` でプロバイダへ遷移。
 - 失敗時は詳細エラーを画面上部のアラートに表示し、利用者には「数秒後に再試行してください」と案内。
 - コールバックページ (`/oauth/callback`) は別途実装し、`state`/`codeVerifier` を読み込んで `/auth/oauth/:provider/callback` を叩く。
