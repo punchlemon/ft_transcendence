@@ -34,6 +34,86 @@ export const attachAuthorizationHeader = (config: InternalAxiosRequestConfig) =>
 
 apiClient.interceptors.request.use(attachAuthorizationHeader)
 
+let isRefreshing = false
+let failedQueue: Array<{
+  resolve: (token: string) => void
+  reject: (error: any) => void
+}> = []
+
+const processQueue = (error: any, token: string | null = null) => {
+  failedQueue.forEach((prom) => {
+    if (error) {
+      prom.reject(error)
+    } else {
+      prom.resolve(token!)
+    }
+  })
+  failedQueue = []
+}
+
+apiClient.interceptors.response.use(
+  (response) => response,
+  async (error) => {
+    const originalRequest = error.config
+
+    if (!originalRequest) {
+      return Promise.reject(error)
+    }
+
+    if (originalRequest.url?.endsWith('/auth/refresh')) {
+      return Promise.reject(error)
+    }
+
+    if (error.response?.status === 401 && !(originalRequest as any)._retry) {
+      if (isRefreshing) {
+        return new Promise<string>((resolve, reject) => {
+          failedQueue.push({ resolve, reject })
+        })
+          .then((token) => {
+            originalRequest.headers['Authorization'] = `Bearer ${token}`
+            return apiClient(originalRequest)
+          })
+          .catch((err) => {
+            return Promise.reject(err)
+          })
+      }
+
+      ;(originalRequest as any)._retry = true
+      isRefreshing = true
+
+      const refreshToken = useAuthStore.getState().refreshToken
+
+      if (!refreshToken) {
+        useAuthStore.getState().clearSession()
+        return Promise.reject(error)
+      }
+
+      try {
+        const response = await apiClient.post('/auth/refresh', { refreshToken })
+        const { tokens, user } = response.data
+
+        useAuthStore.getState().setSession({
+          user,
+          tokens
+        })
+
+        processQueue(null, tokens.access)
+
+        originalRequest.headers['Authorization'] = `Bearer ${tokens.access}`
+        return apiClient(originalRequest)
+      } catch (err) {
+        processQueue(err, null)
+        useAuthStore.getState().clearSession()
+        return Promise.reject(err)
+      } finally {
+        isRefreshing = false
+      }
+    }
+
+    return Promise.reject(error)
+  }
+)
+
 export const fetchHealth = async () => {
   const response = await apiClient.get('/health')
   return response.data as { status: string; timestamp: string }
