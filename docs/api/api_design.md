@@ -17,7 +17,7 @@
 | POST | `/auth/register` | ❌ | Create account. |
 | POST | `/auth/login` | ❌ | Email/password login. Returns access+refresh tokens. |
 | GET | `/auth/oauth/:provider/url` | ❌ | Generate provider authorization URL + PKCE parameters. |
-| POST | `/auth/oauth/:provider/callback` | ❌ | Exchange authorization code for JWT session (42, Google). |
+| POST | `/auth/oauth/:provider/callback` | ❌ | Exchange authorization code for JWT session (Google). |
 | POST | `/auth/refresh` | ❌ | Refresh access token. |
 | POST | `/auth/logout` | ✅ | Invalidate current session. |
 | GET | `/auth/sessions` | ✅ | List active sessions + metadata for current user. |
@@ -119,7 +119,7 @@ Response `201`: `{ "user": { ...basic profile... }, "tokens": { "access", "refre
 - 現在のセッションを削除すると、以後の `/auth/refresh` が `INVALID_REFRESH_TOKEN` になるため、クライアントは `authStore.clearSession()` を呼んで即時ログアウトする必要がある。
 
 ### 1.1.1 OAuth リモート認証
-**対応プロバイダ**: `fortytwo`, `google`。ルートパラメータ `:provider` は小文字。存在しないプロバイダは `404 OAUTH_PROVIDER_NOT_SUPPORTED`。
+**対応プロバイダ**: `google`。ルートパラメータ `:provider` は小文字。存在しないプロバイダは `404 OAUTH_PROVIDER_NOT_SUPPORTED`。
 
 | Method | Path | Auth | Description |
 | --- | --- | --- | --- |
@@ -130,11 +130,11 @@ Response `201`: `{ "user": { ...basic profile... }, "tokens": { "access", "refre
 - クエリ: `redirectUri`（必須、我々のフロントエンドでホワイトリスト登録済みドメインのみ許可）。
 - サーバー処理:
   1. `OAuthState` テーブルへ `provider`, `state` (UUID v4), `codeVerifier` (43 文字ランダム), `redirectUri`, `expiresAt = now + 10min` を保存。
-  2. PKCE 対応プロバイダでは `codeChallenge = base64url(sha256(codeVerifier))` を計算。42API は PKCE 非対応のため `codeChallenge` は `null` を返す。
+  2. PKCE 対応プロバイダでは `codeChallenge = base64url(sha256(codeVerifier))` を計算。PKCE をサポートしないプロバイダの場合は `codeChallenge` を返さないことがあります。
 - レスポンス `200`:
 ```json
 {
-  "authorizationUrl": "https://api.intra.42.fr/oauth/authorize?...",
+  "authorizationUrl": "https://accounts.google.com/o/oauth2/v2/auth?client_id=...&scope=openid%20email%20profile&response_type=code&redirect_uri=...",
   "state": "uuid",
   "codeChallenge": "abc123",
   "expiresIn": 600
@@ -165,7 +165,7 @@ Response `201`: `{ "user": { ...basic profile... }, "tokens": { "access", "refre
   "tokens": { "access": "...", "refresh": "..." },
   "mfaRequired": false,
   "challengeId": null,
-  "oauthProvider": "fortytwo"
+  "oauthProvider": "google"
 }
 ```
 - エラー:

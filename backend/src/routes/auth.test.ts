@@ -22,8 +22,6 @@ const basePayload = {
 const jwtPattern = /^[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+$/
 
 process.env.OAUTH_REDIRECT_WHITELIST = 'https://app.ft/oauth/callback'
-process.env.FORTYTWO_OAUTH_CLIENT_ID = 'test-42-client-id'
-process.env.FORTYTWO_OAUTH_CLIENT_SECRET = 'test-42-client-secret'
 process.env.GOOGLE_OAUTH_CLIENT_ID = 'test-google-client-id'
 process.env.GOOGLE_OAUTH_CLIENT_SECRET = 'test-google-client-secret'
 
@@ -629,7 +627,7 @@ describe('OAuth flow', () => {
   it('rejects redirect URIs outside the whitelist', async () => {
     const response = await server.inject({
       method: 'GET',
-      url: '/auth/oauth/fortytwo/url',
+      url: '/auth/oauth/google/url',
       query: { redirectUri: 'https://evil.example.com/callback' }
     })
 
@@ -654,7 +652,7 @@ describe('OAuth flow', () => {
   it('completes OAuth exchange and creates a new user session', async () => {
     const urlResponse = await server.inject({
       method: 'GET',
-      url: '/auth/oauth/fortytwo/url',
+      url: '/auth/oauth/google/url',
       query: { redirectUri }
     })
 
@@ -665,11 +663,10 @@ describe('OAuth flow', () => {
     )
     const profileResponse = new undici.Response(
       JSON.stringify({
-        id: 99,
+        sub: '99',
         email: 'oauth-user@example.com',
-        usual_full_name: 'OAuth User',
-        login: 'oauthuser',
-        image: { link: 'https://cdn.example.com/avatar.png' }
+        name: 'OAuth User',
+        picture: 'https://cdn.example.com/avatar.png'
       }),
       { status: 200, headers: { 'content-type': 'application/json' } }
     )
@@ -679,7 +676,7 @@ describe('OAuth flow', () => {
 
     const callbackResponse = await server.inject({
       method: 'POST',
-      url: '/auth/oauth/fortytwo/callback',
+      url: '/auth/oauth/google/callback',
       payload: {
         code: 'auth-code',
         state: urlBody.state,
@@ -694,12 +691,12 @@ describe('OAuth flow', () => {
       oauthProvider: string
       mfaRequired: boolean
     }>()
-    expect(body.oauthProvider).toBe('fortytwo')
+    expect(body.oauthProvider).toBe('google')
     expect(body.mfaRequired).toBe(false)
     expect(body.tokens.access).toMatch(jwtPattern)
 
     const account = await prisma.oAuthAccount.findUnique({
-      where: { provider_providerUserId: { provider: 'fortytwo', providerUserId: '99' } }
+      where: { provider_providerUserId: { provider: 'google', providerUserId: '99' } }
     })
     expect(account).not.toBeNull()
   })
@@ -718,7 +715,7 @@ describe('OAuth flow', () => {
 
     const urlResponse = await server.inject({
       method: 'GET',
-      url: '/auth/oauth/fortytwo/url',
+      url: '/auth/oauth/google/url',
       query: { redirectUri }
     })
     const urlBody = urlResponse.json<{ state: string }>()
@@ -729,10 +726,10 @@ describe('OAuth flow', () => {
     )
     const profileResponse = new undici.Response(
       JSON.stringify({
-        id: 77,
+        sub: '77',
         email: 'oauth-user@example.com',
-        usual_full_name: 'OAuth User',
-        login: 'oauthuser'
+        name: 'OAuth User',
+        picture: 'https://cdn.example.com/avatar.png'
       }),
       { status: 200, headers: { 'content-type': 'application/json' } }
     )
@@ -742,7 +739,7 @@ describe('OAuth flow', () => {
 
     const callbackResponse = await server.inject({
       method: 'POST',
-      url: '/auth/oauth/fortytwo/callback',
+      url: '/auth/oauth/google/callback',
       payload: {
         code: 'auth-code',
         state: urlBody.state,
@@ -760,7 +757,7 @@ describe('OAuth flow', () => {
   it('rejects expired OAuth state payloads', async () => {
     const stateRecord = await prisma.oAuthState.create({
       data: {
-        provider: 'fortytwo',
+        provider: 'google',
         state: randomUUID(),
         redirectUri,
         codeVerifier: null,
@@ -770,7 +767,7 @@ describe('OAuth flow', () => {
 
     const response = await server.inject({
       method: 'POST',
-      url: '/auth/oauth/fortytwo/callback',
+      url: '/auth/oauth/google/callback',
       payload: {
         code: 'late-code',
         state: stateRecord.state,

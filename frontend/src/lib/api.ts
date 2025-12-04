@@ -76,7 +76,7 @@ export const register = async (payload: RegisterPayload) => {
   return response.data as LoginSuccessResponse
 }
 
-export type OAuthProvider = 'fortytwo' | 'google'
+export type OAuthProvider = 'google'
 
 export type OAuthAuthorizationUrlResponse = {
   authorizationUrl: string

@@ -86,7 +86,6 @@ model OAuthState {
 
 enum OAuthProvider {
   GOOGLE
-  FORTYTWO
 }
 
 - `OAuthState` は OAuth 認証開始時に生成した `state` と PKCE `codeVerifier` を 10 分間保持するワークテーブル。コールバック成功・失敗にかかわらず必ず削除し、`expiresAt < now` の行は cron かログイン処理でガーベジコレクトする。
