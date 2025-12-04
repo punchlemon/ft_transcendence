@@ -6,7 +6,6 @@ import { resolveOAuthRedirectUri, saveOAuthRequestContext } from '../lib/oauth'
 import useAuthStore from '../stores/authStore'
 
 const OAUTH_PROVIDERS: Array<{ id: OAuthProvider; label: string }> = [
-  { id: 'fortytwo', label: 'Login with 42' },
   { id: 'google', label: 'Login with Google' }
 ]
 
