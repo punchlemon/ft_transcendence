@@ -89,14 +89,17 @@ Docker を使わず `npm run dev` で起動している場合は以下を使用�
 OAuth 認証（42, Google 等）を利用するには、`.env` に以下の変数を設定してください。
 
 ```env
-# OAuth Configuration
-OAUTH_42_CLIENT_ID=your_42_client_id
-OAUTH_42_CLIENT_SECRET=your_42_client_secret
-OAUTH_42_CALLBACK_URL=http://localhost:3000/auth/42/callback
+# OAuth Configuration (Backend)
+FORTYTWO_OAUTH_CLIENT_ID=your-42-client-id
+FORTYTWO_OAUTH_CLIENT_SECRET=your-42-client-secret
+GOOGLE_OAUTH_CLIENT_ID=your-google-client-id
+GOOGLE_OAUTH_CLIENT_SECRET=your-google-client-secret
+OAUTH_REDIRECT_WHITELIST=http://localhost:5173/oauth/callback
 
-OAUTH_GOOGLE_CLIENT_ID=your_google_client_id
-OAUTH_GOOGLE_CLIENT_SECRET=your_google_client_secret
-OAUTH_GOOGLE_CALLBACK_URL=http://localhost:3000/auth/google/callback
+# OAuth Configuration (Frontend)
+VITE_OAUTH_REDIRECT_URI=http://localhost:5173/oauth/callback
 ```
 
-プロバイダを追加する場合は `backend/src/plugins/oauth.ts` と `frontend/src/pages/Login.tsx` を拡張してください。
+**重要:** Google/42 の開発者コンソールで Web アプリ用 OAuth クライアントを作成し、`Authorized redirect URI` に `http://localhost:5173/oauth/callback` を必ず登録してください。上記プレースホルダー値のままでは Google 側で `invalid_client` エラーになります。
+
+プロバイダを追加する場合は `backend/src/routes/auth.ts` と `frontend/src/pages/Login.tsx` を拡張してください。
