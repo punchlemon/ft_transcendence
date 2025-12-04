@@ -122,17 +122,27 @@ const oauthProviderStaticConfigs: Record<OAuthProviderKey, OAuthProviderStaticCo
   }
 }
 
+const sanitizeCredential = (value?: string) => {
+  const trimmed = value?.trim()
+  if (!trimmed) return undefined
+  const lower = trimmed.toLowerCase()
+  if (lower.startsWith('your-') || lower.includes('change-me')) {
+    return undefined
+  }
+  return trimmed
+}
+
 const resolveProviderConfig = (providerKey: OAuthProviderKey): OAuthProviderConfig => {
   const base = oauthProviderStaticConfigs[providerKey]
   const credentials =
     providerKey === 'fortytwo'
       ? {
-          clientId: process.env.FORTYTWO_OAUTH_CLIENT_ID,
-          clientSecret: process.env.FORTYTWO_OAUTH_CLIENT_SECRET
+          clientId: sanitizeCredential(process.env.FORTYTWO_OAUTH_CLIENT_ID),
+          clientSecret: sanitizeCredential(process.env.FORTYTWO_OAUTH_CLIENT_SECRET)
         }
       : {
-          clientId: process.env.GOOGLE_OAUTH_CLIENT_ID,
-          clientSecret: process.env.GOOGLE_OAUTH_CLIENT_SECRET
+          clientId: sanitizeCredential(process.env.GOOGLE_OAUTH_CLIENT_ID),
+          clientSecret: sanitizeCredential(process.env.GOOGLE_OAUTH_CLIENT_SECRET)
         }
 
   return {
