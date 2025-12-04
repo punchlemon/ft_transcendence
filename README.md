@@ -44,7 +44,7 @@ npm run dev
 
 - backend を一時コンテナで実行 (lint → test → build)
 ```bash
-docker compose run --rm backend sh -c "npm run lint && npm run test && npm run build"
+docker compose run --rm backend sh -c "npx prisma generate && npm run lint && npm run test && npm run build"
 ```
 
 - frontend を一時コンテナで実行 (lint → test → build)
