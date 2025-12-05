@@ -3,7 +3,7 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
-    "dev": "ts-node-dev --respawn --transpile-only src/app.ts",
+    "dev": "tsx watch src/app.ts",
     "build": "tsc -p .",
     "start": "node dist/app.js",
     "prisma:generate": "prisma generate",
@@ -14,8 +14,8 @@
     "test": "vitest run --maxWorkers=1 --no-file-parallelism",
     "test:watch": "vitest --maxWorkers=1 --no-file-parallelism",
     "db:reset": "prisma migrate reset --force",
-    "db:users": "ts-node scripts/list_users.ts",
-    "db:force-logout": "ts-node scripts/force_logout.ts",
+    "db:users": "tsx scripts/list_users.ts",
+    "db:force-logout": "tsx scripts/force_logout.ts",
     "postinstall": "prisma generate"
   },
   "dependencies": {
@@ -46,7 +46,7 @@
     "fastify-tsconfig": "^3.0.0",
     "prettier": "^3.6.2",
     "prisma": "^5.8.1",
-    "ts-node-dev": "^2.0.0",
+    "tsx": "^4.21.0",
     "typescript": "^5.3.3",
     "typescript-eslint": "^8.48.0",
     "vitest": "^1.6.0",
