@@ -2,7 +2,6 @@ import { useEffect, useState, useCallback } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import useAuthStore from '../stores/authStore'
 import { useChatStore } from '../stores/chatStore'
-import { useNotificationStore } from '../stores/notificationStore'
 import { onChatWsEvent } from '../lib/chatWs'
 import { 
   fetchUserProfile, 
@@ -14,15 +13,17 @@ import {
   acceptFriendRequest,
   blockUser,
   unblockUser,
-  inviteToGame
+  inviteToGame,
+  updateUserProfile
 } from '../lib/api'
 import { EditProfileModal } from '../components/profile/EditProfileModal'
-import Avatar from '../components/ui/Avatar'
+import UserAvatar from '../components/ui/UserAvatar'
 
 // Mock types
 interface UserProfile {
   id: string
   displayName: string
+  login: string
   tag: string
   avatarUrl: string
   status: 'online' | 'offline' | 'in-game'
@@ -54,6 +55,7 @@ interface MatchHistory {
 interface Friend {
   id: string
   displayName: string
+  login: string
   status: 'online' | 'offline' | 'in-game'
   avatarUrl: string
 }
@@ -62,17 +64,8 @@ const ProfilePage = () => {
   const { username } = useParams<{ username: string }>()
   const navigate = useNavigate()
   const currentUser = useAuthStore((state) => state.user)
-  const clearSession = useAuthStore((state) => state.clearSession)
-  const resetChat = useChatStore((state) => state.reset)
   const createThread = useChatStore((state) => state.createThread)
-  const resetNotifications = useNotificationStore((state) => state.reset)
   const isOwnProfile = currentUser?.login === username
-
-  const handleLogout = () => {
-    clearSession()
-    resetChat()
-    resetNotifications()
-  }
 
   const [profile, setProfile] = useState<UserProfile | null>(null)
   const [stats, setStats] = useState<UserStats | null>(null)
@@ -81,7 +74,38 @@ const ProfilePage = () => {
   const [isLoading, setIsLoading] = useState(true)
   const [isActionLoading, setIsActionLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
-  const [isEditModalOpen, setIsEditModalOpen] = useState(false)
+  const [editModalField, setEditModalField] = useState<'avatar' | null>(null)
+  const [editingField, setEditingField] = useState<'displayName' | 'bio' | null>(null)
+  const [editValue, setEditValue] = useState('')
+
+  const startEditing = (field: 'displayName' | 'bio', value: string) => {
+    setEditingField(field)
+    setEditValue(value)
+  }
+
+  const cancelEditing = () => {
+    setEditingField(null)
+    setEditValue('')
+  }
+
+  const saveEditing = async () => {
+    if (!profile || !editingField) return
+    
+    try {
+      const payload = { [editingField]: editValue }
+      await updateUserProfile(profile.id, payload)
+      
+      setProfile(prev => prev ? { ...prev, [editingField]: editValue } : null)
+      
+      if (isOwnProfile) {
+        useAuthStore.getState().updateUser({ [editingField]: editValue })
+      }
+      
+      setEditingField(null)
+    } catch (err) {
+      console.error(err)
+    }
+  }
 
   const fetchProfileData = useCallback(async () => {
     if (!username) return
@@ -97,10 +121,11 @@ const ProfilePage = () => {
       setProfile({
         id: String(profileData.id),
         displayName: profileData.displayName,
+        login: profileData.login,
         tag: `#${profileData.login}`,
         avatarUrl: profileData.avatarUrl || '',
         status: (profileData.status?.toLowerCase() as 'online' | 'offline' | 'in-game') || 'offline',
-        bio: profileData.bio || 'No bio available',
+        bio: profileData.bio || '',
         friendshipStatus: profileData.friendshipStatus,
         friendRequestId: profileData.friendRequestId,
         isBlockedByViewer: profileData.isBlockedByViewer,
@@ -138,6 +163,7 @@ const ProfilePage = () => {
         friendsData.data.map((f) => ({
           id: String(f.id),
           displayName: f.displayName,
+          login: f.login,
           status: (f.status.toLowerCase() as 'online' | 'offline' | 'in-game') || 'offline',
           avatarUrl: f.avatarUrl || '',
         }))
@@ -162,10 +188,6 @@ const ProfilePage = () => {
         if (profile && Number(profile.id) === data.friendId) {
            setProfile(prev => prev ? { ...prev, friendshipStatus: 'FRIEND' } : null)
         }
-        // If we are viewing our own profile, refresh to show new friend in list
-        if (isOwnProfile) {
-           fetchProfileData()
-        }
       } else if (data.status === 'PENDING_SENT') {
         if (profile && Number(profile.id) === data.friendId) {
            setProfile(prev => prev ? { ...prev, friendshipStatus: 'PENDING_SENT' } : null)
@@ -178,8 +200,27 @@ const ProfilePage = () => {
         if (profile && Number(profile.id) === data.friendId) {
            setProfile(prev => prev ? { ...prev, friendshipStatus: 'NONE' } : null)
         }
-        if (isOwnProfile) {
-           fetchProfileData()
+      }
+    })
+
+    const unsubscribePublicFriend = onChatWsEvent('public_friend_update', (data) => {
+      if (!profile) return;
+      
+      // If the update is about the user we are viewing
+      if (Number(profile.id) === data.userId) {
+        if (data.type === 'ADD') {
+           setFriends(prev => {
+             if (prev.some(f => f.id === String(data.friend.id))) return prev;
+             return [...prev, {
+               id: String(data.friend.id),
+               displayName: data.friend.displayName,
+               login: data.friend.login,
+               status: (data.friend.status?.toLowerCase() as 'online' | 'offline' | 'in-game') || 'offline',
+               avatarUrl: data.friend.avatarUrl || ''
+             }]
+           })
+        } else if (data.type === 'REMOVE') {
+           setFriends(prev => prev.filter(f => f.id !== String(data.friendId)))
         }
       }
     })
@@ -203,11 +244,23 @@ const ProfilePage = () => {
       }
     })
 
+    const unsubscribeUserUpdate = onChatWsEvent('user_update', (data) => {
+      setProfile(prev => {
+        if (prev && Number(prev.id) === data.id) {
+          return { ...prev, ...data }
+        }
+        return prev
+      })
+      setFriends(prev => prev.map(f => f.id === String(data.id) ? { ...f, ...data, id: String(data.id) } : f))
+    })
+
     return () => {
       unsubscribeFriend()
+      unsubscribePublicFriend()
       unsubscribeRelationship()
+      unsubscribeUserUpdate()
     }
-  }, [profile, isOwnProfile, fetchProfileData])
+  }, [isOwnProfile, fetchProfileData])
 
   const handleFriendAction = async (action: 'add' | 'remove' | 'cancel' | 'accept' | 'block' | 'unblock') => {
     if (!profile) return
@@ -279,48 +332,90 @@ const ProfilePage = () => {
     <div className="mx-auto max-w-5xl px-6 py-8">
       {/* Hero Section */}
       <div className="mb-8 flex flex-col items-center gap-6 rounded-xl border border-slate-200 bg-white p-8 shadow-sm sm:flex-row sm:items-start">
-        <div className="relative">
-          <Avatar
-            src={profile.avatarUrl}
-            alt={profile.displayName}
+        <div 
+          className={`relative ${isOwnProfile ? 'cursor-pointer group' : ''}`} 
+          onClick={() => isOwnProfile && setEditModalField('avatar')}
+        >
+          <UserAvatar
+            key={profile.avatarUrl || 'default'}
+            user={{
+              displayName: profile.displayName,
+              avatarUrl: profile.avatarUrl,
+              status: profile.status.toUpperCase(),
+              login: profile.login
+            }}
             size="2xl"
-            className="border-4 border-white shadow-md"
+            className=""
+            linkToProfile={false}
           />
-          <span
-            className={`absolute bottom-2 right-2 h-4 w-4 rounded-full border-2 border-white ${
-              profile.status === 'online'
-                ? 'bg-green-500'
-                : profile.status === 'in-game'
-                  ? 'bg-yellow-500'
-                  : 'bg-slate-400'
-            }`}
-            title={profile.status}
-          />
+          {isOwnProfile && (
+            <div className="absolute inset-0 flex items-center justify-center rounded-full bg-black/50 opacity-0 transition-opacity group-hover:opacity-100">
+               <span className="text-white text-xs font-medium">Edit</span>
+            </div>
+          )}
         </div>
         <div className="flex-1 text-center sm:text-left">
-          <div className="flex flex-col items-center gap-2 sm:flex-row sm:items-baseline">
-            <h1 className="text-3xl font-bold text-slate-900">{profile.displayName}</h1>
+          <div className="flex flex-col items-center sm:items-start">
+            {editingField === 'displayName' ? (
+              <div className="relative inline-grid items-center justify-items-center sm:justify-items-start">
+                <span className="invisible col-start-1 row-start-1 whitespace-pre text-3xl font-bold opacity-0 pointer-events-none">
+                  {editValue || ' '}
+                </span>
+                <input
+                  type="text"
+                  value={editValue}
+                  onChange={(e) => setEditValue(e.target.value)}
+                  className="col-start-1 row-start-1 w-full min-w-[1ch] bg-transparent p-0 text-center text-3xl font-bold text-slate-900 focus:outline-none sm:text-left"
+                  autoFocus
+                  onBlur={saveEditing}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') saveEditing()
+                    if (e.key === 'Escape') cancelEditing()
+                  }}
+                />
+              </div>
+            ) : (
+              <h1 
+                className={`text-3xl font-bold text-slate-900 ${isOwnProfile ? 'cursor-pointer hover:underline decoration-slate-400 decoration-dashed underline-offset-4' : ''}`}
+                onClick={() => isOwnProfile && startEditing('displayName', profile.displayName)}
+                title={isOwnProfile ? "Click to edit profile" : undefined}
+              >
+                {profile.displayName}
+              </h1>
+            )}
             <span className="text-sm text-slate-500">{profile.tag}</span>
           </div>
-          <p className="mt-2 text-slate-600">{profile.bio}</p>
+          {editingField === 'bio' ? (
+            <div className="mt-2">
+              <textarea
+                value={editValue}
+                onChange={(e) => setEditValue(e.target.value)}
+                className="w-full rounded-md border border-slate-300 px-2 py-1 text-slate-600 focus:border-indigo-500 focus:outline-none"
+                rows={3}
+                autoFocus
+                onKeyDown={(e) => {
+                  if (e.key === 'Escape') cancelEditing()
+                }}
+              />
+              <div className="mt-1 flex gap-2">
+                <button onClick={saveEditing} className="rounded bg-slate-900 px-2 py-1 text-xs text-white">Save</button>
+                <button onClick={cancelEditing} className="rounded bg-slate-200 px-2 py-1 text-xs text-slate-700">Cancel</button>
+              </div>
+            </div>
+          ) : (
+            (profile.bio || isOwnProfile) && (
+              <p 
+                className={`mt-2 text-slate-600 ${isOwnProfile ? 'cursor-pointer hover:bg-slate-50 rounded px-2 -mx-2 transition-colors' : ''}`}
+                onClick={() => isOwnProfile && startEditing('bio', profile.bio)}
+                title={isOwnProfile ? "Click to edit bio" : undefined}
+              >
+                {profile.bio || <span className="text-slate-400 italic">Add a bio...</span>}
+              </p>
+            )
+          )}
           
           <div className="mt-4 flex flex-wrap justify-center gap-2 sm:justify-start">
-            {isOwnProfile ? (
-              <>
-                <button
-                  onClick={() => setIsEditModalOpen(true)}
-                  className="rounded-md bg-slate-900 px-4 py-2 text-sm font-medium text-white hover:bg-slate-800"
-                >
-                  Edit Profile
-                </button>
-                <button
-                  onClick={handleLogout}
-                  className="rounded-md border border-red-200 bg-white px-4 py-2 text-sm font-medium text-red-600 hover:bg-red-50"
-                >
-                  Logout
-                </button>
-              </>
-            ) : (
+            {!isOwnProfile && (
               <>
                 <button
                   onClick={handleSendMessage}
@@ -436,23 +531,22 @@ const ProfilePage = () => {
                 {friends.length > 0 ? (
                   friends.map((friend) => (
                     <div key={friend.id} className="flex items-center gap-3">
-                      <div className="relative">
-                        <Avatar
-                          src={friend.avatarUrl}
-                          alt={friend.displayName}
-                          size="md"
-                        />
-                        <span
-                          className={`absolute bottom-0 right-0 h-2.5 w-2.5 rounded-full border-2 border-white ${
-                            friend.status === 'online' ? 'bg-green-500' : 'bg-slate-400'
-                          }`}
-                        />
-                      </div>
+                      <UserAvatar
+                        key={friend.avatarUrl || 'default'}
+                        user={{
+                          displayName: friend.displayName,
+                          avatarUrl: friend.avatarUrl,
+                          status: friend.status.toUpperCase(),
+                          login: friend.login
+                        }}
+                        size="md"
+                        linkToProfile={true}
+                      />
                       <div className="flex-1 overflow-hidden">
                         <div className="truncate font-medium text-slate-900">
                           {friend.displayName}
                         </div>
-                        <div className="text-xs text-slate-500 capitalize">{friend.status}</div>
+                        <div className="text-xs text-slate-500">#{friend.login}</div>
                       </div>
                     </div>
                   ))
@@ -534,8 +628,9 @@ const ProfilePage = () => {
             bio: profile.bio,
             avatarUrl: profile.avatarUrl
           }}
-          isOpen={isEditModalOpen}
-          onClose={() => setIsEditModalOpen(false)}
+          isOpen={!!editModalField}
+          editMode={editModalField || 'avatar'}
+          onClose={() => setEditModalField(null)}
           onSuccess={(updated) => {
             setProfile((prev) =>
               prev
@@ -543,7 +638,7 @@ const ProfilePage = () => {
                     ...prev,
                     displayName: updated.displayName,
                     bio: updated.bio || '',
-                    avatarUrl: updated.avatarUrl || 'https://via.placeholder.com/150'
+                    avatarUrl: updated.avatarUrl || ''
                   }
                 : null
             )

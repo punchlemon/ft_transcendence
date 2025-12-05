@@ -1,8 +1,9 @@
 import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
-import { fetchUsers, fetchUserFriends, fetchSentFriendRequests, fetchBlockedUsers, type UserSearchResponse, type UserSearchParams } from '../lib/api'
+import { fetchUsers, fetchUserFriends, fetchSentFriendRequests, fetchReceivedFriendRequests, fetchBlockedUsers, type UserSearchResponse, type UserSearchParams } from '../lib/api'
 import { onChatWsEvent } from '../lib/chatWs'
 import Button from '../components/ui/Button'
+import UserAvatar from '../components/ui/UserAvatar'
 import useAuthStore from '../stores/authStore'
 
 const UsersPage = () => {
@@ -19,6 +20,7 @@ const UsersPage = () => {
   const { user: currentUser } = useAuthStore()
   const [myFriends, setMyFriends] = useState<number[]>([])
   const [sentRequests, setSentRequests] = useState<number[]>([])
+  const [receivedRequests, setReceivedRequests] = useState<number[]>([])
   const [blockedUsers, setBlockedUsers] = useState<number[]>([])
 
   useEffect(() => {
@@ -29,14 +31,21 @@ const UsersPage = () => {
           return [...prev, data.friendId]
         })
         setSentRequests(prev => prev.filter(id => id !== data.friendId))
+        setReceivedRequests(prev => prev.filter(id => id !== data.friendId))
       } else if (data.status === 'PENDING_SENT') {
         setSentRequests(prev => {
+          if (prev.includes(data.friendId)) return prev
+          return [...prev, data.friendId]
+        })
+      } else if (data.status === 'PENDING_RECEIVED') {
+        setReceivedRequests(prev => {
           if (prev.includes(data.friendId)) return prev
           return [...prev, data.friendId]
         })
       } else if (data.status === 'NONE') {
         setMyFriends(prev => prev.filter(id => id !== data.friendId))
         setSentRequests(prev => prev.filter(id => id !== data.friendId))
+        setReceivedRequests(prev => prev.filter(id => id !== data.friendId))
       }
     })
 
@@ -51,9 +60,24 @@ const UsersPage = () => {
       }
     })
 
+    const unsubscribeUserUpdate = onChatWsEvent('user_update', (data) => {
+      setUsers(prev => prev.map(u => {
+        if (u.id === data.id) {
+          return { ...u, ...data }
+        }
+        return u
+      }))
+    })
+
+    const unsubscribeUserCreated = onChatWsEvent('user_created', (newUser) => {
+      setUsers(prev => [newUser, ...prev])
+    })
+
     return () => {
       unsubscribeFriend()
       unsubscribeRelationship()
+      unsubscribeUserUpdate()
+      unsubscribeUserCreated()
     }
   }, [])
 
@@ -65,6 +89,10 @@ const UsersPage = () => {
 
       fetchSentFriendRequests().then(res => {
         setSentRequests(res.data?.map(r => r.receiver?.id).filter((id): id is number => !!id) || [])
+      }).catch(console.error)
+
+      fetchReceivedFriendRequests().then(res => {
+        setReceivedRequests(res.data?.map(r => r.sender?.id).filter((id): id is number => !!id) || [])
       }).catch(console.error)
 
       fetchBlockedUsers().then(res => {
@@ -150,23 +178,12 @@ const UsersPage = () => {
               to={`/${user.login}`}
               className="flex items-center gap-4 rounded-lg border border-slate-200 bg-white p-4 transition-shadow hover:shadow-md"
             >
-              <div className="relative h-12 w-12 flex-shrink-0">
-                <div className="h-full w-full overflow-hidden rounded-full bg-slate-100">
-                  {user.avatarUrl ? (
-                    <img src={user.avatarUrl} alt={user.displayName} className="h-full w-full object-cover" />
-                  ) : (
-                    <div className="flex h-full w-full items-center justify-center text-slate-400">
-                      <svg className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
-                      </svg>
-                    </div>
-                  )}
-                </div>
-                <span className={`absolute bottom-0 right-0 block h-3 w-3 rounded-full ring-2 ring-white ${
-                  user.status === 'ONLINE' ? 'bg-green-500' : 
-                  user.status === 'IN_MATCH' ? 'bg-yellow-500' : 'bg-slate-300'
-                }`} />
-              </div>
+              <UserAvatar 
+                user={user}
+                size="md"
+                className="flex-shrink-0"
+                linkToProfile={false}
+              />
               <div className="flex-1 min-w-0">
                 <h3 className="truncate font-medium text-slate-900">{user.displayName}</h3>
                 <div className="flex items-center gap-2 text-xs text-slate-500">
@@ -183,6 +200,11 @@ const UsersPage = () => {
                   {sentRequests.includes(user.id) && (
                     <span className="rounded-full bg-blue-100 px-2 py-0.5 text-blue-700 font-medium">
                       Request Sent
+                    </span>
+                  )}
+                  {receivedRequests.includes(user.id) && (
+                    <span className="rounded-full bg-yellow-100 px-2 py-0.5 text-yellow-700 font-medium">
+                      Request Received
                     </span>
                   )}
                   {blockedUsers.includes(user.id) && (

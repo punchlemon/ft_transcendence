@@ -2,6 +2,11 @@ import fp from 'fastify-plugin'
 import type { FastifyPluginAsync } from 'fastify'
 import { z } from 'zod'
 import type { Prisma } from '@prisma/client'
+import { pipeline } from 'stream/promises'
+import fs from 'fs'
+import path from 'path'
+import { randomUUID } from 'crypto'
+import sharp from 'sharp'
 
 const STATUS_VALUES = ['OFFLINE', 'ONLINE', 'IN_MATCH', 'AWAY', 'DO_NOT_DISTURB'] as const
 
@@ -103,6 +108,124 @@ const usersRoutes: FastifyPluginAsync = async (fastify) => {
         avatarUrl: true,
         bio: true,
         country: true
+      }
+    })
+
+    return updatedUser
+  })
+
+  fastify.post('/users/:id/avatar', { preHandler: fastify.authenticate }, async (request, reply) => {
+    const paramsParsed = z.object({ id: z.coerce.number().int().positive() }).safeParse(request.params)
+    if (!paramsParsed.success) {
+      reply.code(400)
+      return { error: { code: 'INVALID_PARAMS', message: 'Invalid user ID' } }
+    }
+
+    const { id: targetId } = paramsParsed.data
+    const viewerId = request.user.userId
+
+    if (targetId !== viewerId) {
+      reply.code(403)
+      return { error: { code: 'FORBIDDEN', message: 'You can only edit your own profile' } }
+    }
+
+    const data = await request.file()
+    if (!data) {
+      reply.code(400)
+      return { error: { code: 'NO_FILE', message: 'No file uploaded' } }
+    }
+
+    const allowedMimeTypes = ['image/jpeg', 'image/png', 'image/webp', 'image/gif']
+    if (!allowedMimeTypes.includes(data.mimetype)) {
+      reply.code(400)
+      return { error: { code: 'INVALID_FILE_TYPE', message: 'Only images are allowed' } }
+    }
+
+    const uploadsDir = path.join(process.cwd(), 'uploads')
+    if (!fs.existsSync(uploadsDir)) {
+      fs.mkdirSync(uploadsDir, { recursive: true })
+    }
+
+    const filename = `${randomUUID()}.png`
+    const filepath = path.join(uploadsDir, filename)
+
+    try {
+      const transform = sharp().resize(256, 256, { fit: 'cover' }).png()
+      await pipeline(data.file, transform, fs.createWriteStream(filepath))
+
+      const avatarUrl = `/uploads/${filename}`
+
+      const user = await fastify.prisma.user.findUnique({ where: { id: viewerId }, select: { avatarUrl: true } })
+      if (user?.avatarUrl) {
+        const oldFilename = user.avatarUrl.split('/').pop()
+        if (oldFilename) {
+          const oldPath = path.join(uploadsDir, oldFilename)
+          if (fs.existsSync(oldPath)) {
+            fs.unlinkSync(oldPath)
+          }
+        }
+      }
+
+      const updatedUser = await fastify.prisma.user.update({
+        where: { id: viewerId },
+        data: { avatarUrl },
+        select: {
+          id: true,
+          displayName: true,
+          login: true,
+          status: true,
+          avatarUrl: true,
+          country: true,
+          bio: true
+        }
+      })
+
+      return updatedUser
+    } catch (err) {
+      request.log.error(err)
+      reply.code(500)
+      return { error: { code: 'UPLOAD_FAILED', message: 'Failed to process upload' } }
+    }
+  })
+
+  fastify.delete('/users/:id/avatar', { preHandler: fastify.authenticate }, async (request, reply) => {
+    const paramsParsed = z.object({ id: z.coerce.number().int().positive() }).safeParse(request.params)
+    if (!paramsParsed.success) {
+      reply.code(400)
+      return { error: { code: 'INVALID_PARAMS', message: 'Invalid user ID' } }
+    }
+
+    const { id: targetId } = paramsParsed.data
+    const viewerId = request.user.userId
+
+    if (targetId !== viewerId) {
+      reply.code(403)
+      return { error: { code: 'FORBIDDEN', message: 'You can only edit your own profile' } }
+    }
+
+    const user = await fastify.prisma.user.findUnique({ where: { id: viewerId }, select: { avatarUrl: true } })
+    if (user?.avatarUrl) {
+      const uploadsDir = path.join(process.cwd(), 'uploads')
+      const oldFilename = user.avatarUrl.split('/').pop()
+      if (oldFilename) {
+        const oldPath = path.join(uploadsDir, oldFilename)
+        if (fs.existsSync(oldPath)) {
+          fs.unlinkSync(oldPath)
+        }
+      }
+    }
+
+    const updatedUser = await fastify.prisma.user.update({
+      where: { id: viewerId },
+      data: { avatarUrl: null },
+      select: {
+        id: true,
+        displayName: true,
+        login: true,
+        status: true,
+        avatarUrl: true,
+        country: true,
+        bio: true
       }
     })
 

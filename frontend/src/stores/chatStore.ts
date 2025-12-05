@@ -5,6 +5,7 @@ import useAuthStore from './authStore';
 export interface ChatUser {
   id: number;
   displayName: string;
+  login?: string;
   avatarUrl?: string;
   status: string;
   lastReadAt?: string;
@@ -45,6 +46,7 @@ interface ChatState {
   addMessage: (message: ChatMessage) => void;
   markAsRead: (threadId: number) => Promise<void>;
   handleReadReceipt: (data: { channelId: number, userId: number, lastReadAt: string }) => void;
+  handleUserUpdate: (user: Partial<ChatUser>) => void;
   reset: () => void;
 }
 
@@ -72,6 +74,40 @@ export const useChatStore = create<ChatState>((set, get) => ({
       initialLastReadAt: null,
       isDrawerOpen: false,
     });
+  },
+
+  handleUserUpdate: (user) => {
+    const currentUserId = useAuthStore.getState().user?.id;
+    set((state) => ({
+      threads: state.threads.map(t => {
+        const isTargetUser = t.members.some(m => m.id === user.id);
+        // If it's a DM and the updated user is the OTHER person (not me), update the thread name
+        const shouldUpdateName = t.type === 'DM' && isTargetUser && user.id !== currentUserId;
+        
+        return {
+          ...t,
+          name: shouldUpdateName && user.displayName ? user.displayName : t.name,
+          members: t.members.map(m => 
+            m.id === user.id 
+              ? { ...m, ...user } 
+              : m
+          ),
+          lastMessage: t.lastMessage && t.lastMessage.user.id === user.id
+            ? { ...t.lastMessage, user: { ...t.lastMessage.user, ...user } }
+            : t.lastMessage
+        };
+      }),
+      messages: Object.fromEntries(
+        Object.entries(state.messages).map(([channelId, msgs]) => [
+          channelId,
+          msgs.map(m => 
+            m.userId === user.id 
+              ? { ...m, user: { ...m.user, ...user } } 
+              : m
+          )
+        ])
+      )
+    }));
   },
 
   fetchThreads: async () => {

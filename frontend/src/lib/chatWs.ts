@@ -4,6 +4,8 @@ import { useNotificationStore } from '../stores/notificationStore';
 import { baseURL } from './api';
 
 let socket: WebSocket | null = null;
+let reconnectTimer: NodeJS.Timeout | null = null;
+let isExplicitDisconnect = false;
 
 type ChatWsListener = (data: any) => void;
 const listeners: Record<string, Set<ChatWsListener>> = {};
@@ -20,6 +22,8 @@ export const onChatWsEvent = (type: string, callback: ChatWsListener) => {
 export const connectChatWs = () => {
   const token = useAuthStore.getState().accessToken;
   if (!token || socket) return;
+
+  isExplicitDisconnect = false;
 
   // Determine WS URL
   let host = window.location.host;
@@ -63,19 +67,44 @@ export const connectChatWs = () => {
         if (listeners['relationship_update']) {
           listeners['relationship_update'].forEach(cb => cb(payload.data));
         }
+      } else if (payload.type === 'user_update') {
+        if (listeners['user_update']) {
+          listeners['user_update'].forEach(cb => cb(payload.data));
+        }
+      } else if (payload.type === 'user_created') {
+        if (listeners['user_created']) {
+          listeners['user_created'].forEach(cb => cb(payload.data));
+        }
+      } else if (payload.type === 'public_friend_update') {
+        if (listeners['public_friend_update']) {
+          listeners['public_friend_update'].forEach(cb => cb(payload.data));
+        }
       }
     } catch (e) {
       console.error('Failed to parse WS message', e);
     }
   };
 
-  socket.onclose = () => {
-    console.log('Chat WS disconnected');
+  socket.onclose = (event) => {
+    console.log('Chat WS disconnected', event.code, event.reason);
     socket = null;
+    
+    // Attempt reconnect unless explicitly disconnected or auth failed (1008)
+    if (!isExplicitDisconnect && event.code !== 1008) {
+      console.log('Attempting to reconnect in 3s...');
+      reconnectTimer = setTimeout(() => {
+        connectChatWs();
+      }, 3000);
+    }
   };
 };
 
 export const disconnectChatWs = () => {
+  isExplicitDisconnect = true;
+  if (reconnectTimer) {
+    clearTimeout(reconnectTimer);
+    reconnectTimer = null;
+  }
   if (socket) {
     socket.close();
     socket = null;

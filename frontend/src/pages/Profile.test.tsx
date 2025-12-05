@@ -162,7 +162,7 @@ describe('ProfilePage', () => {
     expect(screen.getByText('Pong enthusiast. Love to play standard mode.')).toBeInTheDocument()
   })
 
-  it('shows edit button for own profile', async () => {
+  it('allows editing own profile via click', async () => {
     // Mock auth store to return the same login as the URL
     ;(useAuthStore as unknown as ReturnType<typeof vi.fn>).mockImplementation((selector) =>
       selector({
@@ -179,11 +179,14 @@ describe('ProfilePage', () => {
     )
 
     await waitFor(() => {
-      expect(screen.getByText('Edit Profile')).toBeInTheDocument()
+      // Check for the "Edit" overlay text on avatar
+      expect(screen.getByText('Edit')).toBeInTheDocument()
+      // Check for title attributes indicating clickability
+      expect(screen.getByText('User 123')).toHaveAttribute('title', 'Click to edit profile')
     })
   })
 
-  it('hides edit button for other profile', async () => {
+  it('does not allow editing other profile', async () => {
     // Mock auth store to return a different login
     ;(useAuthStore as unknown as ReturnType<typeof vi.fn>).mockImplementation((selector) =>
       selector({
@@ -200,7 +203,8 @@ describe('ProfilePage', () => {
     )
 
     await waitFor(() => {
-      expect(screen.queryByText('Edit Profile')).not.toBeInTheDocument()
+      expect(screen.queryByText('Edit')).not.toBeInTheDocument()
+      expect(screen.getByText('User 123')).not.toHaveAttribute('title', 'Click to edit profile')
     })
   })
 
@@ -269,25 +273,5 @@ describe('ProfilePage', () => {
     })
   })
 
-  it('shows logout button for own profile', async () => {
-    // Mock auth store to return the same login as the URL
-    ;(useAuthStore as unknown as ReturnType<typeof vi.fn>).mockImplementation((selector) =>
-      selector({
-        user: { ...mockUser, login: 'user123' },
-        clearSession: vi.fn()
-      })
-    )
 
-    render(
-      <MemoryRouter initialEntries={['/user123']}>
-        <Routes>
-          <Route path="/:username" element={<ProfilePage />} />
-        </Routes>
-      </MemoryRouter>
-    )
-
-    await waitFor(() => {
-      expect(screen.getByText('Logout')).toBeInTheDocument()
-    })
-  })
 })

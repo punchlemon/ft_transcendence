@@ -1,4 +1,5 @@
 import React from 'react'
+import { User } from 'lucide-react'
 
 interface AvatarProps {
   src?: string | null
@@ -17,36 +18,6 @@ const sizeClasses = {
 }
 
 const Avatar: React.FC<AvatarProps> = ({ src, alt, className = '', size = 'md' }) => {
-  const initial = alt.charAt(0).toUpperCase()
-  
-  // Generate a consistent background color based on the name
-  const getBgColor = (name: string) => {
-    const colors = [
-      'bg-red-500',
-      'bg-orange-500',
-      'bg-amber-500',
-      'bg-yellow-500',
-      'bg-lime-500',
-      'bg-green-500',
-      'bg-emerald-500',
-      'bg-teal-500',
-      'bg-cyan-500',
-      'bg-sky-500',
-      'bg-blue-500',
-      'bg-indigo-500',
-      'bg-violet-500',
-      'bg-purple-500',
-      'bg-fuchsia-500',
-      'bg-pink-500',
-      'bg-rose-500',
-    ]
-    let hash = 0
-    for (let i = 0; i < name.length; i++) {
-      hash = name.charCodeAt(i) + ((hash << 5) - hash)
-    }
-    return colors[Math.abs(hash) % colors.length]
-  }
-
   const baseClasses = `inline-flex items-center justify-center rounded-full object-cover border border-slate-200 ${sizeClasses[size]} ${className}`
 
   if (src) {
@@ -54,8 +25,8 @@ const Avatar: React.FC<AvatarProps> = ({ src, alt, className = '', size = 'md' }
   }
 
   return (
-    <div className={`${baseClasses} ${getBgColor(alt)} text-white font-bold`}>
-      {initial}
+    <div className={`${baseClasses} bg-slate-200 text-slate-400`}>
+      <User className="h-1/2 w-1/2" />
     </div>
   )
 }

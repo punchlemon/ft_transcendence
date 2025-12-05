@@ -19,6 +19,7 @@ type AuthStore = {
   refreshToken: string | null
   isHydrated: boolean
   setSession: (payload: { user: AuthUserSnapshot; tokens: AuthTokens }) => void
+  updateUser: (updates: Partial<AuthUserSnapshot>) => void
   hydrateFromStorage: () => void
   clearSession: () => void
 }
@@ -63,6 +64,15 @@ const useAuthStore = create<AuthStore>((set, get) => ({
       refreshToken: tokens.refresh,
       isHydrated: true
     })
+  },
+  updateUser: (updates) => {
+    const currentUser = get().user
+    if (!currentUser) return
+    const newUser = { ...currentUser, ...updates }
+    if (isBrowserEnvironment()) {
+      sessionStorage.setItem(USER_SNAPSHOT_KEY, JSON.stringify(newUser))
+    }
+    set({ user: newUser })
   },
   hydrateFromStorage: () => {
     if (get().isHydrated) {

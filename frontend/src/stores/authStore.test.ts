@@ -57,6 +57,25 @@ describe('authStore', () => {
     expect(sessionStorage.getItem('ft_access_token')).toBeNull()
     expect(sessionStorage.getItem('ft_user')).toBeNull()
   })
+
+  it('updates user state and storage when updateUser is called', () => {
+    const store = useAuthStore.getState()
+    store.setSession({
+      user: { id: 4, displayName: 'Dave', login: 'dave', status: 'ONLINE', avatarUrl: 'old-url' },
+      tokens: { access: 'acc', refresh: 'ref' }
+    })
+
+    store.updateUser({ displayName: 'David', avatarUrl: 'new-url' })
+
+    const latest = useAuthStore.getState()
+    expect(latest.user?.displayName).toBe('David')
+    expect(latest.user?.avatarUrl).toBe('new-url')
+    expect(latest.user?.login).toBe('dave') // Should remain unchanged
+
+    const stored = JSON.parse(sessionStorage.getItem('ft_user') || '{}')
+    expect(stored.displayName).toBe('David')
+    expect(stored.avatarUrl).toBe('new-url')
+  })
 })
 
 /*

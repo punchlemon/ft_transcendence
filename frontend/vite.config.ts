@@ -21,6 +21,10 @@ export default defineConfig({
         target: internalApiUrl,
         changeOrigin: true,
         ws: true
+      },
+      '/uploads': {
+        target: internalApiUrl,
+        changeOrigin: true
       }
     }
   }

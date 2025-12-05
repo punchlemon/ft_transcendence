@@ -319,6 +319,7 @@ export type FriendResponse = {
   data: Array<{
     id: number
     displayName: string
+    login: string
     status: string
     avatarUrl: string | null
   }>
@@ -417,6 +418,22 @@ export type UpdateProfilePayload = {
 
 export const updateUserProfile = async (userId: string, payload: UpdateProfilePayload) => {
   const response = await apiClient.patch(`/users/${userId}`, payload)
+  return response.data as UserProfileResponse
+}
+
+export const uploadAvatar = async (userId: string, file: File) => {
+  const formData = new FormData()
+  formData.append('file', file)
+  const response = await apiClient.post(`/users/${userId}/avatar`, formData, {
+    headers: {
+      'Content-Type': 'multipart/form-data'
+    }
+  })
+  return response.data as UserProfileResponse
+}
+
+export const deleteAvatar = async (userId: string) => {
+  const response = await apiClient.delete(`/users/${userId}/avatar`)
   return response.data as UserProfileResponse
 }
 
