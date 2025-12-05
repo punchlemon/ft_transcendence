@@ -460,6 +460,9 @@ export type UserSearchResponse = {
     status: string
     avatarUrl: string | null
     mutualFriends: number
+    wins: number
+    winRate: number
+    gamesPlayed: number
   }>
   meta: {
     page: number
@@ -474,8 +477,11 @@ export type UserSearchParams = {
   query?: string
   statuses?: string
   relationships?: string
-  sortBy?: 'displayName' | 'createdAt'
+  sortBy?: 'displayName' | 'createdAt' | 'winRate'
   order?: 'asc' | 'desc'
+  winRateSort?: 'off' | 'asc' | 'desc'
+  gamesSort?: 'off' | 'asc' | 'desc'
+  sortOrder?: string
 }
 
 export const fetchUsers = async (params: UserSearchParams = {}) => {

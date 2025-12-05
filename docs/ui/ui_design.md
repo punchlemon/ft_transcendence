@@ -283,7 +283,27 @@ Authenticated Routes (Layout 配下)
 - **統合**: Game Room からのメッセージはチャットオーバーレイにストリーム表示。Profile から「チャット開始」を押すと該当スレッドを前面表示。
 - **テスト観点**: 未読バッジの増減、招待カードのアクション、ブロック状態での入力無効化。
 
-## テスト観点
-- 全画面 (Home / Health / Tournament / Auth / Game Lobby / Game Room / Profile / Chat) で **Loading / Success / Error / Empty** の各状態を UI テストで確認。
-- 主要アクション (ログイン、モード選択、マッチングキャンセル、プロフィール編集、チャット送信) は `vitest` + React Testing Library + MSW/WebSocket モックで副作用を検証。
-- Tournament の純粋関数 (`lib/tournament.ts`)、Game のネットワーク同期、Chat ストアはユニットテストで担保し、統合テストで相互作用を確認する。
+## 7. Users Search Page (`/users`)
+- **Purpose**: Provide user search with filtering based on friend/blocked status; serves as entry point for friend invites and profile visits.
+- **Key Elements**:
+  1. Search Input: Partial match against `displayName` / `login`. Empty query is not sent.
+  2. Filter Buttons (3 only):
+     - "Include Offline": Initial OFF. When OFF, excludes `OFFLINE` and includes `ONLINE/IN_MATCH/AWAY/DO_NOT_DISTURB`. When ON, omits status filter.
+     - "Friends Only": Initial OFF. When ON, shows only friend relationships (overrides other filters).
+     - "Exclude Blocked": Initial ON. When ON, excludes blocked users from results; when OFF, includes them.
+  3. Sort: Toggle between `displayName` / `createdAt`. Maintains existing behavior.
+  4. Badges: Displays `Friend` / `Request Sent` / `Request Received` / `Blocked` status.
+- **State Persistence**: Saves filter+search state in `localStorage` (`ft_users_filters_v1`); restored on page reload. Falls back to defaults on JSON corruption, with "Exclude Blocked" ON by default.
+- **API Parameter Mapping** (AND Logic):
+  - "Include Offline" OFF → sends `statuses=ONLINE,IN_MATCH,AWAY,DO_NOT_DISTURB`; ON → omits statuses.
+  - "Friends Only" ON → sends `relationships=friends` only (overrides excludeBlocked).
+  - "Exclude Blocked" ON → excludes `blocked` from relationships; OFF → includes it.
+- **Test Coverage**:
+  - Initial render calls API with "Exclude Blocked" ON and offline excluded.
+  - Each toggle click triggers re-fetch with updated `statuses`/`relationships`.
+  - localStorage filters persist and restore across page reloads.
+
+## Test Coverage
+- All screens (Home / Health / Tournament / Auth / Game Lobby / Game Room / Profile / Chat) in **Loading / Success / Error / Empty** states.
+- Key actions (Login, Mode Select, Match Cancel, Profile Edit, Chat Send) with `vitest` + React Testing Library + MSW/WebSocket mocks for side effects.
+- Pure functions (`lib/tournament.ts`, Game network sync, Chat store) with unit tests; integration tests verify interactions.

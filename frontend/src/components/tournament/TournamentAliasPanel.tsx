@@ -20,16 +20,16 @@ const TournamentAliasPanel = ({
 }: TournamentAliasPanelProps) => {
   return (
     <div className="mt-6">
-      <form className="flex flex-col gap-3 sm:flex-row" onSubmit={onSubmit} aria-label="トーナメント参加フォーム">
+      <form className="flex flex-col gap-3 sm:flex-row" onSubmit={onSubmit} aria-label="tournament entry form">
         <input
           type="text"
           value={aliasInput}
           onChange={(event) => onAliasChange(event.target.value)}
-          placeholder="例: Meteor"
+          placeholder="e.g. Meteor"
           className="flex-1 rounded-lg border border-slate-300 px-4 py-2 text-sm focus:border-brand focus:outline-none"
         />
         <Button type="submit" disabled={isSubmitDisabled}>
-          参加登録
+          Register
         </Button>
       </form>
       {errorMessage && <p className="mt-2 text-sm text-red-600">{errorMessage}</p>}
@@ -41,14 +41,14 @@ const TournamentAliasPanel = ({
 export default TournamentAliasPanel
 
 /*
-解説:
+Explanation:
 
 1) TournamentAliasPanelProps
-  - 親コンポーネントから状態とハンドラを受け取り、フォーム内で副作用を持たずに入力値と送信処理を委譲するための契約を明示する。
+  - Receives state and handlers from parent component; delegates input value and submit processing without side effects.
 
-2) form レイアウト
-  - `aria-label` を付与してスクリーンリーダーから識別しやすくし、SM 以上では横並び・モバイルでは縦積みになるよう Tailwind クラスを組み合わせている。
+2) Form Layout
+  - `aria-label` for screen reader identification; uses Tailwind classes for responsive layout (horizontal on SM+, vertical on mobile).
 
-3) メッセージ表示
-  - エラーを優先して表示し、成功/情報メッセージは brand カラーで描画することで、TournamentPage から渡された状態が視認できるようにする。
+3) Message Display
+  - Errors displayed with priority, success/info messages in brand color to make TournamentPage-provided state visible.
 */

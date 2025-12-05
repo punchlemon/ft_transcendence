@@ -1,7 +1,7 @@
 /**
- * なぜテストが必要か:
- * - トーナメントの入力フォームが props に依存して正しく制御されているかを検証し、不整合による登録エラーを未然に防ぐ。
- * - 状態メッセージやボタン活性制御が想定どおりに動くことで、画面全体の UX を担保する。
+ * Why this test is needed:
+ * - Validates that the tournament entry form is correctly controlled by props and prevents registration errors.
+ * - Ensures status messages and button states work as expected, maintaining UX integrity.
  */
 import { describe, it, expect, vi } from 'vitest'
 import { render, screen, fireEvent } from '@testing-library/react'
@@ -9,7 +9,7 @@ import userEvent from '@testing-library/user-event'
 import TournamentAliasPanel from '../TournamentAliasPanel'
 
 describe('TournamentAliasPanel', () => {
-  it('入力値変更時に onAliasChange が呼ばれる', () => {
+  it('input change calls onAliasChange', () => {
     const onAliasChange = vi.fn()
     const onSubmit = vi.fn()
 
@@ -23,13 +23,13 @@ describe('TournamentAliasPanel', () => {
       />
     )
 
-    fireEvent.change(screen.getByPlaceholderText('例: Meteor'), { target: { value: 'Nova' } })
+    fireEvent.change(screen.getByPlaceholderText('e.g. Meteor'), { target: { value: 'Nova' } })
 
     expect(onAliasChange).toHaveBeenCalledTimes(1)
     expect(onAliasChange).toHaveBeenCalledWith('Nova')
   })
 
-  it('isSubmitDisabled が true の場合はボタンが無効になる', () => {
+  it('disables button when isSubmitDisabled is true', () => {
     render(
       <TournamentAliasPanel
         aliasInput=""
@@ -41,25 +41,25 @@ describe('TournamentAliasPanel', () => {
       />
     )
 
-    expect(screen.getByRole('button', { name: '参加登録' })).toBeDisabled()
+    expect(screen.getByRole('button', { name: 'Register' })).toBeDisabled()
   })
 
-  it('メッセージが渡されたときに表示される', () => {
+  it('displays messages when provided', () => {
     render(
       <TournamentAliasPanel
         aliasInput="Nova"
         onAliasChange={vi.fn()}
         onSubmit={vi.fn()}
-        errorMessage="同じエイリアスは登録できません"
-        infoMessage="参加者を追加しました"
+        errorMessage="Duplicate alias"
+        infoMessage="Participant added"
       />
     )
 
-    expect(screen.getByText('同じエイリアスは登録できません')).toBeInTheDocument()
-    expect(screen.getByText('参加者を追加しました')).toBeInTheDocument()
+    expect(screen.getByText('Duplicate alias')).toBeInTheDocument()
+    expect(screen.getByText('Participant added')).toBeInTheDocument()
   })
 
-  it('フォーム送信で onSubmit が呼ばれる', async () => {
+  it('calls onSubmit when form is submitted', async () => {
     const user = userEvent.setup()
     const onSubmit = vi.fn((event) => event.preventDefault())
 
@@ -73,7 +73,7 @@ describe('TournamentAliasPanel', () => {
       />
     )
 
-    await user.click(screen.getByRole('button', { name: '参加登録' }))
+    await user.click(screen.getByRole('button', { name: 'Register' }))
 
     expect(onSubmit).toHaveBeenCalledTimes(1)
   })

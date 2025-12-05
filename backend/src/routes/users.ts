@@ -8,6 +8,7 @@ import path from 'path'
 import { randomUUID } from 'crypto'
 import sharp from 'sharp'
 import { userService } from '../services/user'
+import { calculateUserStats, calculateMultipleUserStats } from '../utils/stats'
 
 const STATUS_VALUES = ['OFFLINE', 'ONLINE', 'IN_MATCH', 'AWAY', 'DO_NOT_DISTURB'] as const
 
@@ -23,7 +24,10 @@ const searchQuerySchema = z.object({
   limit: z.coerce.number().int().min(1).default(20),
   excludeFriendIds: z.string().optional(),
   sortBy: z.enum(['displayName', 'createdAt']).default('displayName'),
-  order: z.enum(['asc', 'desc']).default('asc')
+  order: z.enum(['asc', 'desc']).default('asc'),
+  winRateSort: z.enum(['off', 'asc', 'desc']).default('off'),
+  gamesSort: z.enum(['off', 'asc', 'desc']).default('off'),
+  sortOrder: z.string().optional() // Comma separated values: winRate,games
 })
 
 type SearchQuery = z.infer<typeof searchQuerySchema>
@@ -269,16 +273,7 @@ const usersRoutes: FastifyPluginAsync = async (fastify) => {
         avatarUrl: true,
         country: true,
         bio: true,
-        createdAt: true,
-        stats: {
-          select: {
-            wins: true,
-            losses: true,
-            matchesPlayed: true,
-            pointsScored: true,
-            pointsAgainst: true
-          }
-        }
+        createdAt: true
       }
     })
 
@@ -288,6 +283,9 @@ const usersRoutes: FastifyPluginAsync = async (fastify) => {
     }
 
     const targetId = user.id
+
+    // Calculate stats from matches (source of truth)
+    const matchStats = await calculateUserStats(fastify.prisma, targetId)
 
     // Friendship Status
     let friendshipStatus: 'NONE' | 'FRIEND' | 'PENDING_SENT' | 'PENDING_RECEIVED' = 'NONE'
@@ -368,6 +366,7 @@ const usersRoutes: FastifyPluginAsync = async (fastify) => {
 
     return {
       ...user,
+      stats: matchStats,
       friendshipStatus,
       friendRequestId,
       isBlockedByViewer,
@@ -575,11 +574,14 @@ const usersRoutes: FastifyPluginAsync = async (fastify) => {
       }
     }
 
-    const { q, statuses, relationships, page, limit: rawLimit, excludeFriendIds, sortBy, order } = parsed.data
+    const { q, statuses, relationships, page, limit: rawLimit, excludeFriendIds, sortBy, order, winRateSort, gamesSort, sortOrder } = parsed.data
     const limit = Math.min(rawLimit, 50)
     const excludeIds = parseExcludeIds(excludeFriendIds)
     const skip = (page - 1) * limit
     const viewerId = request.user?.userId
+    
+    // Parse sortOrder parameter
+    const sortOrderArray = sortOrder ? sortOrder.split(',').filter(s => s === 'winRate' || s === 'games') as ('winRate' | 'games')[] : ['winRate', 'games']
 
     const where: Prisma.UserWhereInput = {
       deletedAt: null
@@ -677,9 +679,24 @@ const usersRoutes: FastifyPluginAsync = async (fastify) => {
              where.id = { in: includeIds }
           }
         }
+        
+        // Always exclude blocked users if 'blocked' is NOT in the relationships list
+        if (!includeBlocked) {
+          if (blockedIds.length > 0) {
+            if (where.id && typeof where.id === 'object' && 'notIn' in where.id) {
+              where.id = { ...(where.id as any), notIn: [...((where.id as any).notIn ?? []), ...blockedIds] }
+            } else if (where.id && typeof where.id === 'object' && 'in' in where.id) {
+              const currentIncludeIds = (where.id as any).in
+              where.id = { in: currentIncludeIds.filter((id: number) => !blockedIds.includes(id)) }
+            } else {
+              where.id = { notIn: blockedIds }
+            }
+          }
+        }
       }
     }
 
+    // Always sort by displayName first, then optionally by winRate
     let orderBy: Prisma.UserOrderByWithRelationInput | Prisma.UserOrderByWithRelationInput[] = []
 
     orderBy = { [sortBy]: order }
@@ -691,7 +708,10 @@ const usersRoutes: FastifyPluginAsync = async (fastify) => {
       orderBy = [orderBy, { id: 'asc' }]
     }
 
-    const [total, users] = await fastify.prisma.$transaction([
+    // If winRateSort or gamesSort is active, we need to fetch all matching users to sort by stats
+    const needsStatsSorting = winRateSort !== 'off' || gamesSort !== 'off'
+
+    const [total, allUsers] = await fastify.prisma.$transaction([
       fastify.prisma.user.count({ where }),
       fastify.prisma.user.findMany({
         where,
@@ -704,10 +724,50 @@ const usersRoutes: FastifyPluginAsync = async (fastify) => {
           country: true
         },
         orderBy,
-        skip,
-        take: limit
+        skip: needsStatsSorting ? undefined : skip,
+        take: needsStatsSorting ? undefined : limit
       })
     ])
+
+    // Calculate statistics using shared utility (source of truth)
+    const userIds = allUsers.map(u => u.id)
+    const statsMap = await calculateMultipleUserStats(fastify.prisma, userIds)
+
+    // Sort by stats if requested (already sorted by name)
+    let users = allUsers
+    if (needsStatsSorting) {
+      users = allUsers.sort((a, b) => {
+        // Apply sorts in the order specified by sortOrderArray
+        for (const sortType of sortOrderArray) {
+          if (sortType === 'winRate' && winRateSort !== 'off') {
+            const aStats = statsMap.get(a.id)
+            const bStats = statsMap.get(b.id)
+            const aWinRate = aStats?.winRate ?? 0
+            const bWinRate = bStats?.winRate ?? 0
+            const comparison = aWinRate - bWinRate
+            const orderMultiplier = winRateSort === 'desc' ? -1 : 1
+            if (Math.abs(comparison) >= 0.0001) {
+              return comparison * orderMultiplier
+            }
+          } else if (sortType === 'games' && gamesSort !== 'off') {
+            const aStats = statsMap.get(a.id)
+            const bStats = statsMap.get(b.id)
+            const aGames = aStats?.matchesPlayed ?? 0
+            const bGames = bStats?.matchesPlayed ?? 0
+            const comparison = aGames - bGames
+            const orderMultiplier = gamesSort === 'desc' ? -1 : 1
+            if (comparison !== 0) {
+              return comparison * orderMultiplier
+            }
+          }
+        }
+        // If all sorts are equal, keep name order
+        return a.displayName.localeCompare(b.displayName)
+      })
+
+      // Apply pagination after sorting
+      users = users.slice(skip, skip + limit)
+    }
 
     let mutualFriendsMap: Record<number, number> = {}
 
@@ -774,10 +834,16 @@ const usersRoutes: FastifyPluginAsync = async (fastify) => {
     }
 
     return {
-      data: users.map((user) => ({
-        ...user,
-        mutualFriends: mutualFriendsMap[user.id] ?? 0
-      })),
+      data: users.map((user) => {
+        const stats = statsMap.get(user.id)
+        return {
+          ...user,
+          mutualFriends: mutualFriendsMap[user.id] ?? 0,
+          wins: stats?.wins ?? 0,
+          winRate: stats?.winRate ?? 0,
+          gamesPlayed: stats?.matchesPlayed ?? 0
+        }
+      }),
       meta: {
         page,
         limit,

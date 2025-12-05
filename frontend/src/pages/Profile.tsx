@@ -18,6 +18,7 @@ import {
 } from '../lib/api'
 import { EditProfileModal } from '../components/profile/EditProfileModal'
 import UserAvatar from '../components/ui/UserAvatar'
+import { calculateWinRate, formatWinRate, formatGamesCount } from '../utils/stats'
 
 // Mock types
 interface UserProfile {
@@ -140,7 +141,7 @@ const ProfilePage = () => {
 
       if (profileData.stats) {
         const totalMatches = profileData.stats.matchesPlayed
-        const winRate = totalMatches > 0 ? Math.round((profileData.stats.wins / totalMatches) * 100) : 0
+        const winRate = calculateWinRate(profileData.stats.wins, totalMatches)
 
         setStats({
           wins: profileData.stats.wins,
@@ -507,11 +508,11 @@ const ProfilePage = () => {
                 <div className="space-y-4">
                   <div className="flex justify-between border-b border-slate-100 pb-2">
                     <span className="text-slate-600">Win Rate</span>
-                    <span className="font-medium text-slate-900">{stats.winRate}%</span>
+                    <span className="font-medium text-slate-900">{formatWinRate(stats.winRate)}</span>
                   </div>
                   <div className="flex justify-between border-b border-slate-100 pb-2">
                     <span className="text-slate-600">Matches</span>
-                    <span className="font-medium text-slate-900">{stats.totalMatches}</span>
+                    <span className="font-medium text-slate-900">{formatGamesCount(stats.totalMatches)}</span>
                   </div>
                   <div className="flex justify-between border-b border-slate-100 pb-2">
                     <span className="text-slate-600">Wins / Losses</span>
