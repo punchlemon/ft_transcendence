@@ -45,6 +45,7 @@
 - `frontend/src/components/chat/ChatDrawer.tsx` を実装し、折りたたみ可能なチャットドロワー、スレッド一覧、メッセージ送受信（モック）、タブ切り替えを作成した。
 - `frontend/src/components/chat/ChatDrawer.test.tsx` を追加し、開閉動作、メッセージ送信、画面遷移を検証した。
 - `App.tsx` に `ChatDrawer` を追加し、ログイン時のみ表示されるようにした。
+- `/users` ページのフィルタを「Include Offline / Friends Only / Exclude Blocked」の 3 つに絞り、AND ロジックで複数フィルタを組み合わせ可能に。デフォルトで「Exclude Blocked」ON・ローカルストレージ復元でリロード後も条件を保持。UI テキストを英語化して整合性確保。
 
 ### Epic A: インフラ・開発基盤
 | 状態 | タスク | メモ |

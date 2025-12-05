@@ -4,28 +4,72 @@ import type { PrismaClient } from '@prisma/client'
 import { randomUUID } from 'node:crypto'
 import { buildServer } from '../app'
 
-const createUser = (prisma: PrismaClient, data: {
+const createUser = async (prisma: PrismaClient, data: {
   login: string
   email: string
   displayName: string
   status?: string
   country?: string
-}) =>
-  prisma.user.create({
+}) => {
+  const user = await prisma.user.create({
     data: {
       passwordHash: 'hashed',
-      ...data,
-      stats: {
-        create: {
-          wins: 10,
-          losses: 5,
-          matchesPlayed: 15,
-          pointsScored: 100,
-          pointsAgainst: 50
-        }
-      }
+      ...data
     }
   })
+
+  // Create dummy opponent users for matches
+  const opponent1 = await prisma.user.create({
+    data: {
+      login: `opponent_${user.id}_1`,
+      email: `opponent_${user.id}_1@example.com`,
+      displayName: `Opponent 1 (${user.id})`,
+      passwordHash: 'hashed'
+    }
+  })
+
+  const opponent2 = await prisma.user.create({
+    data: {
+      login: `opponent_${user.id}_2`,
+      email: `opponent_${user.id}_2@example.com`,
+      displayName: `Opponent 2 (${user.id})`,
+      passwordHash: 'hashed'
+    }
+  })
+
+  // Create 15 match records: 10 wins, 5 losses
+  for (let i = 0; i < 10; i++) {
+    const opponent = i % 2 === 0 ? opponent1 : opponent2
+    await prisma.match.create({
+      data: {
+        playerAId: user.id,
+        playerBId: opponent.id,
+        winnerId: user.id,
+        mode: 'PONG',
+        status: 'FINISHED',
+        startedAt: new Date(),
+        endedAt: new Date()
+      }
+    })
+  }
+
+  for (let i = 0; i < 5; i++) {
+    const opponent = i % 2 === 0 ? opponent1 : opponent2
+    await prisma.match.create({
+      data: {
+        playerAId: user.id,
+        playerBId: opponent.id,
+        winnerId: opponent.id,
+        mode: 'PONG',
+        status: 'FINISHED',
+        startedAt: new Date(),
+        endedAt: new Date()
+      }
+    })
+  }
+
+  return user
+}
 
 const connectFriends = async (prisma: PrismaClient, userAId: number, userBId: number, status: string = 'ACCEPTED') => {
   const [requesterId, addresseeId] = userAId < userBId ? [userAId, userBId] : [userBId, userAId]
@@ -70,6 +114,7 @@ describe('GET /api/users/:id', () => {
   })
 
   beforeEach(async () => {
+    await prisma.notification.deleteMany()
     await prisma.message.deleteMany()
     await prisma.channelMember.deleteMany()
     await prisma.channelInvite.deleteMany()
@@ -81,14 +126,25 @@ describe('GET /api/users/:id', () => {
     await prisma.tournamentMatch.deleteMany()
     await prisma.tournamentParticipant.deleteMany()
     await prisma.tournament.deleteMany()
-    await prisma.twoFactorBackupCode.deleteMany()
-    await prisma.mfaChallenge.deleteMany()
-    await prisma.session.deleteMany()
-    await prisma.friendRequest.deleteMany()
+    await prisma.matchResult.deleteMany()
+    await prisma.matchRound.deleteMany()
+    await prisma.penalty.deleteMany()
+    await prisma.match.deleteMany()
     await prisma.friendship.deleteMany()
+    await prisma.blocklist.deleteMany()
+    await prisma.friendRequest.deleteMany()
     await prisma.userStats.deleteMany()
     // await prisma.ladderProfile.deleteMany()
     await prisma.ladderEnrollment.deleteMany()
+    await prisma.wallet.deleteMany()
+    await prisma.inventoryItem.deleteMany()
+    await prisma.userAchievement.deleteMany()
+    await prisma.auditLog.deleteMany()
+    await prisma.oAuthState.deleteMany()
+    await prisma.oAuthAccount.deleteMany()
+    await prisma.twoFactorBackupCode.deleteMany()
+    await prisma.mfaChallenge.deleteMany()
+    await prisma.session.deleteMany()
     await prisma.user.deleteMany()
   })
 
