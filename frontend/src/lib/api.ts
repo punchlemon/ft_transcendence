@@ -472,6 +472,8 @@ export type UserSearchParams = {
   page?: number
   limit?: number
   query?: string
+  statuses?: string
+  relationships?: string
   sortBy?: 'displayName' | 'createdAt'
   order?: 'asc' | 'desc'
 }

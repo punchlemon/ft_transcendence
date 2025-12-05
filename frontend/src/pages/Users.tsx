@@ -15,13 +15,37 @@ const UsersPage = () => {
     limit: 20,
     sortBy: 'displayName',
     order: 'asc',
-    query: undefined
+    query: undefined,
+    statuses: 'ONLINE,OFFLINE,IN_MATCH',
+    relationships: 'friends,blocked,pending_sent,pending_received,none'
   })
   const { user: currentUser } = useAuthStore()
   const [myFriends, setMyFriends] = useState<number[]>([])
   const [sentRequests, setSentRequests] = useState<number[]>([])
   const [receivedRequests, setReceivedRequests] = useState<number[]>([])
   const [blockedUsers, setBlockedUsers] = useState<number[]>([])
+
+  const toggleStatus = (status: string) => {
+    const current = params.statuses ? params.statuses.split(',') : []
+    let next: string[]
+    if (current.includes(status)) {
+      next = current.filter(s => s !== status)
+    } else {
+      next = [...current, status]
+    }
+    setParams(prev => ({ ...prev, statuses: next.join(','), page: 1 }))
+  }
+
+  const toggleRelationship = (rel: string) => {
+    const current = params.relationships ? params.relationships.split(',') : []
+    let next: string[]
+    if (current.includes(rel)) {
+      next = current.filter(r => r !== rel)
+    } else {
+      next = [...current, rel]
+    }
+    setParams(prev => ({ ...prev, relationships: next.join(','), page: 1 }))
+  }
 
   useEffect(() => {
     const unsubscribeFriend = onChatWsEvent('friend_update', (data) => {
@@ -132,35 +156,79 @@ const UsersPage = () => {
 
   return (
     <div className="mx-auto max-w-5xl px-6 py-8">
-      <div className="mb-8 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-        <h1 className="text-2xl font-bold text-slate-900">User Search</h1>
-        <form onSubmit={handleSearch} className="flex gap-2">
-          <input
-            type="text"
-            placeholder="Search by name..."
-            className="rounded-md border border-slate-300 px-3 py-2 text-sm focus:border-indigo-500 focus:outline-none focus:ring-1 focus:ring-indigo-500"
-            value={params.query ?? ''}
-            onChange={(e) => setParams((prev) => ({ ...prev, query: e.target.value || undefined, page: 1 }))}
-          />
-        </form>
-      </div>
+      <div className="mb-8 flex flex-col gap-4">
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+          <h1 className="text-2xl font-bold text-slate-900">User Search</h1>
+          <form onSubmit={handleSearch} className="flex items-center gap-2 w-full sm:w-auto">
+            <input
+              type="text"
+              placeholder="Search by name..."
+              className="rounded-md border border-slate-300 px-3 py-2 text-sm focus:border-indigo-500 focus:outline-none focus:ring-1 focus:ring-indigo-500 w-full sm:w-64"
+              value={params.query ?? ''}
+              onChange={(e) => setParams((prev) => ({ ...prev, query: e.target.value || undefined, page: 1 }))}
+            />
+          </form>
+        </div>
 
-      <div className="mb-6 flex flex-wrap gap-2">
-        <span className="text-sm font-medium text-slate-700 self-center mr-2">Sort by:</span>
-        <Button
-          variant={params.sortBy === 'displayName' ? 'primary' : 'secondary'}
-          onClick={() => handleSortChange('displayName')}
-          className="text-xs"
-        >
-          Name {params.sortBy === 'displayName' && (params.order === 'asc' ? '↑' : '↓')}
-        </Button>
-        <Button
-          variant={params.sortBy === 'createdAt' ? 'primary' : 'secondary'}
-          onClick={() => handleSortChange('createdAt')}
-          className="text-xs"
-        >
-          Joined {params.sortBy === 'createdAt' && (params.order === 'asc' ? '↑' : '↓')}
-        </Button>
+        <div className="flex flex-col gap-4 bg-white p-4 rounded-lg border border-slate-200 shadow-sm">
+          {/* Filters Row */}
+          <div className="flex flex-wrap gap-y-2 gap-x-6 items-center">
+            <div className="flex flex-wrap gap-2 items-center">
+              <span className="text-xs font-semibold text-slate-500 uppercase tracking-wider">Status:</span>
+              {['ONLINE', 'OFFLINE', 'IN_MATCH'].map(status => (
+                <Button
+                  key={status}
+                  type="button"
+                  variant={params.statuses?.split(',').includes(status) ? 'primary' : 'secondary'}
+                  onClick={() => toggleStatus(status)}
+                  className="text-xs py-1 px-2 h-auto"
+                >
+                  {status.replace('_', ' ')}
+                </Button>
+              ))}
+            </div>
+
+            <div className="flex flex-wrap gap-2 items-center">
+              <span className="text-xs font-semibold text-slate-500 uppercase tracking-wider">Relationship:</span>
+              {[
+                { id: 'friends', label: 'Friends' },
+                { id: 'pending_sent', label: 'Sent' },
+                { id: 'pending_received', label: 'Received' },
+                { id: 'blocked', label: 'Blocked' },
+                { id: 'none', label: 'Others' }
+              ].map(rel => (
+                <Button
+                  key={rel.id}
+                  type="button"
+                  variant={params.relationships?.split(',').includes(rel.id) ? 'primary' : 'secondary'}
+                  onClick={() => toggleRelationship(rel.id)}
+                  className="text-xs py-1 px-2 h-auto"
+                >
+                  {rel.label}
+                </Button>
+              ))}
+            </div>
+          </div>
+
+          {/* Sort Row */}
+          <div className="flex flex-wrap gap-2 items-center border-t border-slate-100 pt-4">
+            <span className="text-xs font-semibold text-slate-500 uppercase tracking-wider">Sort by:</span>
+            <Button
+              variant={params.sortBy === 'displayName' ? 'primary' : 'secondary'}
+              onClick={() => handleSortChange('displayName')}
+              className="text-xs py-1 px-2 h-auto"
+            >
+              Name {params.sortBy === 'displayName' && (params.order === 'asc' ? '↑' : '↓')}
+            </Button>
+            <Button
+              variant={params.sortBy === 'createdAt' ? 'primary' : 'secondary'}
+              onClick={() => handleSortChange('createdAt')}
+              className="text-xs py-1 px-2 h-auto"
+            >
+              Joined {params.sortBy === 'createdAt' && (params.order === 'asc' ? '↑' : '↓')}
+            </Button>
+          </div>
+        </div>
       </div>
 
       {loading ? (
