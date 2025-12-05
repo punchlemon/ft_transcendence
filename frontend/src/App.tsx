@@ -22,7 +22,12 @@ const App = () => {
   const resetChat = useChatStore((state) => state.reset)
   const resetNotifications = useNotificationStore((state) => state.reset)
 
-  const handleLogout = () => {
+  const handleLogout = async () => {
+    try {
+      await (await import('./lib/api')).logout()
+    } catch (err) {
+      console.warn('Logout request failed', err)
+    }
     clearSession()
     resetChat()
     resetNotifications()

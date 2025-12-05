@@ -439,6 +439,18 @@ export const revokeSession = async (sessionId: number) => {
   await apiClient.delete(`/auth/sessions/${sessionId}`)
 }
 
+export const logout = async () => {
+  const refreshToken = useAuthStore.getState().refreshToken
+  try {
+    if (refreshToken) {
+      await apiClient.post('/auth/logout', { refreshToken })
+    }
+  } catch (err) {
+    // best-effort: ignore server errors during logout
+    console.warn('Failed to call logout endpoint', err)
+  }
+}
+
 export type UserSearchResponse = {
   data: Array<{
     id: number

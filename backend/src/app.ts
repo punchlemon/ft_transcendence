@@ -33,6 +33,10 @@ export const buildServer = async () => {
   await server.register(swaggerUi, { routePrefix: '/docs' })
   await server.register(dbPlugin)
   await server.register(jwtPlugin)
+  // Register chat WS routes before auth so WS helpers (decorations) are available
+  // to auth routes at runtime.
+  await server.register(chatWsRoutes, { prefix: '/api' })
+
   await server.register(authRoutes, { prefix: '/auth' })
   await server.register(authRoutes, { prefix: '/api/auth' })
   await server.register(usersRoutes, { prefix: '/api' })
@@ -40,7 +44,6 @@ export const buildServer = async () => {
   await server.register(gameRoutes)
   await server.register(gameRoutes, { prefix: '/api' })
   await server.register(chatRoutes, { prefix: '/api/chat' })
-  await server.register(chatWsRoutes, { prefix: '/api' })
   await server.register(friendRoutes, { prefix: '/api' })
   await server.register(notificationsRoutes, { prefix: '/api/notifications' })
 

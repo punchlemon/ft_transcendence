@@ -69,9 +69,17 @@ const ProfilePage = () => {
   const isOwnProfile = currentUser?.login === username
 
   const handleLogout = () => {
-    clearSession()
-    resetChat()
-    resetNotifications()
+    ;(async () => {
+      try {
+        const api = await import('../lib/api')
+        await api.logout()
+      } catch (err) {
+        console.warn('Logout request failed', err)
+      }
+      clearSession()
+      resetChat()
+      resetNotifications()
+    })()
   }
 
   const [profile, setProfile] = useState<UserProfile | null>(null)
@@ -203,9 +211,25 @@ const ProfilePage = () => {
       }
     })
 
+    const normalizeStatus = (raw: string | undefined): 'online' | 'offline' | 'in-game' => {
+      const lowered = raw?.toLowerCase()
+      if (lowered === 'online' || lowered === 'in-game') return lowered
+      return 'offline'
+    }
+
+    const unsubscribePresence = onChatWsEvent('friend_status', (data) => {
+      const normalized = normalizeStatus(data.status)
+      setFriends((prev) => prev.map((friend) => (friend.id === String(data.userId) ? { ...friend, status: normalized } : friend)))
+      setProfile((prev) => {
+        if (!prev || Number(prev.id) !== data.userId) return prev
+        return { ...prev, status: normalized }
+      })
+    })
+
     return () => {
       unsubscribeFriend()
       unsubscribeRelationship()
+      unsubscribePresence()
     }
   }, [profile, isOwnProfile, fetchProfileData])
 

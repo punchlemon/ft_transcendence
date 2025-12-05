@@ -2,6 +2,7 @@ import { FastifyInstance } from 'fastify';
 import { chatService } from '../services/chat';
 import { notificationService } from '../services/notification';
 import { friendService } from '../services/friend';
+import { presenceService } from '../services/presence';
 import { WebSocket } from 'ws';
 
 interface SocketStream {
@@ -10,6 +11,127 @@ interface SocketStream {
 
 export default async function chatWsRoutes(fastify: FastifyInstance) {
   const connections = new Map<number, Set<WebSocket>>();
+  // Map socket -> userId to reliably find owner when 'close' fires
+  const socketToUser = new WeakMap<WebSocket, number>();
+
+  // Cleanup helper moved to outer scope so it can be reused by the forced-close helper.
+  const cleanupSocket = async (s: WebSocket) => {
+    try {
+      const ownerId = socketToUser.get(s);
+      if (ownerId === undefined) {
+        // If no owner mapping, attempt best-effort removal across all sets
+        for (const [uid, setOfSockets] of connections.entries()) {
+          if (setOfSockets.has(s)) {
+            setOfSockets.delete(s);
+            socketToUser.delete(s as WebSocket);
+            if (setOfSockets.size === 0) {
+              connections.delete(uid);
+              await fastify.prisma.user.update({ where: { id: uid }, data: { status: 'OFFLINE' } }).catch(console.error);
+              broadcastPresenceToFriends(uid, 'OFFLINE').catch(() => {});
+              fastify.log && fastify.log.info && fastify.log.info({ uid }, 'user presence: OFFLINE (cleaned up)')
+            }
+            break;
+          }
+        }
+        return;
+      }
+
+      const userConns = connections.get(ownerId);
+      if (userConns && userConns.has(s)) {
+        userConns.delete(s);
+        socketToUser.delete(s as WebSocket);
+        if (userConns.size === 0) {
+          connections.delete(ownerId);
+          await fastify.prisma.user.update({ where: { id: ownerId }, data: { status: 'OFFLINE' } }).catch(console.error);
+          broadcastPresenceToFriends(ownerId, 'OFFLINE').catch(() => {});
+          fastify.log && fastify.log.info && fastify.log.info({ ownerId }, 'user presence: OFFLINE (last connection closed)')
+        }
+      }
+    } catch (err) {
+      fastify.log && fastify.log.warn && fastify.log.warn({ err }, 'Error during socket cleanup')
+    }
+  }
+
+  // Force-close all sockets for a given userId. Returns number of sockets attempted.
+  const closeUserSockets = async (userId: number) => {
+    const setOfSockets = connections.get(userId);
+    if (!setOfSockets || setOfSockets.size === 0) return 0;
+
+    // Copy sockets so we can iterate while cleanup mutates the set
+    const sockets = Array.from(setOfSockets);
+    for (const ws of sockets) {
+      try {
+        if (ws.readyState === WebSocket.OPEN) {
+          // 4000+ are application-defined close codes; use 4000 to indicate server-forced logout
+          ws.close(4000, 'server logout');
+        }
+      } catch (err) {
+        // ignore
+      }
+
+      // Ensure cleanup runs (if 'close' event doesn't fire synchronously)
+      try {
+        // cleanupSocket is idempotent and safe to call
+        // eslint-disable-next-line no-await-in-loop
+        await cleanupSocket(ws);
+      } catch (err) {
+        fastify.log && fastify.log.warn && fastify.log.warn({ err }, 'Error during forced socket cleanup')
+      }
+    }
+
+    return sockets.length;
+  }
+
+
+  // Broadcast presence changes to connected friends of a user
+  const broadcastPresenceToFriends = async (userId: number, status: 'ONLINE' | 'OFFLINE') => {
+    try {
+      fastify.log && fastify.log.info && fastify.log.info({ userId, status }, 'broadcastPresenceToFriends called')
+      const friendships = await fastify.prisma.friendship.findMany({
+        where: {
+          status: 'ACCEPTED',
+          OR: [
+            { requesterId: userId },
+            { addresseeId: userId }
+          ]
+        },
+        select: { requesterId: true, addresseeId: true }
+      });
+
+      const friendIds = friendships.map(f => (f.requesterId === userId ? f.addresseeId : f.requesterId));
+
+      fastify.log && fastify.log.info && fastify.log.info({ userId, friendCount: friendIds.length, friendIds }, 'presence friends resolved')
+
+      const payload = JSON.stringify({ type: 'friend_status', data: { userId, status } });
+
+      for (const fid of friendIds) {
+        const conns = connections.get(fid);
+        if (!conns) {
+          fastify.log && fastify.log.debug && fastify.log.debug({ userId, fid }, 'no connections for friend')
+          continue;
+        }
+        let sent = 0
+        for (const ws of conns) {
+          try {
+            if (ws.readyState === WebSocket.OPEN) {
+              ws.send(payload);
+              sent++
+            }
+          } catch (err) {
+            fastify.log && fastify.log.warn && fastify.log.warn({ err, userId, fid }, 'error sending presence payload')
+          }
+        }
+        fastify.log && fastify.log.info && fastify.log.info({ userId, fid, conns: conns.size, sent }, 'presence payload send summary')
+      }
+    } catch (err) {
+      fastify.log && fastify.log.warn && fastify.log.warn({ err }, 'Failed to broadcast presence to friends')
+    }
+  }
+
+  presenceService.setBroadcast(broadcastPresenceToFriends)
+
+    // Register helpers in the shared presenceService so other parts of the app can call them.
+    presenceService.setCloseSockets(closeUserSockets)
 
   chatService.on('message', async (message) => {
     // Get members of the channel
@@ -298,6 +420,7 @@ export default async function chatWsRoutes(fastify: FastifyInstance) {
       return;
     }
 
+    // Ensure we always register the same socket instance and a reverse mapping
     if (!connections.has(userId)) {
       connections.set(userId, new Set());
       // First connection, set status ONLINE
@@ -305,22 +428,60 @@ export default async function chatWsRoutes(fastify: FastifyInstance) {
         where: { id: userId },
         data: { status: 'ONLINE' }
       }).catch(console.error);
+      // Notify connected friends about presence change
+      broadcastPresenceToFriends(userId, 'ONLINE').catch(() => {});
+      fastify.log && fastify.log.info && fastify.log.info({ userId }, 'user presence: ONLINE (first connection)')
     }
+
     connections.get(userId)!.add(socket);
+    socketToUser.set(socket, userId);
+
+    const cleanupSocket = async (s: WebSocket) => {
+      try {
+        const ownerId = socketToUser.get(s) ?? userId;
+        const userConns = connections.get(ownerId);
+        if (userConns && userConns.has(s)) {
+          userConns.delete(s);
+          socketToUser.delete(s);
+          if (userConns.size === 0) {
+            connections.delete(ownerId);
+            // Last connection, set status OFFLINE
+            await fastify.prisma.user.update({
+              where: { id: ownerId },
+              data: { status: 'OFFLINE' }
+            }).catch(console.error);
+            // Notify connected friends about presence change
+            broadcastPresenceToFriends(ownerId, 'OFFLINE').catch(() => {});
+            fastify.log && fastify.log.info && fastify.log.info({ ownerId }, 'user presence: OFFLINE (last connection closed)')
+          }
+        } else {
+          // If no matching set found, attempt best-effort removal across all sets
+          for (const [uid, setOfSockets] of connections.entries()) {
+            if (setOfSockets.has(s)) {
+              setOfSockets.delete(s);
+              socketToUser.delete(s);
+              if (setOfSockets.size === 0) {
+                connections.delete(uid);
+                await fastify.prisma.user.update({ where: { id: uid }, data: { status: 'OFFLINE' } }).catch(console.error);
+                broadcastPresenceToFriends(uid, 'OFFLINE').catch(() => {});
+                fastify.log && fastify.log.info && fastify.log.info({ uid }, 'user presence: OFFLINE (cleaned up)')
+              }
+              break;
+            }
+          }
+        }
+      } catch (err) {
+        fastify.log && fastify.log.warn && fastify.log.warn({ err }, 'Error during socket cleanup')
+      }
+    };
 
     socket.on('close', async () => {
-      const userConns = connections.get(userId);
-      if (userConns) {
-        userConns.delete(socket);
-        if (userConns.size === 0) {
-          connections.delete(userId);
-          // Last connection, set status OFFLINE
-          await fastify.prisma.user.update({
-            where: { id: userId },
-            data: { status: 'OFFLINE' }
-          }).catch(console.error);
-        }
-      }
+      await cleanupSocket(socket);
+    });
+
+    socket.on('error', async (err: unknown) => {
+      fastify.log && fastify.log.warn && fastify.log.warn({ err }, 'WebSocket error for user')
+      await cleanupSocket(socket);
     });
   });
 }

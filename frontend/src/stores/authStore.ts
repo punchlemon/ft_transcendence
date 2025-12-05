@@ -1,4 +1,5 @@
 import { create } from 'zustand'
+import { disconnectChatWs, connectChatWs } from '../lib/chatWs'
 
 export type AuthUserSnapshot = {
   id: number
@@ -63,6 +64,11 @@ const useAuthStore = create<AuthStore>((set, get) => ({
       refreshToken: tokens.refresh,
       isHydrated: true
     })
+    try {
+      connectChatWs()
+    } catch (err) {
+      // ignore
+    }
   },
   hydrateFromStorage: () => {
     if (get().isHydrated) {
@@ -82,6 +88,12 @@ const useAuthStore = create<AuthStore>((set, get) => ({
     })
   },
   clearSession: () => {
+    try {
+      // Ensure any active WebSocket is closed so server can mark presence OFFLINE
+      disconnectChatWs()
+    } catch (err) {
+      // ignore
+    }
     if (isBrowserEnvironment()) {
       sessionStorage.removeItem(ACCESS_TOKEN_KEY)
       sessionStorage.removeItem(REFRESH_TOKEN_KEY)

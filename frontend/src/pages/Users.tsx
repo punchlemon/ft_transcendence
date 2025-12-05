@@ -40,6 +40,17 @@ const UsersPage = () => {
       }
     })
 
+    const normalizeStatus = (raw?: string) => {
+      const lowered = raw?.toLowerCase()
+      if (lowered === 'online' || lowered === 'in-game') return lowered
+      return 'offline'
+    }
+
+    const unsubscribePresence = onChatWsEvent('friend_status', (data) => {
+      const normalized = normalizeStatus(data.status)
+      setUsers((prev) => prev.map((u) => (u.id === data.userId ? { ...u, status: normalized.toUpperCase() } : u)))
+    })
+
     const unsubscribeRelationship = onChatWsEvent('relationship_update', (data) => {
       if (data.status === 'BLOCKING') {
         setBlockedUsers(prev => {
@@ -54,6 +65,7 @@ const UsersPage = () => {
     return () => {
       unsubscribeFriend()
       unsubscribeRelationship()
+      unsubscribePresence()
     }
   }, [])
 
@@ -93,13 +105,12 @@ const UsersPage = () => {
     e.preventDefault()
     // Search is triggered by useEffect when params.query changes
   }
-
-  const handleSortChange = (sortBy: UserSearchParams['sortBy']) => {
+  const handleSortChange = (sortBy: 'displayName' | 'createdAt') => {
     setParams((prev) => ({
       ...prev,
       sortBy,
-      // Toggle order if clicking the same sort field, otherwise default to asc (or desc for createdAt)
-      order: prev.sortBy === sortBy ? (prev.order === 'asc' ? 'desc' : 'asc') : (sortBy === 'createdAt' ? 'desc' : 'asc')
+      order: prev.sortBy === sortBy ? (prev.order === 'asc' ? 'desc' : 'asc') : (sortBy === 'createdAt' ? 'desc' : 'asc'),
+      page: 1,
     }))
   }
 
@@ -144,8 +155,10 @@ const UsersPage = () => {
         <div className="py-12 text-center text-slate-500">Loading...</div>
       ) : (
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-          {users?.map((user) => (
-            <Link
+          {users?.map((user) => {
+            const statusLower = user.status?.toLowerCase()
+            return (
+              <Link
               key={user.id}
               to={`/${user.login}`}
               className="flex items-center gap-4 rounded-lg border border-slate-200 bg-white p-4 transition-shadow hover:shadow-md"
@@ -163,8 +176,8 @@ const UsersPage = () => {
                   )}
                 </div>
                 <span className={`absolute bottom-0 right-0 block h-3 w-3 rounded-full ring-2 ring-white ${
-                  user.status === 'ONLINE' ? 'bg-green-500' : 
-                  user.status === 'IN_MATCH' ? 'bg-yellow-500' : 'bg-slate-300'
+                  statusLower === 'online' ? 'bg-green-500' : 
+                  statusLower === 'in-game' || statusLower === 'in_match' ? 'bg-yellow-500' : 'bg-slate-300'
                 }`} />
               </div>
               <div className="flex-1 min-w-0">
@@ -192,8 +205,9 @@ const UsersPage = () => {
                   )}
                 </div>
               </div>
-            </Link>
-          ))}
+              </Link>
+            )
+          })}
         </div>
       )}
 

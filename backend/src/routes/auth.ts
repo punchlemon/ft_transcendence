@@ -6,6 +6,7 @@ import argon2 from 'argon2'
 import { authenticator } from 'otplib'
 import { z } from 'zod'
 import type { PrismaClient } from '@prisma/client'
+import { presenceService } from '../services/presence'
 
 const SESSION_TTL_MS = 1000 * 60 * 60 * 24 * 7 // 7 days
 const MFA_CHALLENGE_TTL_MS = 1000 * 60 * 5 // 5 minutes
@@ -1425,7 +1426,52 @@ const authRoutes: FastifyPluginAsync = async (fastify) => {
       }
     }
 
-    await fastify.prisma.session.deleteMany({ where: { token: parsed.data.refreshToken } })
+    const token = parsed.data.refreshToken
+
+    // Find the session first so we can determine the owning user.
+    const existing = await fastify.prisma.session.findUnique({ where: { token } })
+
+    // Delete any matching sessions (idempotent)
+    await fastify.prisma.session.deleteMany({ where: { token } })
+
+    // If we found an owning user, decide whether to close sockets / set OFFLINE.
+    // Only force-close sockets and mark the user OFFLINE when there are no remaining
+    // sessions for that user. This avoids closing sockets for other active sessions
+    // (e.g., another browser tab) when the current session is logged out.
+    if (existing) {
+      try {
+        const remaining = await fastify.prisma.session.count({ where: { userId: existing.userId } })
+        if (remaining === 0) {
+          // No more sessions: close sockets, persist OFFLINE, and broadcast.
+          try {
+            await presenceService.closeUserSockets(existing.userId).catch(() => {})
+          } catch (err) {
+            fastify.log && fastify.log.warn && fastify.log.warn({ err }, 'Failed while attempting to close user sockets after logout')
+          }
+
+          try {
+            await fastify.prisma.user.update({ where: { id: existing.userId }, data: { status: 'OFFLINE' } })
+          } catch (err) {
+            fastify.log && fastify.log.warn && fastify.log.warn({ err }, 'Failed to persist OFFLINE status after logout')
+          }
+
+          // Notify friends immediately about the offline status if broadcast helper exists
+          try {
+            await presenceService.broadcast(existing.userId, 'OFFLINE').catch(() => {})
+          } catch (err) {
+            fastify.log && fastify.log.warn && fastify.log.warn({ err }, 'Failed to broadcast presence after logout')
+          }
+
+          fastify.log && fastify.log.info && fastify.log.info({ userId: existing.userId }, 'user presence: OFFLINE (logout with no remaining sessions)')
+        } else {
+          // There are still active sessions; do not close sockets or change DB status.
+          fastify.log && fastify.log.info && fastify.log.info({ userId: existing.userId, remaining }, 'logout: session removed but other sessions remain; presence unchanged')
+        }
+      } catch (err) {
+        fastify.log && fastify.log.warn && fastify.log.warn({ err }, 'Failed to set user OFFLINE after logout')
+      }
+    }
+
     reply.code(204)
     return null
   })

@@ -59,6 +59,10 @@ export const connectChatWs = () => {
         if (listeners['friend_update']) {
           listeners['friend_update'].forEach(cb => cb(payload.data));
         }
+      } else if (payload.type === 'friend_status') {
+        if (listeners['friend_status']) {
+          listeners['friend_status'].forEach(cb => cb(payload.data));
+        }
       } else if (payload.type === 'relationship_update') {
         if (listeners['relationship_update']) {
           listeners['relationship_update'].forEach(cb => cb(payload.data));
@@ -70,14 +74,27 @@ export const connectChatWs = () => {
   };
 
   socket.onclose = () => {
-    console.log('Chat WS disconnected');
+    console.log('Chat WS disconnected', { socketState: socket?.readyState });
     socket = null;
   };
 };
 
 export const disconnectChatWs = () => {
   if (socket) {
-    socket.close();
-    socket = null;
+    try {
+      console.log('Closing Chat WS from client', { readyState: socket.readyState });
+      // Use normal closure code and a reason for clarity
+      if (socket.readyState === WebSocket.OPEN || socket.readyState === WebSocket.CONNECTING) {
+        socket.close(1000, 'client logout');
+      } else {
+        socket.close();
+      }
+    } catch (err) {
+      console.warn('Error while closing socket', err);
+    } finally {
+      socket = null;
+    }
+  } else {
+    console.log('disconnectChatWs called but no socket present');
   }
 };
