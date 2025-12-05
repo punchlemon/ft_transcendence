@@ -125,7 +125,7 @@ export default async function chatWsRoutes(fastify: FastifyInstance) {
   }
 
 
-  // Broadcast presence changes to connected friends of a user
+  // Broadcast presence changes to all connected users (previously only friends)
   const broadcastPresenceToFriends = async (userId: number, status: 'ONLINE' | 'OFFLINE') => {
     try {
       fastify.log && fastify.log.info && fastify.log.info({ userId, status }, 'broadcastPresenceToFriends called')
@@ -141,17 +141,13 @@ export default async function chatWsRoutes(fastify: FastifyInstance) {
       });
 
       const friendIds = friendships.map(f => (f.requesterId === userId ? f.addresseeId : f.requesterId));
-
       fastify.log && fastify.log.info && fastify.log.info({ userId, friendCount: friendIds.length, friendIds }, 'presence friends resolved')
 
       const payload = JSON.stringify({ type: 'friend_status', data: { userId, status } });
 
-      for (const fid of friendIds) {
-        const conns = connections.get(fid);
-        if (!conns) {
-          fastify.log && fastify.log.debug && fastify.log.debug({ userId, fid }, 'no connections for friend')
-          continue;
-        }
+      // Send to all connected users so non-friends see presence updates as well
+      for (const [fid, conns] of connections.entries()) {
+        if (!conns) continue
         let sent = 0
         for (const entry of conns) {
           const ws = entry.ws
