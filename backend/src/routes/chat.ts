@@ -39,6 +39,7 @@ export default async function chatRoutes(fastify: FastifyInstance) {
           id: mem.user.id,
           displayName: mem.user.displayName,
           avatarUrl: mem.user.avatarUrl,
+          login: (mem.user as any).login,
           status: mem.user.status,
           role: mem.role,
           lastReadAt: mem.lastReadAt

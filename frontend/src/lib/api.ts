@@ -319,6 +319,7 @@ export type FriendResponse = {
   data: Array<{
     id: number
     displayName: string
+    login: string
     status: string
     avatarUrl: string | null
   }>
@@ -420,6 +421,18 @@ export const updateUserProfile = async (userId: string, payload: UpdateProfilePa
   return response.data as UserProfileResponse
 }
 
+export const uploadAvatar = async (userId: string, file: File) => {
+  const formData = new FormData()
+  formData.append('file', file)
+  const response = await apiClient.post(`/users/${userId}/avatar`, formData)
+  return response.data as UserProfileResponse
+}
+
+export const deleteAvatar = async (userId: string) => {
+  const response = await apiClient.delete(`/users/${userId}/avatar`)
+  return response.data as UserProfileResponse
+}
+
 export type Session = {
   id: number
   createdAt: string
@@ -459,6 +472,8 @@ export type UserSearchParams = {
   page?: number
   limit?: number
   query?: string
+  statuses?: string
+  relationships?: string
   sortBy?: 'displayName' | 'createdAt'
   order?: 'asc' | 'desc'
 }

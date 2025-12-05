@@ -1,11 +1,9 @@
 import { Link } from 'react-router-dom'
 import useAuthStore from '../../stores/authStore'
-import { useNotificationStore } from '../../stores/notificationStore'
-import Avatar from './Avatar'
+import UserAvatar from './UserAvatar'
 
 const UserMenu = () => {
   const user = useAuthStore((state) => state.user)
-  const unreadCount = useNotificationStore((state) => state.unreadCount)
 
   if (!user) return null
 
@@ -16,12 +14,7 @@ const UserMenu = () => {
       data-testid="user-menu-link"
     >
       <div className="relative">
-        <Avatar src={user.avatarUrl} alt={user.displayName} size="sm" />
-        {unreadCount > 0 && (
-          <span className="absolute -top-1 -right-1 flex h-4 w-4 items-center justify-center rounded-full bg-red-500 text-[10px] font-bold text-white">
-            {unreadCount > 99 ? '99+' : unreadCount}
-          </span>
-        )}
+        <UserAvatar user={user} size="sm" linkToProfile={false} />
       </div>
     </Link>
   )

@@ -15,6 +15,8 @@ import useAuthStore from './stores/authStore'
 import { useChatStore } from './stores/chatStore'
 import { useNotificationStore } from './stores/notificationStore'
 import RequireAuth from './components/auth/RequireAuth'
+import { disconnectChatWs } from './lib/chatWs'
+import { api } from './lib/api'
 
 const App = () => {
   const user = useAuthStore((state) => state.user)
@@ -22,7 +24,16 @@ const App = () => {
   const resetChat = useChatStore((state) => state.reset)
   const resetNotifications = useNotificationStore((state) => state.reset)
 
-  const handleLogout = () => {
+  const handleLogout = async () => {
+    const refreshToken = useAuthStore.getState().refreshToken
+    if (refreshToken) {
+      try {
+        await api.post('/auth/logout', { refreshToken })
+      } catch (error) {
+        console.error('Logout API call failed', error)
+      }
+    }
+    disconnectChatWs()
     clearSession()
     resetChat()
     resetNotifications()
@@ -34,10 +45,13 @@ const App = () => {
 
   function AuthRedirectOnLogout() {
     const user = useAuthStore((s) => s.user)
+    const isHydrated = useAuthStore((s) => s.isHydrated)
     const navigate = useNavigate()
     const location = useLocation()
 
     useEffect(() => {
+      if (!isHydrated) return // Wait for hydration
+
       if (!user) {
         // Allow auth-related routes to remain accessible (login/register/2fa/oauth callback)
         const allowedPrefixes = ['/login', '/register', '/auth', '/oauth']
@@ -47,7 +61,9 @@ const App = () => {
           navigate('/login', { replace: true })
         }
       }
-    }, [user, navigate, location])
+    }, [user, isHydrated, navigate, location])
+
+    if (!isHydrated) return null // Or a loading spinner
 
     return null
   }

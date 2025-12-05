@@ -2,6 +2,12 @@ import fp from 'fastify-plugin'
 import type { FastifyPluginAsync } from 'fastify'
 import { z } from 'zod'
 import type { Prisma } from '@prisma/client'
+import { pipeline } from 'stream/promises'
+import fs from 'fs'
+import path from 'path'
+import { randomUUID } from 'crypto'
+import sharp from 'sharp'
+import { userService } from '../services/user'
 
 const STATUS_VALUES = ['OFFLINE', 'ONLINE', 'IN_MATCH', 'AWAY', 'DO_NOT_DISTURB'] as const
 
@@ -11,7 +17,8 @@ const searchQuerySchema = z.object({
     .transform((value) => value.trim())
     .pipe(z.string().min(1).max(64))
     .optional(),
-  status: z.enum(STATUS_VALUES).optional(),
+  statuses: z.string().optional(), // Comma separated values
+  relationships: z.string().optional(), // Comma separated values: friends,blocked,none
   page: z.coerce.number().int().min(1).default(1),
   limit: z.coerce.number().int().min(1).default(20),
   excludeFriendIds: z.string().optional(),
@@ -33,7 +40,7 @@ const parseExcludeIds = (excludeFriendIds?: string) => {
 const updateProfileSchema = z.object({
   displayName: z.string().trim().min(1).max(32).optional(),
   bio: z.string().trim().max(255).optional(),
-  avatarUrl: z.union([z.string().trim().url(), z.literal('')]).optional()
+  avatarUrl: z.union([z.string().trim(), z.literal('')]).optional()
 })
 
 const usersRoutes: FastifyPluginAsync = async (fastify) => {
@@ -105,6 +112,130 @@ const usersRoutes: FastifyPluginAsync = async (fastify) => {
         country: true
       }
     })
+
+    userService.emitUserUpdated(updatedUser)
+
+    return updatedUser
+  })
+
+  fastify.post('/users/:id/avatar', { preHandler: fastify.authenticate }, async (request, reply) => {
+    const paramsParsed = z.object({ id: z.coerce.number().int().positive() }).safeParse(request.params)
+    if (!paramsParsed.success) {
+      reply.code(400)
+      return { error: { code: 'INVALID_PARAMS', message: 'Invalid user ID' } }
+    }
+
+    const { id: targetId } = paramsParsed.data
+    const viewerId = request.user.userId
+
+    if (targetId !== viewerId) {
+      reply.code(403)
+      return { error: { code: 'FORBIDDEN', message: 'You can only edit your own profile' } }
+    }
+
+    const data = await request.file()
+    if (!data) {
+      reply.code(400)
+      return { error: { code: 'NO_FILE', message: 'No file uploaded' } }
+    }
+
+    const allowedMimeTypes = ['image/jpeg', 'image/png', 'image/webp', 'image/gif']
+    if (!allowedMimeTypes.includes(data.mimetype)) {
+      reply.code(400)
+      return { error: { code: 'INVALID_FILE_TYPE', message: 'Only images are allowed' } }
+    }
+
+    const uploadsDir = path.join(process.cwd(), 'uploads')
+    if (!fs.existsSync(uploadsDir)) {
+      fs.mkdirSync(uploadsDir, { recursive: true })
+    }
+
+    const filename = `${randomUUID()}.png`
+    const filepath = path.join(uploadsDir, filename)
+
+    try {
+      const transform = sharp().resize(256, 256, { fit: 'cover' }).png()
+      await pipeline(data.file, transform, fs.createWriteStream(filepath))
+
+      const avatarUrl = `/uploads/${filename}`
+
+      const user = await fastify.prisma.user.findUnique({ where: { id: viewerId }, select: { avatarUrl: true } })
+      if (user?.avatarUrl) {
+        const oldFilename = user.avatarUrl.split('/').pop()
+        if (oldFilename) {
+          const oldPath = path.join(uploadsDir, oldFilename)
+          if (fs.existsSync(oldPath)) {
+            fs.unlinkSync(oldPath)
+          }
+        }
+      }
+
+      const updatedUser = await fastify.prisma.user.update({
+        where: { id: viewerId },
+        data: { avatarUrl },
+        select: {
+          id: true,
+          displayName: true,
+          login: true,
+          status: true,
+          avatarUrl: true,
+          country: true,
+          bio: true
+        }
+      })
+
+      userService.emitUserUpdated(updatedUser)
+
+      return updatedUser
+    } catch (err) {
+      request.log.error(err)
+      reply.code(500)
+      return { error: { code: 'UPLOAD_FAILED', message: 'Failed to process upload' } }
+    }
+  })
+
+  fastify.delete('/users/:id/avatar', { preHandler: fastify.authenticate }, async (request, reply) => {
+    const paramsParsed = z.object({ id: z.coerce.number().int().positive() }).safeParse(request.params)
+    if (!paramsParsed.success) {
+      reply.code(400)
+      return { error: { code: 'INVALID_PARAMS', message: 'Invalid user ID' } }
+    }
+
+    const { id: targetId } = paramsParsed.data
+    const viewerId = request.user.userId
+
+    if (targetId !== viewerId) {
+      reply.code(403)
+      return { error: { code: 'FORBIDDEN', message: 'You can only edit your own profile' } }
+    }
+
+    const user = await fastify.prisma.user.findUnique({ where: { id: viewerId }, select: { avatarUrl: true } })
+    if (user?.avatarUrl) {
+      const uploadsDir = path.join(process.cwd(), 'uploads')
+      const oldFilename = user.avatarUrl.split('/').pop()
+      if (oldFilename) {
+        const oldPath = path.join(uploadsDir, oldFilename)
+        if (fs.existsSync(oldPath)) {
+          fs.unlinkSync(oldPath)
+        }
+      }
+    }
+
+    const updatedUser = await fastify.prisma.user.update({
+      where: { id: viewerId },
+      data: { avatarUrl: null },
+      select: {
+        id: true,
+        displayName: true,
+        login: true,
+        status: true,
+        avatarUrl: true,
+        country: true,
+        bio: true
+      }
+    })
+
+    userService.emitUserUpdated(updatedUser)
 
     return updatedUser
   })
@@ -417,8 +548,8 @@ const usersRoutes: FastifyPluginAsync = async (fastify) => {
         OR: [{ requesterId: userId }, { addresseeId: userId }]
       },
       include: {
-        requester: { select: { id: true, displayName: true, status: true, avatarUrl: true } },
-        addressee: { select: { id: true, displayName: true, status: true, avatarUrl: true } }
+        requester: { select: { id: true, displayName: true, login: true, status: true, avatarUrl: true } },
+        addressee: { select: { id: true, displayName: true, login: true, status: true, avatarUrl: true } }
       }
     })
 
@@ -444,7 +575,7 @@ const usersRoutes: FastifyPluginAsync = async (fastify) => {
       }
     }
 
-    const { q, status, page, limit: rawLimit, excludeFriendIds, sortBy, order } = parsed.data
+    const { q, statuses, relationships, page, limit: rawLimit, excludeFriendIds, sortBy, order } = parsed.data
     const limit = Math.min(rawLimit, 50)
     const excludeIds = parseExcludeIds(excludeFriendIds)
     const skip = (page - 1) * limit
@@ -462,12 +593,91 @@ const usersRoutes: FastifyPluginAsync = async (fastify) => {
       ]
     }
 
-    if (status) {
-      where.status = status
+    if (statuses) {
+      const statusList = statuses.split(',').filter((s) => STATUS_VALUES.includes(s as any))
+      if (statusList.length > 0) {
+        where.status = { in: statusList as any[] }
+      }
     }
 
     if (excludeIds.length > 0) {
       where.id = { notIn: excludeIds }
+    }
+
+    if (relationships && viewerId) {
+      const relList = relationships.split(',')
+      const includeFriends = relList.includes('friends')
+      const includeBlocked = relList.includes('blocked')
+      const includeSent = relList.includes('pending_sent')
+      const includeReceived = relList.includes('pending_received')
+      const includeNone = relList.includes('none')
+
+      // If all are included (or none specified), no filter needed.
+      // If some are missing, we need to filter.
+      if (!includeFriends || !includeBlocked || !includeSent || !includeReceived || !includeNone) {
+        const [friendships, blocks, sentReqs, receivedReqs] = await Promise.all([
+          fastify.prisma.friendship.findMany({
+            where: {
+              status: 'ACCEPTED',
+              OR: [{ requesterId: viewerId }, { addresseeId: viewerId }]
+            },
+            select: { requesterId: true, addresseeId: true }
+          }),
+          fastify.prisma.blocklist.findMany({
+            where: { blockerId: viewerId },
+            select: { blockedId: true }
+          }),
+          fastify.prisma.friendRequest.findMany({
+            where: { senderId: viewerId, status: 'PENDING' },
+            select: { receiverId: true }
+          }),
+          fastify.prisma.friendRequest.findMany({
+            where: { receiverId: viewerId, status: 'PENDING' },
+            select: { senderId: true }
+          })
+        ])
+
+        const friendIds = friendships.map((f) => (f.requesterId === viewerId ? f.addresseeId : f.requesterId))
+        const blockedIds = blocks.map((b) => b.blockedId)
+        const sentIds = sentReqs.map(r => r.receiverId)
+        const receivedIds = receivedReqs.map(r => r.senderId)
+        
+        // Logic:
+        // We want to INCLUDE users who match the selected relationships.
+        // - If 'friends' is selected -> include friendIds
+        // - If 'blocked' is selected -> include blockedIds
+        // - If 'pending_sent' is selected -> include sentIds
+        // - If 'pending_received' is selected -> include receivedIds
+        // - If 'none' is selected -> include IDs that are NOT in (friendIds + blockedIds + sentIds + receivedIds)
+        
+        if (includeNone) {
+          const excludeFromView: number[] = []
+          if (!includeFriends) excludeFromView.push(...friendIds)
+          if (!includeBlocked) excludeFromView.push(...blockedIds)
+          if (!includeSent) excludeFromView.push(...sentIds)
+          if (!includeReceived) excludeFromView.push(...receivedIds)
+          
+          if (excludeFromView.length > 0) {
+            if (where.id && typeof where.id === 'object' && 'notIn' in where.id) {
+              where.id = { notIn: [...(where.id as any).notIn, ...excludeFromView] }
+            } else {
+              where.id = { notIn: excludeFromView }
+            }
+          }
+        } else {
+          const includeIds: number[] = []
+          if (includeFriends) includeIds.push(...friendIds)
+          if (includeBlocked) includeIds.push(...blockedIds)
+          if (includeSent) includeIds.push(...sentIds)
+          if (includeReceived) includeIds.push(...receivedIds)
+          
+          if (where.id && typeof where.id === 'object' && 'notIn' in where.id) {
+             where.id = { in: includeIds, notIn: (where.id as any).notIn }
+          } else {
+             where.id = { in: includeIds }
+          }
+        }
+      }
     }
 
     let orderBy: Prisma.UserOrderByWithRelationInput | Prisma.UserOrderByWithRelationInput[] = []

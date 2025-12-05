@@ -6,6 +6,7 @@ import { useNotificationStore } from '../../stores/notificationStore'
 import { connectChatWs, disconnectChatWs, onChatWsEvent } from '../../lib/chatWs'
 import { inviteToGame, fetchBlockedUsers } from '../../lib/api'
 import NotificationItem from './NotificationItem'
+import UserAvatar from '../ui/UserAvatar'
 
 const ChatDrawer = () => {
   const [activeTab, setActiveTab] = useState<'dm' | 'system'>('dm')
@@ -27,7 +28,8 @@ const ChatDrawer = () => {
     sendMessage,
     initialLastReadAt,
     isDrawerOpen,
-    setDrawerOpen
+    setDrawerOpen,
+    handleUserUpdate
   } = useChatStore()
   const { notifications, fetchNotifications, unreadCount } = useNotificationStore()
 
@@ -54,7 +56,7 @@ const ChatDrawer = () => {
   }, [user, fetchThreads, fetchNotifications])
 
   useEffect(() => {
-    const unsubscribe = onChatWsEvent('relationship_update', (data) => {
+    const unsubscribeRelationship = onChatWsEvent('relationship_update', (data) => {
       if (data.status === 'BLOCKING') {
         setBlockedUsers(prev => {
           if (prev.includes(data.userId)) return prev
@@ -70,7 +72,19 @@ const ChatDrawer = () => {
         setBlockedByUsers(prev => prev.filter(id => id !== data.userId))
       }
     })
-    return unsubscribe
+
+    const unsubscribeUserUpdate = onChatWsEvent('user_update', (data) => {
+      handleUserUpdate(data)
+      const currentUser = useAuthStore.getState().user
+      if (currentUser && currentUser.id === data.id) {
+        useAuthStore.getState().updateUser(data)
+      }
+    })
+
+    return () => {
+      unsubscribeRelationship()
+      unsubscribeUserUpdate()
+    }
   }, [])
 
   const activeMessages = useMemo(() => {
@@ -107,15 +121,10 @@ const ChatDrawer = () => {
 
   const toggleDrawer = () => setDrawerOpen(!isDrawerOpen)
 
-  const getThreadStatus = (thread: any) => {
-    if (thread.type === 'DM') {
-      const other = thread.members.find((m: any) => m.id !== user?.id)
-      return other?.status === 'ONLINE' ? 'online' : 'offline'
-    }
-    return 'online'
-  }
-
   const activeThread = threadsArr.find(t => t.id === activeThreadId)
+  const activeThreadOtherMember = activeThread?.type === 'DM' 
+    ? activeThread.members.find((m: any) => m.id !== user?.id) 
+    : null
   
   const isBlockedContext = useMemo(() => {
     if (!activeThread || activeThread.type !== 'DM') return false;
@@ -234,6 +243,21 @@ const ChatDrawer = () => {
                       >
                         ←
                       </button>
+                      {activeThread?.type === 'DM' && activeThreadOtherMember && (
+                         <UserAvatar 
+                           key={activeThreadOtherMember.avatarUrl}
+                           user={{
+                             id: activeThreadOtherMember.id,
+                             displayName: activeThread.name,
+                             avatarUrl: activeThreadOtherMember.avatarUrl,
+                             status: activeThreadOtherMember.status || 'ONLINE',
+                             login: activeThreadOtherMember.login
+                           }}
+                           size="sm"
+                           className="mr-2"
+                           linkToProfile={true}
+                         />
+                      )}
                       <span className="font-medium text-slate-900">
                         {activeThread?.name}
                       </span>
@@ -351,35 +375,42 @@ const ChatDrawer = () => {
                 // Thread List View
                 <div className="flex-1 overflow-y-auto">
                   {threadsArr.length > 0 ? (
-                    threadsArr.map((thread) => (
-                      <div
-                        key={thread.id}
-                        onClick={() => selectThread(thread.id)}
-                        className="flex cursor-pointer items-center gap-3 border-b border-slate-50 p-3 hover:bg-slate-50"
-                      >
-                        <div className="relative">
-                          <div className="h-10 w-10 rounded-full bg-slate-200 flex items-center justify-center text-slate-500 font-bold">
-                            {thread.name?.[0]}
+                    threadsArr.map((thread) => {
+                      const otherMember = thread.type === 'DM' ? thread.members.find((m: any) => m.id !== user?.id) : null
+                      return (
+                        <div
+                          key={thread.id}
+                          onClick={() => selectThread(thread.id)}
+                          className="flex cursor-pointer items-center gap-3 border-b border-slate-50 p-3 hover:bg-slate-50"
+                        >
+                          <UserAvatar 
+                            key={otherMember?.avatarUrl}
+                            user={{
+                              id: otherMember?.id,
+                              displayName: thread.name,
+                              avatarUrl: otherMember?.avatarUrl,
+                              status: otherMember?.status || 'ONLINE',
+                              login: otherMember?.login
+                            }}
+                            size="md"
+                            linkToProfile={true}
+                          />
+                          <div className="flex-1 overflow-hidden">
+                            <div className="flex justify-between items-center">
+                              <span className="font-medium text-slate-900">{thread.name}</span>
+                              {thread.unreadCount > 0 && (
+                                  <span className="flex h-5 w-5 items-center justify-center rounded-full bg-red-500 text-[10px] font-bold text-white">
+                                      {thread.unreadCount > 9 ? '9+' : thread.unreadCount}
+                                  </span>
+                              )}
+                            </div>
+                            <div className="truncate text-xs text-slate-500">
+                              {thread.lastMessage?.content || 'No messages yet'}
+                            </div>
                           </div>
-                          <span className={`absolute bottom-0 right-0 h-2.5 w-2.5 rounded-full border-2 border-white ${
-                            getThreadStatus(thread) === 'online' ? 'bg-green-500' : 'bg-slate-400'
-                          }`} />
                         </div>
-                        <div className="flex-1 overflow-hidden">
-                          <div className="flex justify-between items-center">
-                            <span className="font-medium text-slate-900">{thread.name}</span>
-                            {thread.unreadCount > 0 && (
-                                <span className="flex h-5 w-5 items-center justify-center rounded-full bg-red-500 text-[10px] font-bold text-white">
-                                    {thread.unreadCount > 9 ? '9+' : thread.unreadCount}
-                                </span>
-                            )}
-                          </div>
-                          <div className="truncate text-xs text-slate-500">
-                            {thread.lastMessage?.content || 'No messages yet'}
-                          </div>
-                        </div>
-                      </div>
-                    ))
+                      )
+                    })
                   ) : (
                     <div className="p-4 text-center text-sm text-slate-500">
                       No conversations yet

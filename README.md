@@ -101,3 +101,22 @@ VITE_OAUTH_REDIRECT_URI=http://localhost:5173/oauth/callback
 **重要:** Google の開発者コンソールで Web アプリ用 OAuth クライアントを作成し、`Authorized redirect URI` に `http://localhost:5173/oauth/callback` を必ず登録してください。上記プレースホルダー値のままでは Google 側で `invalid_client` エラーになります。
 
 プロバイダを追加する場合は `backend/src/routes/auth.ts` と `frontend/src/pages/Login.tsx` を拡張してください。
+
+## 便利なコマンド
+
+### ログイン中のユーザー一覧を確認
+現在データベース上で「ログイン中（ONLINE / IN_GAME）」と判定されているユーザーを表示します。
+※ ログアウトしたはずなのに ONLINE と表示される場合は、サーバー側でセッションが正常に削除されていない可能性があります。
+
+```bash
+docker compose exec backend npm run db:users
+```
+
+### 強制ログアウト（ステータス修正）
+特定のユーザーのセッションを全削除し、ステータスを OFFLINE に強制変更します。
+開発中にステータスが不整合を起こした場合に使用してください。
+
+```bash
+# メールアドレスを指定して実行
+docker compose exec backend npm run db:force-logout test2@test.com
+```

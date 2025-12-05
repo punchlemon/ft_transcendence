@@ -4,7 +4,12 @@ import useAuthStore from '../../stores/authStore'
 
 const RequireAuth = ({ children }: { children: ReactNode }) => {
   const user = useAuthStore((s) => s.user)
+  const isHydrated = useAuthStore((s) => s.isHydrated)
   const location = useLocation()
+
+  if (!isHydrated) {
+    return null
+  }
 
   if (!user) {
     const redirectTo = `${location.pathname}${location.search}`

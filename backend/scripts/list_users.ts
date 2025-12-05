@@ -12,14 +12,43 @@ async function main() {
       createdAt: true,
       deletedAt: true,
       status: true,
+      _count: {
+        select: { sessions: true },
+      },
+    },
+    orderBy: {
+      id: 'asc',
     },
   });
 
-  console.log('--- Users ---');
-  if (users.length === 0) {
-    console.log('No users found.');
+  const onlineUsers = users.filter((u) => u.status === 'ONLINE' || u.status === 'IN_GAME');
+  const offlineUsers = users.filter((u) => u.status !== 'ONLINE' && u.status !== 'IN_GAME');
+
+  console.log(`Total Users: ${users.length}`);
+  console.log(`Online Users: ${onlineUsers.length}`);
+
+  if (onlineUsers.length > 0) {
+    console.log('\n--- Online Users ---');
+    console.table(
+      onlineUsers.map((u) => ({
+        ...u,
+        sessions: u._count.sessions,
+        _count: undefined,
+      }))
+    );
   } else {
-    console.table(users);
+    console.log('\n--- No Online Users ---');
+  }
+
+  if (offlineUsers.length > 0) {
+    console.log('\n--- Offline Users ---');
+    console.table(
+      offlineUsers.map((u) => ({
+        ...u,
+        sessions: u._count.sessions,
+        _count: undefined,
+      }))
+    );
   }
 }
 
