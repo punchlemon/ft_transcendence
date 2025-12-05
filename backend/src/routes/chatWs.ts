@@ -9,8 +9,13 @@ interface SocketStream {
   socket: WebSocket;
 }
 
+interface SocketWithSessionId extends WebSocket {
+  __sessionId?: number;
+}
+
 export default async function chatWsRoutes(fastify: FastifyInstance) {
-  const connections = new Map<number, Set<WebSocket>>();
+  const connections = new Map<number, Set<SocketWithSessionId>>();
+  const sessionSockets = new Map<number, Set<SocketWithSessionId>>();
 
   const broadcastStatusChange = (userId: number, status: string) => {
     const payload = JSON.stringify({
@@ -482,6 +487,46 @@ export default async function chatWsRoutes(fastify: FastifyInstance) {
     done();
   });
 
+  // Register closeSocketsBySession implementation for presenceService (lazy require)
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-var-requires
+    const presenceMod = require('../services/presence')
+    if (presenceMod && presenceMod.presenceService && typeof presenceMod.presenceService.setCloseSocketsBySession === 'function') {
+      presenceMod.presenceService.setCloseSocketsBySession(async (sessionId: number) => {
+        let count = 0;
+        const sockets = sessionSockets.get(sessionId);
+        if (sockets) {
+          for (const ws of sockets) {
+            try {
+              ws.close(4000, 'session_revoked');
+              count++;
+            } catch (e) {
+              console.error(`[WS] Error closing socket for sessionId ${sessionId}:`, e);
+            }
+          }
+          sessionSockets.delete(sessionId);
+        }
+        return count;
+      })
+    }
+  } catch (e) {
+    console.warn('presenceService not available at startup in chatWs:', e && e.message ? e.message : e)
+  }
+    
+  try {
+    // Also register getConnectionCount implementation if presenceService is available
+    // eslint-disable-next-line @typescript-eslint/no-var-requires
+    const presenceMod2 = require('../services/presence')
+    if (presenceMod2 && presenceMod2.presenceService && typeof presenceMod2.presenceService.setGetConnectionCount === 'function') {
+      presenceMod2.presenceService.setGetConnectionCount(async (userId: number) => {
+        const set = connections.get(userId);
+        return set ? set.size : 0;
+      })
+    }
+  } catch (e) {
+    // non-fatal
+  }
+
   fastify.get('/ws/chat', { websocket: true }, async (connection: any, req: any) => {
     // Guard: if this route was reached without a websocket connection object
     // (e.g. an accidental HTTP GET), avoid crashing the server.
@@ -492,7 +537,7 @@ export default async function chatWsRoutes(fastify: FastifyInstance) {
     
     // Compatibility check: fastify-websocket v10 passes SocketStream, but sometimes we might get raw socket?
     // If connection has .socket, use it. If connection IS socket, use it.
-    const socket = connection.socket || connection;
+    const socket = connection.socket || connection as SocketWithSessionId;
 
     if (!socket) {
        req.log && req.log.warn && req.log.warn({ headers: req.headers }, 'WebSocket handler invoked without a socket (connection object present)')
@@ -506,13 +551,27 @@ export default async function chatWsRoutes(fastify: FastifyInstance) {
     }
 
     let userId: number;
+    let sessionId: number;
     try {
       const user = fastify.jwt.verify(token) as any;
       userId = user.userId;
+      sessionId = user.sessionId;
     } catch (err) {
       socket.close(1008, 'Invalid token');
       return;
     }
+
+    if (!sessionId) {
+      socket.close(1008, 'Session ID missing from token');
+      return;
+    }
+
+    // Bind socket to sessionId
+    (socket as SocketWithSessionId).__sessionId = sessionId;
+    if (!sessionSockets.has(sessionId)) {
+      sessionSockets.set(sessionId, new Set());
+    }
+    sessionSockets.get(sessionId)!.add(socket as SocketWithSessionId);
 
     if (!connections.has(userId)) {
       console.log(`[WS] User ${userId} connected (First connection)`);
@@ -526,13 +585,23 @@ export default async function chatWsRoutes(fastify: FastifyInstance) {
     } else {
       console.log(`[WS] User ${userId} connected (New tab/window)`);
     }
-    connections.get(userId)!.add(socket);
+    connections.get(userId)!.add(socket as SocketWithSessionId);
 
     socket.on('close', async () => {
-      console.log(`[WS] Socket closed for user ${userId}`);
+      console.log(`[WS] Socket closed for user ${userId}, sessionId ${sessionId}`);
+      
+      // Clean up from sessionSockets
+      const sessionSocketSet = sessionSockets.get(sessionId);
+      if (sessionSocketSet) {
+        sessionSocketSet.delete(socket as SocketWithSessionId);
+        if (sessionSocketSet.size === 0) {
+          sessionSockets.delete(sessionId);
+        }
+      }
+
       const userConns = connections.get(userId);
       if (userConns) {
-        userConns.delete(socket);
+        userConns.delete(socket as SocketWithSessionId);
         if (userConns.size === 0) {
           console.log(`[WS] User ${userId} went OFFLINE`);
           connections.delete(userId);

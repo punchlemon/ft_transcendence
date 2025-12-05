@@ -89,6 +89,16 @@ export const connectChatWs = () => {
     console.log('Chat WS disconnected', event.code, event.reason);
     socket = null;
     
+    // Check if server revoked the session
+    if (event.code === 4000 || event.reason === 'session_revoked') {
+      console.log('Session revoked by server, clearing session and logging out');
+      isExplicitDisconnect = true;
+      useAuthStore.getState().clearSession();
+      // Optionally navigate to login
+      window.location.href = '/login';
+      return;
+    }
+    
     // Attempt reconnect unless explicitly disconnected or auth failed (1008)
     if (!isExplicitDisconnect && event.code !== 1008) {
       console.log('Attempting to reconnect in 3s...');
