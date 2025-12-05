@@ -13,6 +13,10 @@ import useAuthStore from '../../stores/authStore'
 vi.mock('../../lib/api')
 vi.mock('../../stores/authStore')
 
+// Mock URL.createObjectURL and revokeObjectURL for jsdom
+global.URL.createObjectURL = vi.fn(() => 'blob:mock-url')
+global.URL.revokeObjectURL = vi.fn()
+
 const mockInitialData = {
   displayName: 'Test User',
   bio: 'Test bio',
