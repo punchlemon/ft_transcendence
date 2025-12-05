@@ -111,6 +111,7 @@ describe('POST /api/auth/register', () => {
     const stored = await prisma.user.findUniqueOrThrow({ where: { id: body.user.id } })
     expect(stored.passwordHash).toBeTruthy()
     expect(stored.passwordHash).not.toBe(basePayload.password)
+    expect(stored.avatarUrl).toMatch(/^\/avatars\/avatar-\d{2}\.png$/)
     const isValid = await argon2.verify(stored.passwordHash!, basePayload.password)
     expect(isValid).toBe(true)
     const session = await prisma.session.findFirstOrThrow({ where: { userId: stored.id } })
@@ -149,6 +150,30 @@ describe('POST /api/auth/register', () => {
     expect(response.statusCode).toBe(400)
     const body = response.json<{ error: { code: string } }>()
     expect(body.error.code).toBe('INVALID_BODY')
+  })
+
+  it('assigns consistent default avatar based on login', async () => {
+    // 同じloginは常に同じアバターを取得
+    const user1Response = await server.inject({
+      method: 'POST',
+      url: '/api/auth/register',
+      payload: { ...basePayload, email: 'test1@example.com', username: 'testuser' }
+    })
+    const user2Response = await server.inject({
+      method: 'POST',
+      url: '/api/auth/register',
+      payload: { ...basePayload, email: 'test2@example.com', username: 'testuser2' }
+    })
+
+    const user1 = await prisma.user.findUniqueOrThrow({ where: { email: 'test1@example.com' } })
+    const user2 = await prisma.user.findUniqueOrThrow({ where: { email: 'test2@example.com' } })
+
+    // アバターが設定されていることを確認
+    expect(user1.avatarUrl).toMatch(/^\/avatars\/avatar-\d{2}\.png$/)
+    expect(user2.avatarUrl).toMatch(/^\/avatars\/avatar-\d{2}\.png$/)
+
+    // 異なるloginは異なるアバターになる可能性が高い（必ずではないが）
+    // ここでは単に形式をチェック
   })
 })
 

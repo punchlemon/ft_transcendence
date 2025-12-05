@@ -19,6 +19,39 @@ const CODE_VERIFIER_BYTE_LENGTH = 32
 const PKCE_METHOD = 'S256'
 const DEFAULT_REDIRECT_URI = 'http://localhost:5173/oauth/callback'
 
+// デフォルトアバター画像のパス配列（frontend/public/avatars/と同期）
+const DEFAULT_AVATARS = [
+  '/avatars/avatar-01.png',
+  '/avatars/avatar-02.png',
+  '/avatars/avatar-03.png',
+  '/avatars/avatar-04.png',
+  '/avatars/avatar-05.png',
+  '/avatars/avatar-06.png',
+  '/avatars/avatar-07.png',
+  '/avatars/avatar-08.png',
+  '/avatars/avatar-09.png',
+  '/avatars/avatar-10.png',
+  '/avatars/avatar-11.png',
+  '/avatars/avatar-12.png',
+  '/avatars/avatar-13.png',
+  '/avatars/avatar-14.png'
+]
+
+/**
+ * 文字列をシードにしてデフォルトアバターを取得
+ * 同じloginは常に同じアバターになる
+ */
+const getDefaultAvatarForLogin = (login: string): string => {
+  let hash = 0
+  for (let i = 0; i < login.length; i += 1) {
+    const char = login.charCodeAt(i)
+    hash = (hash << 5) - hash + char
+    hash = hash & hash // Convert to 32bit integer
+  }
+  const index = Math.abs(hash) % DEFAULT_AVATARS.length
+  return DEFAULT_AVATARS[index]!
+}
+
 type OAuthProviderKey = 'google'
 
 type ProviderProfile = {
@@ -469,6 +502,7 @@ const authRoutes: FastifyPluginAsync = async (fastify) => {
         login: username,
         displayName,
         passwordHash,
+        avatarUrl: getDefaultAvatarForLogin(username),
         status: 'OFFLINE',
         profileVisibility: 'PUBLIC',
         twoFAEnabled: false
@@ -765,7 +799,7 @@ const authRoutes: FastifyPluginAsync = async (fastify) => {
             email: normalizedEmail,
             login: uniqueLogin,
             displayName: sanitizedDisplayName,
-            avatarUrl: profile.avatarUrl ?? undefined,
+            avatarUrl: profile.avatarUrl ?? getDefaultAvatarForLogin(uniqueLogin),
             passwordHash: null,
             twoFAEnabled: false
           },

@@ -130,6 +130,7 @@ export type LoginSuccessResponse = {
     displayName: string
     login: string
     status: string
+    avatarUrl?: string
   }
   tokens: {
     access: string

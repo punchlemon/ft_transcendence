@@ -1,6 +1,7 @@
-import { useState } from 'react'
-import { updateUserProfile, uploadAvatar, deleteAvatar } from '../../lib/api'
+import React, { useState, useEffect } from 'react'
+import { updateUserProfile, uploadAvatar } from '../../lib/api'
 import useAuthStore from '../../stores/authStore'
+import { DEFAULT_AVATARS } from '../../lib/avatars'
 
 interface EditProfileModalProps {
   userId: string
@@ -19,28 +20,37 @@ export const EditProfileModal = ({ userId, initialData, isOpen, editMode = 'all'
   const [displayName, setDisplayName] = useState(initialData.displayName)
   const [bio, setBio] = useState(initialData.bio)
   const [selectedFile, setSelectedFile] = useState<File | null>(null)
+  const [previewUrl, setPreviewUrl] = useState<string | null>(null)
+  const [avatarMode, setAvatarMode] = useState<'default' | 'custom'>('default')
+  const [selectedDefaultAvatar, setSelectedDefaultAvatar] = useState<string>(initialData.avatarUrl)
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
+  // Cleanup preview URL when modal closes or reopens
+  useEffect(() => {
+    if (!isOpen) {
+      // Clean up preview URL and reset custom image state when modal closes
+      if (previewUrl) {
+        URL.revokeObjectURL(previewUrl)
+      }
+      setPreviewUrl(null)
+      setSelectedFile(null)
+    }
+  }, [isOpen, previewUrl])
+
+  // Cleanup preview URL when switching away from custom mode
+  useEffect(() => {
+    if (avatarMode !== 'custom' && previewUrl) {
+      URL.revokeObjectURL(previewUrl)
+      setPreviewUrl(null)
+      setSelectedFile(null)
+    }
+  }, [avatarMode, previewUrl])
+
   if (!isOpen) return null
 
-  const handleDeleteAvatar = async () => {
-    if (!confirm('Are you sure you want to remove your avatar?')) return
-    setIsSubmitting(true)
-    setError(null)
-    try {
-      const updated = await deleteAvatar(userId)
-      useAuthStore.getState().updateUser({
-        avatarUrl: undefined
-      })
-      onSuccess(updated)
-      onClose()
-    } catch (err: any) {
-      console.error(err)
-      setError(err.response?.data?.error?.message || 'Failed to delete avatar')
-    } finally {
-      setIsSubmitting(false)
-    }
+  const handleClose = () => {
+    onClose()
   }
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -51,9 +61,13 @@ export const EditProfileModal = ({ userId, initialData, isOpen, editMode = 'all'
     try {
       let currentAvatarUrl = initialData.avatarUrl
 
-      if ((editMode === 'all' || editMode === 'avatar') && selectedFile) {
-        const updatedUser = await uploadAvatar(userId, selectedFile)
-        currentAvatarUrl = updatedUser.avatarUrl || ''
+      if (editMode === 'all' || editMode === 'avatar') {
+        if (avatarMode === 'custom' && selectedFile) {
+          const updatedUser = await uploadAvatar(userId, selectedFile)
+          currentAvatarUrl = updatedUser.avatarUrl || ''
+        } else if (avatarMode === 'default') {
+          currentAvatarUrl = selectedDefaultAvatar
+        }
       }
 
       const payload: any = {}
@@ -130,26 +144,117 @@ export const EditProfileModal = ({ userId, initialData, isOpen, editMode = 'all'
           {(editMode === 'all' || editMode === 'avatar') && (
             <>
               <div>
-                <label className="block text-sm font-medium text-slate-700">Avatar Image</label>
-                <input
-                  type="file"
-                  accept="image/*"
-                  onChange={(e) => {
-                    if (e.target.files && e.target.files[0]) {
-                      setSelectedFile(e.target.files[0])
-                    }
-                  }}
-                  className="mt-1 block w-full text-sm text-slate-500 file:mr-4 file:py-2 file:px-4 file:rounded-md file:border-0 file:text-sm file:font-semibold file:bg-slate-50 file:text-slate-700 hover:file:bg-slate-100"
-                />
-                {initialData.avatarUrl && (
+                <label className="block text-sm font-medium text-slate-700 mb-2">Avatar Image</label>
+                
+                {/* Avatar mode selection tabs */}
+                <div className="flex gap-2 mb-3">
                   <button
                     type="button"
-                    onClick={handleDeleteAvatar}
-                    className="mt-2 text-sm text-red-600 hover:text-red-800 hover:underline"
-                    disabled={isSubmitting}
+                    onClick={() => setAvatarMode('default')}
+                    className={`flex-1 px-4 py-2 text-sm font-medium rounded-md ${
+                      avatarMode === 'default'
+                        ? 'bg-slate-900 text-white'
+                        : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
+                    }`}
                   >
-                    Remove current avatar
+                    Default Avatars
                   </button>
+                  <button
+                    type="button"
+                    onClick={() => setAvatarMode('custom')}
+                    className={`flex-1 px-4 py-2 text-sm font-medium rounded-md ${
+                      avatarMode === 'custom'
+                        ? 'bg-slate-900 text-white'
+                        : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
+                    }`}
+                  >
+                    Custom Image
+                  </button>
+                </div>
+
+                {/* Default avatar selection */}
+                {avatarMode === 'default' && (
+                  <div className="grid grid-cols-4 gap-2 p-3 bg-slate-50 rounded-md max-h-60 overflow-y-auto">
+                    {DEFAULT_AVATARS.map((avatar) => (
+                      <button
+                        key={avatar}
+                        type="button"
+                        onClick={() => setSelectedDefaultAvatar(avatar)}
+                        className={`relative aspect-square rounded-md overflow-hidden border-2 transition-all hover:scale-105 ${
+                          selectedDefaultAvatar === avatar
+                            ? 'border-indigo-600 ring-2 ring-indigo-600'
+                            : 'border-slate-300'
+                        }`}
+                      >
+                        <img
+                          src={avatar}
+                          alt="Avatar option"
+                          className="w-full h-full object-cover"
+                        />
+                      </button>
+                    ))}
+                  </div>
+                )}
+
+                {/* Custom image upload */}
+                {avatarMode === 'custom' && (
+                  <div className="space-y-3">
+                    <input
+                      type="file"
+                      accept="image/*"
+                      ref={(input) => {
+                        if (input) {
+                          (input as any)._fileInputRef = input
+                        }
+                      }}
+                      onChange={(e) => {
+                        if (e.target.files && e.target.files[0]) {
+                          const file = e.target.files[0]
+                          setSelectedFile(file)
+                          // Create preview URL
+                          const url = URL.createObjectURL(file)
+                          setPreviewUrl(url)
+                        }
+                      }}
+                      className="hidden"
+                      id="custom-avatar-input"
+                    />
+                    {previewUrl ? (
+                      <div className="flex flex-col items-center gap-3">
+                        <div className="relative w-32 h-32 rounded-full overflow-hidden border-2 border-slate-300">
+                          <img
+                            src={previewUrl}
+                            alt="Preview"
+                            className="w-full h-full object-cover"
+                          />
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setSelectedFile(null)
+                            if (previewUrl) {
+                              URL.revokeObjectURL(previewUrl)
+                            }
+                            setPreviewUrl(null)
+                            // Open file dialog immediately
+                            document.getElementById('custom-avatar-input')?.click()
+                          }}
+                          className="text-sm text-slate-600 hover:text-slate-900 underline"
+                        >
+                          Choose different image
+                        </button>
+                      </div>
+                    ) : (
+                      <label htmlFor="custom-avatar-input" className="flex flex-col items-center justify-center w-full h-32 border-2 border-dashed border-slate-300 rounded-lg cursor-pointer bg-slate-50 hover:bg-slate-100 transition-colors">
+                        <div className="flex flex-col items-center justify-center pt-5 pb-6">
+                          <svg className="w-8 h-8 mb-2 text-slate-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
+                          </svg>
+                          <p className="text-sm text-slate-500">Click to upload image</p>
+                        </div>
+                      </label>
+                    )}
+                  </div>
                 )}
               </div>
             </>
@@ -158,7 +263,7 @@ export const EditProfileModal = ({ userId, initialData, isOpen, editMode = 'all'
           <div className="flex justify-end gap-3 pt-4">
             <button
               type="button"
-              onClick={onClose}
+              onClick={handleClose}
               className="rounded-md px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-100"
               disabled={isSubmitting}
             >
