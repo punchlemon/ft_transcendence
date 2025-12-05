@@ -29,6 +29,7 @@ const ChatDrawer = () => {
     isDrawerOpen,
     setDrawerOpen
   } = useChatStore()
+  const { updateMemberStatus } = useChatStore()
   const { notifications, fetchNotifications, unreadCount } = useNotificationStore()
 
   // Ensure threads is always an array to avoid test/runtime errors when store is uninitialized
@@ -54,7 +55,7 @@ const ChatDrawer = () => {
   }, [user, fetchThreads, fetchNotifications])
 
   useEffect(() => {
-    const unsubscribe = onChatWsEvent('relationship_update', (data) => {
+    const unsubRel = onChatWsEvent('relationship_update', (data) => {
       if (data.status === 'BLOCKING') {
         setBlockedUsers(prev => {
           if (prev.includes(data.userId)) return prev
@@ -70,8 +71,24 @@ const ChatDrawer = () => {
         setBlockedByUsers(prev => prev.filter(id => id !== data.userId))
       }
     })
-    return unsubscribe
+    return () => unsubRel()
   }, [])
+
+  // Subscribe to presence updates for friends and update chat threads' member statuses
+  useEffect(() => {
+    const unsub = onChatWsEvent('friend_status', (data) => {
+      // data: { userId, status }
+      if (!data || typeof data.userId !== 'number') return
+      const status = data.status === 'ONLINE' ? 'ONLINE' : 'OFFLINE'
+      try {
+        // Update chat store so chat UI reflects the new presence immediately
+        updateMemberStatus(data.userId, status)
+      } catch (err) {
+        console.warn('Failed to update member status from WS event', err)
+      }
+    })
+    return unsub
+  }, [updateMemberStatus])
 
   const activeMessages = useMemo(() => {
     return activeThreadId ? (messages?.[activeThreadId] || []) : []

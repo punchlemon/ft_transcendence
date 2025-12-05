@@ -212,4 +212,13 @@ export const useChatStore = create<ChatState>((set, get) => ({
       })
     }));
   },
+  // Update a member's presence status across all threads
+  updateMemberStatus: (userId: number, status: string) => {
+    set((state) => ({
+      threads: state.threads.map(t => ({
+        ...t,
+        members: t.members.map(m => m.id === userId ? { ...m, status } : m)
+      }))
+    }));
+  },
 }));
