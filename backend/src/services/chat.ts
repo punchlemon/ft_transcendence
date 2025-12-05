@@ -265,7 +265,9 @@ export class ChatService extends EventEmitter {
       },
     });
 
+    console.log(`[Service] 📖 Emitting read event: channelId=${channelId}, userId=${userId}, lastReadAt=${updated.lastReadAt}`);
     this.emit('read', { channelId, userId, lastReadAt: updated.lastReadAt });
+    console.log(`[Service] ✅ read event emitted`);
     return updated;
   }
 

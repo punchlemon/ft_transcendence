@@ -18,13 +18,17 @@ export default async function chatWsRoutes(fastify: FastifyInstance) {
       data: { id: userId, status }
     });
     
+    console.log(`[WS-Broadcast] 📤 Broadcasting status change for user ${userId} -> ${status}`);
+    let sentCount = 0;
     for (const userSockets of connections.values()) {
       for (const ws of userSockets) {
         if (ws.readyState === WebSocket.OPEN) {
           ws.send(payload);
+          sentCount++;
         }
       }
     }
+    console.log(`[WS-Broadcast] ✅ Sent to ${sentCount} connections`);
   };
 
   const broadcastUserCreated = (user: any) => {
@@ -33,13 +37,17 @@ export default async function chatWsRoutes(fastify: FastifyInstance) {
       data: user
     });
     
+    console.log(`[WS-Broadcast] 📤 Broadcasting user created: ${user.id}`);
+    let sentCount = 0;
     for (const userSockets of connections.values()) {
       for (const ws of userSockets) {
         if (ws.readyState === WebSocket.OPEN) {
           ws.send(payload);
+          sentCount++;
         }
       }
     }
+    console.log(`[WS-Broadcast] ✅ Sent to ${sentCount} connections`);
   };
 
   const broadcastUserUpdated = (user: any) => {
@@ -48,13 +56,17 @@ export default async function chatWsRoutes(fastify: FastifyInstance) {
       data: user
     });
     
+    console.log(`[WS-Broadcast] 📤 Broadcasting user update: ${user.id} (${user.displayName})`);
+    let sentCount = 0;
     for (const userSockets of connections.values()) {
       for (const ws of userSockets) {
         if (ws.readyState === WebSocket.OPEN) {
           ws.send(payload);
+          sentCount++;
         }
       }
     }
+    console.log(`[WS-Broadcast] ✅ Sent to ${sentCount} connections`);
   };
 
   const onStatusChange = (event: any) => {
@@ -103,12 +115,14 @@ export default async function chatWsRoutes(fastify: FastifyInstance) {
   };
 
   const onChatRead = async (event: any) => {
+    console.log(`[WS-Broadcast] 📖 Broadcasting read event: channelId=${event.channelId}, userId=${event.userId}`);
     const members = await fastify.prisma.channelMember.findMany({
       where: { channelId: event.channelId },
       select: { userId: true }
     });
 
     const payload = JSON.stringify({ type: 'read', data: event });
+    let sentCount = 0;
 
     for (const member of members) {
       const userConns = connections.get(member.userId);
@@ -116,10 +130,12 @@ export default async function chatWsRoutes(fastify: FastifyInstance) {
         for (const ws of userConns) {
           if (ws.readyState === WebSocket.OPEN) {
             ws.send(payload);
+            sentCount++;
           }
         }
       }
     }
+    console.log(`[WS-Broadcast] ✅ Sent read event to ${sentCount} connections`);
   };
 
   const onChannelCreated = (channel: any) => {
@@ -191,26 +207,6 @@ export default async function chatWsRoutes(fastify: FastifyInstance) {
     done();
   });
 
-  chatService.on('read', async (event) => {
-    const members = await fastify.prisma.channelMember.findMany({
-      where: { channelId: event.channelId },
-      select: { userId: true }
-    });
-
-    const payload = JSON.stringify({ type: 'read', data: event });
-
-    for (const member of members) {
-      const userConns = connections.get(member.userId);
-      if (userConns) {
-        for (const ws of userConns) {
-          if (ws.readyState === WebSocket.OPEN) {
-            ws.send(payload);
-          }
-        }
-      }
-    }
-  });
-
   chatService.on('channel_created', (channel) => {
     const payload = JSON.stringify({ type: 'channel_created', data: { id: channel.id } });
     // channel.members is expected to be populated because we included it in the create call
@@ -258,19 +254,26 @@ export default async function chatWsRoutes(fastify: FastifyInstance) {
       data
     });
     
+    console.log(`[WS-Broadcast] 📤 Broadcasting public_friend_update for user ${data.userId}`);
+    let sentCount = 0;
     for (const userSockets of connections.values()) {
       for (const ws of userSockets) {
         if (ws.readyState === WebSocket.OPEN) {
           ws.send(payload);
+          sentCount++;
         }
       }
     }
+    console.log(`[WS-Broadcast] ✅ Sent to ${sentCount} connections`);
   };
 
   const onFriendAccepted = async (event: any) => {
     const { requesterId, addresseeId } = event;
+    console.log(`[WS-Event] 👥 Friend accepted: ${requesterId} <-> ${addresseeId}`);
+    
     const requesterConns = connections.get(requesterId);
     if (requesterConns) {
+      console.log(`[WS-Send] 📨 Sending friend_update to requester ${requesterId} (${requesterConns.size} connections)`);
       const payload = JSON.stringify({ 
         type: 'friend_update', 
         data: { friendId: addresseeId, status: 'FRIEND' } 
@@ -278,9 +281,13 @@ export default async function chatWsRoutes(fastify: FastifyInstance) {
       for (const ws of requesterConns) {
         if (ws.readyState === WebSocket.OPEN) ws.send(payload);
       }
+    } else {
+      console.log(`[WS-Send] ⚠️  Requester ${requesterId} has no connections`);
     }
+    
     const addresseeConns = connections.get(addresseeId);
     if (addresseeConns) {
+      console.log(`[WS-Send] 📨 Sending friend_update to addressee ${addresseeId} (${addresseeConns.size} connections)`);
       const payload = JSON.stringify({ 
         type: 'friend_update', 
         data: { friendId: requesterId, status: 'FRIEND' } 
@@ -288,6 +295,8 @@ export default async function chatWsRoutes(fastify: FastifyInstance) {
       for (const ws of addresseeConns) {
         if (ws.readyState === WebSocket.OPEN) ws.send(payload);
       }
+    } else {
+      console.log(`[WS-Send] ⚠️  Addressee ${addresseeId} has no connections`);
     }
 
     // Public updates
@@ -295,6 +304,7 @@ export default async function chatWsRoutes(fastify: FastifyInstance) {
     const addressee = await fastify.prisma.user.findUnique({ where: { id: addresseeId } });
 
     if (requester && addressee) {
+        console.log(`[WS-Send] 📣 Broadcasting public updates for new friends`);
         broadcastPublicFriendUpdate({
             userId: requesterId,
             type: 'ADD',
@@ -501,6 +511,7 @@ export default async function chatWsRoutes(fastify: FastifyInstance) {
     
     const token = (req.query as any).token;
     if (!token) {
+      console.log('[WS-Connect] ❌ Token required but not provided');
       socket.close(1008, 'Token required');
       return;
     }
@@ -510,12 +521,13 @@ export default async function chatWsRoutes(fastify: FastifyInstance) {
       const user = fastify.jwt.verify(token) as any;
       userId = user.userId;
     } catch (err) {
+      console.log('[WS-Connect] ❌ Invalid token:', err);
       socket.close(1008, 'Invalid token');
       return;
     }
 
     if (!connections.has(userId)) {
-      console.log(`[WS] User ${userId} connected (First connection)`);
+      console.log(`[WS-Connect] ✅ User ${userId} - NEW connection (First connection of this user)`);
       connections.set(userId, new Set());
       // First connection, set status ONLINE
       await fastify.prisma.user.update({
@@ -524,17 +536,17 @@ export default async function chatWsRoutes(fastify: FastifyInstance) {
       }).catch(console.error);
       broadcastStatusChange(userId, 'ONLINE');
     } else {
-      console.log(`[WS] User ${userId} connected (New tab/window)`);
+      console.log(`[WS-Connect] ✅ User ${userId} - NEW connection (Multiple windows/tabs - ${connections.get(userId)!.size + 1} total connections)`);
     }
     connections.get(userId)!.add(socket);
 
     socket.on('close', async () => {
-      console.log(`[WS] Socket closed for user ${userId}`);
+      console.log(`[WS-Close] 🔌 Socket closed for user ${userId}`);
       const userConns = connections.get(userId);
       if (userConns) {
         userConns.delete(socket);
         if (userConns.size === 0) {
-          console.log(`[WS] User ${userId} went OFFLINE`);
+          console.log(`[WS-Close] 👤 User ${userId} went OFFLINE (No more connections)`);
           connections.delete(userId);
           // Last connection, set status OFFLINE
           await fastify.prisma.user.update({
@@ -543,7 +555,7 @@ export default async function chatWsRoutes(fastify: FastifyInstance) {
           }).catch(console.error);
           broadcastStatusChange(userId, 'OFFLINE');
         } else {
-          console.log(`[WS] User ${userId} still has ${userConns.size} connections`);
+          console.log(`[WS-Close] 📊 User ${userId} still has ${userConns.size} connections`);
         }
       }
     });

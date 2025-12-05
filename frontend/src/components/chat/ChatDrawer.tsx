@@ -73,17 +73,8 @@ const ChatDrawer = () => {
       }
     })
 
-    const unsubscribeUserUpdate = onChatWsEvent('user_update', (data) => {
-      handleUserUpdate(data)
-      const currentUser = useAuthStore.getState().user
-      if (currentUser && currentUser.id === data.id) {
-        useAuthStore.getState().updateUser(data)
-      }
-    })
-
     return () => {
       unsubscribeRelationship()
-      unsubscribeUserUpdate()
     }
   }, [])
 

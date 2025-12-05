@@ -190,6 +190,22 @@ const ProfilePage = () => {
   useEffect(() => {
     const unsubscribeFriend = onChatWsEvent('friend_update', (data) => {
       const currentProfile = profileRef.current
+
+      // If viewing own profile, refresh friends list on any friend update
+      if (currentUser?.login === username && username) {
+        fetchUserFriends(username).then(friendsData => {
+          setFriends(
+            friendsData.data.map((f) => ({
+              id: String(f.id),
+              displayName: f.displayName,
+              login: f.login,
+              status: (f.status.toLowerCase() as 'online' | 'offline' | 'in-game') || 'offline',
+              avatarUrl: f.avatarUrl || '',
+            }))
+          )
+        }).catch(console.error)
+      }
+
       if (data.status === 'FRIEND') {
         // If we are viewing the profile of the person we just became friends with
         if (currentProfile && Number(currentProfile.id) === data.friendId) {

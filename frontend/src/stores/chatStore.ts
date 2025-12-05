@@ -234,11 +234,19 @@ export const useChatStore = create<ChatState>((set, get) => ({
   },
 
   handleReadReceipt: (data) => {
+    const currentUserId = useAuthStore.getState().user?.id;
+    console.log(`[ChatStore] 📖 Handling read receipt: channelId=${data.channelId}, userId=${data.userId}, currentUserId=${currentUserId}`);
     set((state) => ({
       threads: state.threads.map(t => {
         if (t.id !== data.channelId) return t;
+        
+        // If the reader is me, reset unread count
+        const isMe = data.userId === currentUserId;
+        console.log(`[ChatStore] ${isMe ? '✅' : '👤'} ${isMe ? 'My read' : 'Other user read'}: Updating thread ${t.id}, unread: ${t.unreadCount} -> ${isMe ? 0 : t.unreadCount}`);
+        
         return {
           ...t,
+          unreadCount: isMe ? 0 : t.unreadCount,
           members: t.members.map(m => 
             m.id === data.userId 
               ? { ...m, lastReadAt: data.lastReadAt } 

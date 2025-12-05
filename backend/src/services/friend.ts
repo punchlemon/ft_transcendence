@@ -94,6 +94,8 @@ export class FriendService extends EventEmitter {
     if (request.receiverId !== userId) throw new Error("Not authorized");
     if (request.status !== 'PENDING') throw new Error("Request not pending");
 
+    console.log(`[Service] 🤝 Accepting friend request ${requestId}: ${request.senderId} <-> ${request.receiverId}`);
+
     // Create friendship
     await prisma.$transaction([
       prisma.friendRequest.update({
@@ -124,10 +126,12 @@ export class FriendService extends EventEmitter {
     // Remove notification from receiver
     await notificationService.deleteNotificationByRequestId(requestId);
 
+    console.log(`[Service] 📡 Emitting friend_accepted event: ${request.senderId} <-> ${request.receiverId}`);
     this.emit('friend_accepted', { 
       requesterId: request.senderId, 
       addresseeId: request.receiverId 
     });
+    console.log(`[Service] ✅ friend_accepted event emitted`);
   }
 
   async declineFriendRequest(requestId: number, userId: number) {
@@ -136,6 +140,8 @@ export class FriendService extends EventEmitter {
     if (request.receiverId !== userId) throw new Error("Not authorized");
     if (request.status !== 'PENDING') throw new Error("Request not pending");
 
+    console.log(`[Service] 👋 Declining friend request ${requestId}: ${request.senderId} <-> ${request.receiverId}`);
+
     await prisma.friendRequest.delete({
       where: { id: requestId },
     });
@@ -143,11 +149,13 @@ export class FriendService extends EventEmitter {
     // Remove notification from receiver
     await notificationService.deleteNotificationByRequestId(requestId);
 
+    console.log(`[Service] 📡 Emitting friend_request_declined event`);
     this.emit('friend_request_declined', { 
       senderId: request.senderId, 
       receiverId: request.receiverId, 
       requestId 
     });
+    console.log(`[Service] ✅ friend_request_declined event emitted`);
   }
 
   async removeFriend(userId: number, friendId: number) {

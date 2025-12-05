@@ -17,12 +17,15 @@ import { useNotificationStore } from './stores/notificationStore'
 import RequireAuth from './components/auth/RequireAuth'
 import { disconnectChatWs } from './lib/chatWs'
 import { api } from './lib/api'
+import { useGlobalWsListeners } from './hooks/useGlobalWsListeners'
 
 const App = () => {
   const user = useAuthStore((state) => state.user)
   const clearSession = useAuthStore((state) => state.clearSession)
   const resetChat = useChatStore((state) => state.reset)
   const resetNotifications = useNotificationStore((state) => state.reset)
+
+  useGlobalWsListeners()
 
   const handleLogout = async () => {
     const refreshToken = useAuthStore.getState().refreshToken

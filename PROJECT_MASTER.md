@@ -45,6 +45,7 @@
 - `frontend/src/components/chat/ChatDrawer.tsx` を実装し、折りたたみ可能なチャットドロワー、スレッド一覧、メッセージ送受信（モック）、タブ切り替えを作成した。
 - `frontend/src/components/chat/ChatDrawer.test.tsx` を追加し、開閉動作、メッセージ送信、画面遷移を検証した。
 - `App.tsx` に `ChatDrawer` を追加し、ログイン時のみ表示されるようにした。
+- **複数ブラウザ WebSocket 同期の改善**: `chatWs.ts` にデバッグログを大量追加し、同一ユーザーの複数接続に対するブロードキャストが正常に機能していることを検証。ユーザーの更新（アバター変更、プロフィール編集）や Friend Request 承認時に、6 つの接続すべてへブロードキャストが送信されることをログで確認。`useGlobalWsListeners` の依存配列を最適化し、WebSocket イベントリスナーの重複登録を防止した。
 
 ### Epic A: インフラ・開発基盤
 | 状態 | タスク | メモ |

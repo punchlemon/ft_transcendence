@@ -90,12 +90,17 @@ const friendRoutes: FastifyPluginAsync = async (fastify) => {
 
     try {
       if (action === 'ACCEPT') {
+        console.log(`[API] 🤝 Friend request ${requestId} being accepted by user ${userId}`);
         await friendService.acceptFriendRequest(requestId, userId);
+        console.log(`[API] ✅ Friend request ${requestId} accepted by user ${userId}`);
       } else {
+        console.log(`[API] 👋 Friend request ${requestId} being declined by user ${userId}`);
         await friendService.declineFriendRequest(requestId, userId);
+        console.log(`[API] ✅ Friend request ${requestId} declined by user ${userId}`);
       }
       return { success: true };
     } catch (error: any) {
+      console.error(`[API] ❌ Friend action failed for request ${requestId}:`, error);
       return reply.status(400).send({ error: { code: 'ACTION_FAILED', message: error.message } });
     }
   });
