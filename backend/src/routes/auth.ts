@@ -6,6 +6,7 @@ import argon2 from 'argon2'
 import { authenticator } from 'otplib'
 import { z } from 'zod'
 import type { PrismaClient } from '@prisma/client'
+import { userService } from '../services/user'
 
 const SESSION_TTL_MS = 1000 * 60 * 60 * 24 * 7 // 7 days
 const MFA_CHALLENGE_TTL_MS = 1000 * 60 * 5 // 5 minutes
@@ -383,6 +384,11 @@ const ensureUniqueDisplayName = async (_prisma: PrismaClient, preferred: string)
 
 const authRoutes: FastifyPluginAsync = async (fastify) => {
   const issueSessionTokens = async (userId: number, metadata?: SessionClientMetadata) => {
+    const previousUser = await fastify.prisma.user.findUnique({
+      where: { id: userId },
+      select: { status: true }
+    })
+
     const user = await fastify.prisma.user.update({
       where: { id: userId },
       data: {
@@ -393,7 +399,9 @@ const authRoutes: FastifyPluginAsync = async (fastify) => {
         id: true,
         displayName: true,
         login: true,
-        status: true
+        status: true,
+        avatarUrl: true,
+        createdAt: true
       }
     })
 
@@ -404,6 +412,10 @@ const authRoutes: FastifyPluginAsync = async (fastify) => {
         token: true
       }
     })
+
+    if (previousUser?.status === 'OFFLINE') {
+      userService.emitStatusChange(userId, 'ONLINE')
+    }
 
     const accessToken = await fastify.issueAccessToken({ userId, sessionId: session.id })
 
@@ -472,6 +484,8 @@ const authRoutes: FastifyPluginAsync = async (fastify) => {
     })
 
     const sessionResult = await issueSessionTokens(user.id, extractClientMetadata(request))
+
+    userService.emitUserCreated(sessionResult.user)
 
     reply.code(201)
     return {
@@ -701,6 +715,7 @@ const authRoutes: FastifyPluginAsync = async (fastify) => {
     }
 
     let userId: number
+    let isNewUser = false
 
     const existingAccount = await fastify.prisma.oAuthAccount.findUnique({
       where: {
@@ -758,6 +773,7 @@ const authRoutes: FastifyPluginAsync = async (fastify) => {
         })
 
         userId = createdUser.id
+        isNewUser = true
       }
 
       await fastify.prisma.oAuthAccount.create({
@@ -773,6 +789,10 @@ const authRoutes: FastifyPluginAsync = async (fastify) => {
     }
 
     const result = await issueSessionTokens(userId, extractClientMetadata(request))
+
+    if (isNewUser) {
+      userService.emitUserCreated(result.user)
+    }
 
     return {
       ...result,
@@ -1415,6 +1435,7 @@ const authRoutes: FastifyPluginAsync = async (fastify) => {
     const parsed = refreshSchema.safeParse(request.body)
 
     if (!parsed.success) {
+      request.log.warn({ error: parsed.error }, 'Logout failed: Invalid body')
       reply.code(400)
       return {
         error: {
@@ -1425,7 +1446,32 @@ const authRoutes: FastifyPluginAsync = async (fastify) => {
       }
     }
 
-    await fastify.prisma.session.deleteMany({ where: { token: parsed.data.refreshToken } })
+    const session = await fastify.prisma.session.findUnique({
+      where: { token: parsed.data.refreshToken },
+      select: { userId: true }
+    })
+
+    if (session) {
+      await fastify.prisma.session.deleteMany({ where: { token: parsed.data.refreshToken } })
+      
+      const remainingSessions = await fastify.prisma.session.count({
+        where: { userId: session.userId }
+      })
+
+      if (remainingSessions === 0) {
+        await fastify.prisma.user.update({
+          where: { id: session.userId },
+          data: { status: 'OFFLINE' }
+        })
+        userService.emitStatusChange(session.userId, 'OFFLINE')
+        request.log.info({ userId: session.userId }, 'Logout successful: All sessions deleted, status set to OFFLINE')
+      } else {
+        request.log.info({ userId: session.userId, remaining: remainingSessions }, 'Logout successful: Session deleted, user remains ONLINE')
+      }
+    } else {
+      request.log.warn({ token: parsed.data.refreshToken }, 'Logout failed: Session not found for token')
+    }
+
     reply.code(204)
     return null
   })

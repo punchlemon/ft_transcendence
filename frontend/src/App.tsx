@@ -15,6 +15,8 @@ import useAuthStore from './stores/authStore'
 import { useChatStore } from './stores/chatStore'
 import { useNotificationStore } from './stores/notificationStore'
 import RequireAuth from './components/auth/RequireAuth'
+import { disconnectChatWs } from './lib/chatWs'
+import { api } from './lib/api'
 
 const App = () => {
   const user = useAuthStore((state) => state.user)
@@ -22,7 +24,16 @@ const App = () => {
   const resetChat = useChatStore((state) => state.reset)
   const resetNotifications = useNotificationStore((state) => state.reset)
 
-  const handleLogout = () => {
+  const handleLogout = async () => {
+    const refreshToken = useAuthStore.getState().refreshToken
+    if (refreshToken) {
+      try {
+        await api.post('/auth/logout', { refreshToken })
+      } catch (error) {
+        console.error('Logout API call failed', error)
+      }
+    }
+    disconnectChatWs()
     clearSession()
     resetChat()
     resetNotifications()

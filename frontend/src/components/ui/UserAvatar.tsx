@@ -1,9 +1,11 @@
 import React from 'react'
 import { Link } from 'react-router-dom'
 import Avatar from './Avatar'
+import { useUserStatus } from '../../hooks/useUserStatus'
 
 export interface UserAvatarProps {
   user: {
+    id?: number
     displayName: string
     avatarUrl?: string | null
     status?: string // 'ONLINE', 'OFFLINE', 'IN_MATCH'
@@ -30,7 +32,8 @@ const statusSizes = {
 }
 
 const UserAvatar: React.FC<UserAvatarProps> = ({ user, size = 'md', className = '', linkToProfile = true }) => {
-  const statusColor = statusColors[user.status || 'OFFLINE'] || statusColors.OFFLINE
+  const status = useUserStatus(user.id, user.status)
+  const statusColor = statusColors[status || 'OFFLINE'] || statusColors.OFFLINE
   const statusSize = statusSizes[size]
 
   const content = (

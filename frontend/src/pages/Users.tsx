@@ -69,15 +69,10 @@ const UsersPage = () => {
       }))
     })
 
-    const unsubscribeUserCreated = onChatWsEvent('user_created', (newUser) => {
-      setUsers(prev => [newUser, ...prev])
-    })
-
     return () => {
       unsubscribeFriend()
       unsubscribeRelationship()
       unsubscribeUserUpdate()
-      unsubscribeUserCreated()
     }
   }, [])
 

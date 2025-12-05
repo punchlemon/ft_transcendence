@@ -2,6 +2,7 @@ import { FastifyInstance } from 'fastify';
 import { chatService } from '../services/chat';
 import { notificationService } from '../services/notification';
 import { friendService } from '../services/friend';
+import { userService } from '../services/user';
 import { WebSocket } from 'ws';
 
 interface SocketStream {
@@ -11,7 +12,75 @@ interface SocketStream {
 export default async function chatWsRoutes(fastify: FastifyInstance) {
   const connections = new Map<number, Set<WebSocket>>();
 
-  chatService.on('message', async (message) => {
+  const broadcastStatusChange = (userId: number, status: string) => {
+    const payload = JSON.stringify({
+      type: 'user_update',
+      data: { id: userId, status }
+    });
+    
+    for (const userSockets of connections.values()) {
+      for (const ws of userSockets) {
+        if (ws.readyState === WebSocket.OPEN) {
+          ws.send(payload);
+        }
+      }
+    }
+  };
+
+  const broadcastUserCreated = (user: any) => {
+    const payload = JSON.stringify({
+      type: 'user_created',
+      data: user
+    });
+    
+    for (const userSockets of connections.values()) {
+      for (const ws of userSockets) {
+        if (ws.readyState === WebSocket.OPEN) {
+          ws.send(payload);
+        }
+      }
+    }
+  };
+
+  const broadcastUserUpdated = (user: any) => {
+    const payload = JSON.stringify({
+      type: 'user_update',
+      data: user
+    });
+    
+    for (const userSockets of connections.values()) {
+      for (const ws of userSockets) {
+        if (ws.readyState === WebSocket.OPEN) {
+          ws.send(payload);
+        }
+      }
+    }
+  };
+
+  const onStatusChange = (event: any) => {
+    broadcastStatusChange(event.userId, event.status);
+  };
+
+  const onUserCreated = (user: any) => {
+    broadcastUserCreated(user);
+  };
+
+  const onUserUpdated = (user: any) => {
+    broadcastUserUpdated(user);
+  };
+
+  userService.on('status_change', onStatusChange);
+  userService.on('user_created', onUserCreated);
+  userService.on('user_updated', onUserUpdated);
+
+  fastify.addHook('onClose', (instance, done) => {
+    userService.off('status_change', onStatusChange);
+    userService.off('user_created', onUserCreated);
+    userService.off('user_updated', onUserUpdated);
+    done();
+  });
+
+  const onChatMessage = async (message: any) => {
     // Get members of the channel
     // We use prisma directly here to avoid circular dependency or just for speed
     const members = await fastify.prisma.channelMember.findMany({
@@ -31,6 +100,95 @@ export default async function chatWsRoutes(fastify: FastifyInstance) {
         }
       }
     }
+  };
+
+  const onChatRead = async (event: any) => {
+    const members = await fastify.prisma.channelMember.findMany({
+      where: { channelId: event.channelId },
+      select: { userId: true }
+    });
+
+    const payload = JSON.stringify({ type: 'read', data: event });
+
+    for (const member of members) {
+      const userConns = connections.get(member.userId);
+      if (userConns) {
+        for (const ws of userConns) {
+          if (ws.readyState === WebSocket.OPEN) {
+            ws.send(payload);
+          }
+        }
+      }
+    }
+  };
+
+  const onChannelCreated = (channel: any) => {
+    const payload = JSON.stringify({ type: 'channel_created', data: { id: channel.id } });
+    // channel.members is expected to be populated because we included it in the create call
+    if (channel.members) {
+      for (const member of channel.members) {
+        const userConns = connections.get(member.userId);
+        if (userConns) {
+          for (const ws of userConns) {
+            if (ws.readyState === WebSocket.OPEN) {
+              ws.send(payload);
+            }
+          }
+        }
+      }
+    }
+  };
+
+  const onNotification = (notification: any) => {
+    const userConns = connections.get(notification.userId);
+    if (userConns) {
+      const payload = JSON.stringify({ type: 'notification', data: notification });
+      for (const ws of userConns) {
+        if (ws.readyState === WebSocket.OPEN) {
+          ws.send(payload);
+        }
+      }
+    }
+  };
+
+  const onNotificationDeleted = (event: any) => {
+    const userConns = connections.get(event.userId);
+    if (userConns) {
+      const payload = JSON.stringify({ type: 'notification_deleted', data: { id: event.id } });
+      for (const ws of userConns) {
+        if (ws.readyState === WebSocket.OPEN) {
+          ws.send(payload);
+        }
+      }
+    }
+  };
+
+  chatService.on('message', onChatMessage);
+  chatService.on('read', onChatRead);
+  chatService.on('channel_created', onChannelCreated);
+  notificationService.on('notification', onNotification);
+  notificationService.on('notification_deleted', onNotificationDeleted);
+
+  fastify.addHook('onClose', (instance, done) => {
+    userService.off('status_change', onStatusChange);
+    userService.off('user_created', onUserCreated);
+    userService.off('user_updated', onUserUpdated);
+    
+    friendService.off('friend_accepted', onFriendAccepted);
+    friendService.off('friend_removed', onFriendRemoved);
+    friendService.off('user_blocked', onUserBlocked);
+    friendService.off('user_unblocked', onUserUnblocked);
+    friendService.off('friend_request_sent', onFriendRequestSent);
+    friendService.off('friend_request_cancelled', onFriendRequestCancelled);
+    friendService.off('friend_request_declined', onFriendRequestDeclined);
+
+    chatService.off('message', onChatMessage);
+    chatService.off('read', onChatRead);
+    chatService.off('channel_created', onChannelCreated);
+    notificationService.off('notification', onNotification);
+    notificationService.off('notification_deleted', onNotificationDeleted);
+    
+    done();
   });
 
   chatService.on('read', async (event) => {
@@ -94,10 +252,23 @@ export default async function chatWsRoutes(fastify: FastifyInstance) {
     }
   });
 
-  friendService.on('friend_accepted', (event) => {
-    const { requesterId, addresseeId } = event;
+  const broadcastPublicFriendUpdate = (data: any) => {
+    const payload = JSON.stringify({
+      type: 'public_friend_update',
+      data
+    });
+    
+    for (const userSockets of connections.values()) {
+      for (const ws of userSockets) {
+        if (ws.readyState === WebSocket.OPEN) {
+          ws.send(payload);
+        }
+      }
+    }
+  };
 
-    // Notify requester
+  const onFriendAccepted = async (event: any) => {
+    const { requesterId, addresseeId } = event;
     const requesterConns = connections.get(requesterId);
     if (requesterConns) {
       const payload = JSON.stringify({ 
@@ -108,8 +279,6 @@ export default async function chatWsRoutes(fastify: FastifyInstance) {
         if (ws.readyState === WebSocket.OPEN) ws.send(payload);
       }
     }
-
-    // Notify addressee
     const addresseeConns = connections.get(addresseeId);
     if (addresseeConns) {
       const payload = JSON.stringify({ 
@@ -120,12 +289,40 @@ export default async function chatWsRoutes(fastify: FastifyInstance) {
         if (ws.readyState === WebSocket.OPEN) ws.send(payload);
       }
     }
-  });
 
-  friendService.on('friend_removed', (event) => {
+    // Public updates
+    const requester = await fastify.prisma.user.findUnique({ where: { id: requesterId } });
+    const addressee = await fastify.prisma.user.findUnique({ where: { id: addresseeId } });
+
+    if (requester && addressee) {
+        broadcastPublicFriendUpdate({
+            userId: requesterId,
+            type: 'ADD',
+            friend: {
+                id: addressee.id,
+                displayName: addressee.displayName,
+                login: addressee.login,
+                status: addressee.status,
+                avatarUrl: addressee.avatarUrl
+            }
+        });
+
+        broadcastPublicFriendUpdate({
+            userId: addresseeId,
+            type: 'ADD',
+            friend: {
+                id: requester.id,
+                displayName: requester.displayName,
+                login: requester.login,
+                status: requester.status,
+                avatarUrl: requester.avatarUrl
+            }
+        });
+    }
+  };
+
+  const onFriendRemoved = (event: any) => {
     const { requesterId, addresseeId } = event;
-
-    // Notify requester
     const requesterConns = connections.get(requesterId);
     if (requesterConns) {
       const payload = JSON.stringify({ 
@@ -136,8 +333,6 @@ export default async function chatWsRoutes(fastify: FastifyInstance) {
         if (ws.readyState === WebSocket.OPEN) ws.send(payload);
       }
     }
-
-    // Notify addressee
     const addresseeConns = connections.get(addresseeId);
     if (addresseeConns) {
       const payload = JSON.stringify({ 
@@ -148,12 +343,23 @@ export default async function chatWsRoutes(fastify: FastifyInstance) {
         if (ws.readyState === WebSocket.OPEN) ws.send(payload);
       }
     }
-  });
 
-  friendService.on('user_blocked', (event) => {
+    // Public updates
+    broadcastPublicFriendUpdate({
+        userId: requesterId,
+        type: 'REMOVE',
+        friendId: addresseeId
+    });
+
+    broadcastPublicFriendUpdate({
+        userId: addresseeId,
+        type: 'REMOVE',
+        friendId: requesterId
+    });
+  };
+
+  const onUserBlocked = (event: any) => {
     const { blockerId, blockedId } = event;
-
-    // Notify blocker
     const blockerConns = connections.get(blockerId);
     if (blockerConns) {
       const payload = JSON.stringify({ 
@@ -164,12 +370,10 @@ export default async function chatWsRoutes(fastify: FastifyInstance) {
         if (ws.readyState === WebSocket.OPEN) ws.send(payload);
       }
     }
-  });
+  };
 
-  friendService.on('user_unblocked', (event) => {
+  const onUserUnblocked = (event: any) => {
     const { blockerId, blockedId } = event;
-
-    // Notify blocker
     const blockerConns = connections.get(blockerId);
     if (blockerConns) {
       const payload = JSON.stringify({ 
@@ -180,12 +384,10 @@ export default async function chatWsRoutes(fastify: FastifyInstance) {
         if (ws.readyState === WebSocket.OPEN) ws.send(payload);
       }
     }
-  });
+  };
 
-  friendService.on('friend_request_sent', (event) => {
+  const onFriendRequestSent = (event: any) => {
     const { senderId, receiverId, requestId } = event;
-
-    // Notify sender
     const senderConns = connections.get(senderId);
     if (senderConns) {
       const payload = JSON.stringify({ 
@@ -196,8 +398,6 @@ export default async function chatWsRoutes(fastify: FastifyInstance) {
         if (ws.readyState === WebSocket.OPEN) ws.send(payload);
       }
     }
-
-    // Notify receiver
     const receiverConns = connections.get(receiverId);
     if (receiverConns) {
       const payload = JSON.stringify({ 
@@ -208,12 +408,10 @@ export default async function chatWsRoutes(fastify: FastifyInstance) {
         if (ws.readyState === WebSocket.OPEN) ws.send(payload);
       }
     }
-  });
+  };
 
-  friendService.on('friend_request_cancelled', (event) => {
+  const onFriendRequestCancelled = (event: any) => {
     const { senderId, receiverId } = event;
-
-    // Notify sender
     const senderConns = connections.get(senderId);
     if (senderConns) {
       const payload = JSON.stringify({ 
@@ -224,8 +422,6 @@ export default async function chatWsRoutes(fastify: FastifyInstance) {
         if (ws.readyState === WebSocket.OPEN) ws.send(payload);
       }
     }
-
-    // Notify receiver
     const receiverConns = connections.get(receiverId);
     if (receiverConns) {
       const payload = JSON.stringify({ 
@@ -236,12 +432,10 @@ export default async function chatWsRoutes(fastify: FastifyInstance) {
         if (ws.readyState === WebSocket.OPEN) ws.send(payload);
       }
     }
-  });
+  };
 
-  friendService.on('friend_request_declined', (event) => {
+  const onFriendRequestDeclined = (event: any) => {
     const { senderId, receiverId } = event;
-
-    // Notify sender (who sent the request)
     const senderConns = connections.get(senderId);
     if (senderConns) {
       const payload = JSON.stringify({ 
@@ -252,8 +446,6 @@ export default async function chatWsRoutes(fastify: FastifyInstance) {
         if (ws.readyState === WebSocket.OPEN) ws.send(payload);
       }
     }
-
-    // Notify receiver (who declined) - just to keep state consistent
     const receiverConns = connections.get(receiverId);
     if (receiverConns) {
       const payload = JSON.stringify({ 
@@ -264,6 +456,30 @@ export default async function chatWsRoutes(fastify: FastifyInstance) {
         if (ws.readyState === WebSocket.OPEN) ws.send(payload);
       }
     }
+  };
+
+  friendService.on('friend_accepted', onFriendAccepted);
+  friendService.on('friend_removed', onFriendRemoved);
+  friendService.on('user_blocked', onUserBlocked);
+  friendService.on('user_unblocked', onUserUnblocked);
+  friendService.on('friend_request_sent', onFriendRequestSent);
+  friendService.on('friend_request_cancelled', onFriendRequestCancelled);
+  friendService.on('friend_request_declined', onFriendRequestDeclined);
+
+  fastify.addHook('onClose', (instance, done) => {
+    userService.off('status_change', onStatusChange);
+    userService.off('user_created', onUserCreated);
+    userService.off('user_updated', onUserUpdated);
+    
+    friendService.off('friend_accepted', onFriendAccepted);
+    friendService.off('friend_removed', onFriendRemoved);
+    friendService.off('user_blocked', onUserBlocked);
+    friendService.off('user_unblocked', onUserUnblocked);
+    friendService.off('friend_request_sent', onFriendRequestSent);
+    friendService.off('friend_request_cancelled', onFriendRequestCancelled);
+    friendService.off('friend_request_declined', onFriendRequestDeclined);
+    
+    done();
   });
 
   fastify.get('/ws/chat', { websocket: true }, async (connection: any, req: any) => {
@@ -299,26 +515,35 @@ export default async function chatWsRoutes(fastify: FastifyInstance) {
     }
 
     if (!connections.has(userId)) {
+      console.log(`[WS] User ${userId} connected (First connection)`);
       connections.set(userId, new Set());
       // First connection, set status ONLINE
       await fastify.prisma.user.update({
         where: { id: userId },
         data: { status: 'ONLINE' }
       }).catch(console.error);
+      broadcastStatusChange(userId, 'ONLINE');
+    } else {
+      console.log(`[WS] User ${userId} connected (New tab/window)`);
     }
     connections.get(userId)!.add(socket);
 
     socket.on('close', async () => {
+      console.log(`[WS] Socket closed for user ${userId}`);
       const userConns = connections.get(userId);
       if (userConns) {
         userConns.delete(socket);
         if (userConns.size === 0) {
+          console.log(`[WS] User ${userId} went OFFLINE`);
           connections.delete(userId);
           // Last connection, set status OFFLINE
           await fastify.prisma.user.update({
             where: { id: userId },
             data: { status: 'OFFLINE' }
           }).catch(console.error);
+          broadcastStatusChange(userId, 'OFFLINE');
+        } else {
+          console.log(`[WS] User ${userId} still has ${userConns.size} connections`);
         }
       }
     });

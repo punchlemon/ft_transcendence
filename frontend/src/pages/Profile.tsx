@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback } from 'react'
+import { useEffect, useState, useCallback, useRef } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import useAuthStore from '../stores/authStore'
 import { useChatStore } from '../stores/chatStore'
@@ -77,6 +77,12 @@ const ProfilePage = () => {
   const [editModalField, setEditModalField] = useState<'avatar' | null>(null)
   const [editingField, setEditingField] = useState<'displayName' | 'bio' | null>(null)
   const [editValue, setEditValue] = useState('')
+  
+  // Use ref to access latest profile in WebSocket callbacks without re-subscribing
+  const profileRef = useRef(profile)
+  useEffect(() => {
+    profileRef.current = profile
+  }, [profile])
 
   const startEditing = (field: 'displayName' | 'bio', value: string) => {
     setEditingField(field)
@@ -183,31 +189,33 @@ const ProfilePage = () => {
 
   useEffect(() => {
     const unsubscribeFriend = onChatWsEvent('friend_update', (data) => {
+      const currentProfile = profileRef.current
       if (data.status === 'FRIEND') {
         // If we are viewing the profile of the person we just became friends with
-        if (profile && Number(profile.id) === data.friendId) {
+        if (currentProfile && Number(currentProfile.id) === data.friendId) {
            setProfile(prev => prev ? { ...prev, friendshipStatus: 'FRIEND' } : null)
         }
       } else if (data.status === 'PENDING_SENT') {
-        if (profile && Number(profile.id) === data.friendId) {
+        if (currentProfile && Number(currentProfile.id) === data.friendId) {
            setProfile(prev => prev ? { ...prev, friendshipStatus: 'PENDING_SENT' } : null)
         }
       } else if (data.status === 'PENDING_RECEIVED') {
-        if (profile && Number(profile.id) === data.friendId) {
+        if (currentProfile && Number(currentProfile.id) === data.friendId) {
            setProfile(prev => prev ? { ...prev, friendshipStatus: 'PENDING_RECEIVED', friendRequestId: data.requestId } : null)
         }
       } else if (data.status === 'NONE') {
-        if (profile && Number(profile.id) === data.friendId) {
+        if (currentProfile && Number(currentProfile.id) === data.friendId) {
            setProfile(prev => prev ? { ...prev, friendshipStatus: 'NONE' } : null)
         }
       }
     })
 
     const unsubscribePublicFriend = onChatWsEvent('public_friend_update', (data) => {
-      if (!profile) return;
+      const currentProfile = profileRef.current
+      if (!currentProfile) return;
       
       // If the update is about the user we are viewing
-      if (Number(profile.id) === data.userId) {
+      if (Number(currentProfile.id) === data.userId) {
         if (data.type === 'ADD') {
            setFriends(prev => {
              if (prev.some(f => f.id === String(data.friend.id))) return prev;
@@ -226,8 +234,9 @@ const ProfilePage = () => {
     })
 
     const unsubscribeRelationship = onChatWsEvent('relationship_update', (data) => {
-      if (!profile) return
-      const targetId = Number(profile.id)
+      const currentProfile = profileRef.current
+      if (!currentProfile) return
+      const targetId = Number(currentProfile.id)
       
       if (data.userId === targetId) {
         if (data.status === 'BLOCKING') {
@@ -339,6 +348,7 @@ const ProfilePage = () => {
           <UserAvatar
             key={profile.avatarUrl || 'default'}
             user={{
+              id: Number(profile.id),
               displayName: profile.displayName,
               avatarUrl: profile.avatarUrl,
               status: profile.status.toUpperCase(),
@@ -534,6 +544,7 @@ const ProfilePage = () => {
                       <UserAvatar
                         key={friend.avatarUrl || 'default'}
                         user={{
+                          id: Number(friend.id),
                           displayName: friend.displayName,
                           avatarUrl: friend.avatarUrl,
                           status: friend.status.toUpperCase(),

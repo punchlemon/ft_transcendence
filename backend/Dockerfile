@@ -6,6 +6,8 @@ RUN apt-get update && apt-get upgrade -y && rm -rf /var/lib/apt/lists/*
 
 # Install deps based on package.json
 COPY package*.json ./
+COPY prisma ./prisma/
+
 RUN npm install
 
 # Copy source

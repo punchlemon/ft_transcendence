@@ -247,6 +247,7 @@ const ChatDrawer = () => {
                          <UserAvatar 
                            key={activeThreadOtherMember.avatarUrl}
                            user={{
+                             id: activeThreadOtherMember.id,
                              displayName: activeThread.name,
                              avatarUrl: activeThreadOtherMember.avatarUrl,
                              status: activeThreadOtherMember.status || 'ONLINE',
@@ -385,6 +386,7 @@ const ChatDrawer = () => {
                           <UserAvatar 
                             key={otherMember?.avatarUrl}
                             user={{
+                              id: otherMember?.id,
                               displayName: thread.name,
                               avatarUrl: otherMember?.avatarUrl,
                               status: otherMember?.status || 'ONLINE',

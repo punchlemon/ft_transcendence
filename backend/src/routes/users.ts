@@ -7,6 +7,7 @@ import fs from 'fs'
 import path from 'path'
 import { randomUUID } from 'crypto'
 import sharp from 'sharp'
+import { userService } from '../services/user'
 
 const STATUS_VALUES = ['OFFLINE', 'ONLINE', 'IN_MATCH', 'AWAY', 'DO_NOT_DISTURB'] as const
 
@@ -38,7 +39,7 @@ const parseExcludeIds = (excludeFriendIds?: string) => {
 const updateProfileSchema = z.object({
   displayName: z.string().trim().min(1).max(32).optional(),
   bio: z.string().trim().max(255).optional(),
-  avatarUrl: z.union([z.string().trim().url(), z.literal('')]).optional()
+  avatarUrl: z.union([z.string().trim(), z.literal('')]).optional()
 })
 
 const usersRoutes: FastifyPluginAsync = async (fastify) => {
@@ -111,6 +112,8 @@ const usersRoutes: FastifyPluginAsync = async (fastify) => {
       }
     })
 
+    userService.emitUserUpdated(updatedUser)
+
     return updatedUser
   })
 
@@ -180,6 +183,8 @@ const usersRoutes: FastifyPluginAsync = async (fastify) => {
         }
       })
 
+      userService.emitUserUpdated(updatedUser)
+
       return updatedUser
     } catch (err) {
       request.log.error(err)
@@ -228,6 +233,8 @@ const usersRoutes: FastifyPluginAsync = async (fastify) => {
         bio: true
       }
     })
+
+    userService.emitUserUpdated(updatedUser)
 
     return updatedUser
   })
@@ -540,8 +547,8 @@ const usersRoutes: FastifyPluginAsync = async (fastify) => {
         OR: [{ requesterId: userId }, { addresseeId: userId }]
       },
       include: {
-        requester: { select: { id: true, displayName: true, status: true, avatarUrl: true } },
-        addressee: { select: { id: true, displayName: true, status: true, avatarUrl: true } }
+        requester: { select: { id: true, displayName: true, login: true, status: true, avatarUrl: true } },
+        addressee: { select: { id: true, displayName: true, login: true, status: true, avatarUrl: true } }
       }
     })
 

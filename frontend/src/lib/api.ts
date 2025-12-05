@@ -424,11 +424,7 @@ export const updateUserProfile = async (userId: string, payload: UpdateProfilePa
 export const uploadAvatar = async (userId: string, file: File) => {
   const formData = new FormData()
   formData.append('file', file)
-  const response = await apiClient.post(`/users/${userId}/avatar`, formData, {
-    headers: {
-      'Content-Type': 'multipart/form-data'
-    }
-  })
+  const response = await apiClient.post(`/users/${userId}/avatar`, formData)
   return response.data as UserProfileResponse
 }
 

@@ -1,4 +1,3 @@
-version: '3.8'
 services:
   backend:
     build:
@@ -11,7 +10,7 @@ services:
       - .env
     ports:
       - "${BACKEND_PORT:-3000}:3000"
-    command: sh -c "npm ci && npm run dev"
+    command: sh -c "npm ci && npx prisma migrate deploy && npm run dev"
     networks:
       - ft_net
 
