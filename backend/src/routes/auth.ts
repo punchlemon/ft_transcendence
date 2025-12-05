@@ -1464,7 +1464,14 @@ const authRoutes: FastifyPluginAsync = async (fastify) => {
 
           fastify.log && fastify.log.info && fastify.log.info({ userId: existing.userId }, 'user presence: OFFLINE (logout with no remaining sessions)')
         } else {
-          // There are still active sessions; do not close sockets or change DB status.
+          // There are still active sessions; close sockets for the specific
+          // logged-out session only (if any), but do not change DB status.
+          try {
+            await presenceService.closeSocketsBySession(existing.id).catch(() => {})
+            fastify.log && fastify.log.info && fastify.log.info({ userId: existing.userId, sessionId: existing.id }, 'logout: closed sockets for logged-out session only')
+          } catch (err) {
+            fastify.log && fastify.log.warn && fastify.log.warn({ err }, 'Failed to close sockets for logged-out session')
+          }
           fastify.log && fastify.log.info && fastify.log.info({ userId: existing.userId, remaining }, 'logout: session removed but other sessions remain; presence unchanged')
         }
       } catch (err) {

@@ -5,14 +5,18 @@ import { friendService } from '../services/friend';
 import { presenceService } from '../services/presence';
 import { WebSocket } from 'ws';
 
+type SocketEntry = { ws: WebSocket; sessionId?: number }
+
 interface SocketStream {
   socket: WebSocket;
 }
 
 export default async function chatWsRoutes(fastify: FastifyInstance) {
-  const connections = new Map<number, Set<WebSocket>>();
+  const connections = new Map<number, Set<SocketEntry>>();
   // Map socket -> userId to reliably find owner when 'close' fires
   const socketToUser = new WeakMap<WebSocket, number>();
+  // Map socket -> sessionId for per-session close
+  const socketToSession = new WeakMap<WebSocket, number>();
 
   // Cleanup helper moved to outer scope so it can be reused by the forced-close helper.
   const cleanupSocket = async (s: WebSocket) => {
@@ -21,9 +25,11 @@ export default async function chatWsRoutes(fastify: FastifyInstance) {
       if (ownerId === undefined) {
         // If no owner mapping, attempt best-effort removal across all sets
         for (const [uid, setOfSockets] of connections.entries()) {
-          if (setOfSockets.has(s)) {
-            setOfSockets.delete(s);
+          const entry = Array.from(setOfSockets).find(e => e.ws === s);
+          if (entry) {
+            setOfSockets.delete(entry);
             socketToUser.delete(s as WebSocket);
+            socketToSession.delete(s as WebSocket);
             if (setOfSockets.size === 0) {
               connections.delete(uid);
               await fastify.prisma.user.update({ where: { id: uid }, data: { status: 'OFFLINE' } }).catch(console.error);
@@ -37,14 +43,18 @@ export default async function chatWsRoutes(fastify: FastifyInstance) {
       }
 
       const userConns = connections.get(ownerId);
-      if (userConns && userConns.has(s)) {
-        userConns.delete(s);
-        socketToUser.delete(s as WebSocket);
-        if (userConns.size === 0) {
-          connections.delete(ownerId);
-          await fastify.prisma.user.update({ where: { id: ownerId }, data: { status: 'OFFLINE' } }).catch(console.error);
-          broadcastPresenceToFriends(ownerId, 'OFFLINE').catch(() => {});
-          fastify.log && fastify.log.info && fastify.log.info({ ownerId }, 'user presence: OFFLINE (last connection closed)')
+      if (userConns) {
+        const entry = Array.from(userConns).find(e => e.ws === s);
+        if (entry) {
+          userConns.delete(entry);
+          socketToUser.delete(s as WebSocket);
+          socketToSession.delete(s as WebSocket);
+          if (userConns.size === 0) {
+            connections.delete(ownerId);
+            await fastify.prisma.user.update({ where: { id: ownerId }, data: { status: 'OFFLINE' } }).catch(console.error);
+            broadcastPresenceToFriends(ownerId, 'OFFLINE').catch(() => {});
+            fastify.log && fastify.log.info && fastify.log.info({ ownerId }, 'user presence: OFFLINE (last connection closed)')
+          }
         }
       }
     } catch (err) {
@@ -57,9 +67,10 @@ export default async function chatWsRoutes(fastify: FastifyInstance) {
     const setOfSockets = connections.get(userId);
     if (!setOfSockets || setOfSockets.size === 0) return 0;
 
-    // Copy sockets so we can iterate while cleanup mutates the set
+    // Copy socket entries so we can iterate while cleanup mutates the set
     const sockets = Array.from(setOfSockets);
-    for (const ws of sockets) {
+    for (const entry of sockets) {
+      const ws = entry.ws;
       try {
         if (ws.readyState === WebSocket.OPEN) {
           // 4000+ are application-defined close codes; use 4000 to indicate server-forced logout
@@ -80,6 +91,31 @@ export default async function chatWsRoutes(fastify: FastifyInstance) {
     }
 
     return sockets.length;
+  }
+
+  // Force-close sockets belonging to a specific sessionId. Returns number of sockets attempted.
+  const closeSocketsBySession = async (sessionId: number) => {
+    let attempted = 0;
+    for (const [userId, setOfSockets] of connections.entries()) {
+      const entries = Array.from(setOfSockets).filter(e => e.sessionId === sessionId);
+      if (!entries.length) continue;
+      for (const entry of entries) {
+        const ws = entry.ws;
+        try {
+          if (ws.readyState === WebSocket.OPEN) ws.close(4000, 'server logout-session');
+        } catch (err) {
+          // ignore
+        }
+        try {
+          // eslint-disable-next-line no-await-in-loop
+          await cleanupSocket(ws);
+        } catch (err) {
+          fastify.log && fastify.log.warn && fastify.log.warn({ err }, 'Error during session forced socket cleanup')
+        }
+        attempted++;
+      }
+    }
+    return attempted;
   }
 
 
@@ -111,7 +147,8 @@ export default async function chatWsRoutes(fastify: FastifyInstance) {
           continue;
         }
         let sent = 0
-        for (const ws of conns) {
+        for (const entry of conns) {
+          const ws = entry.ws
           try {
             if (ws.readyState === WebSocket.OPEN) {
               ws.send(payload);
@@ -132,6 +169,7 @@ export default async function chatWsRoutes(fastify: FastifyInstance) {
 
     // Register helpers in the shared presenceService so other parts of the app can call them.
     presenceService.setCloseSockets(closeUserSockets)
+    presenceService.setCloseSocketsBySession(closeSocketsBySession)
 
   chatService.on('message', async (message) => {
     // Get members of the channel
@@ -146,7 +184,8 @@ export default async function chatWsRoutes(fastify: FastifyInstance) {
     for (const member of members) {
       const userConns = connections.get(member.userId);
       if (userConns) {
-        for (const ws of userConns) {
+        for (const entry of userConns) {
+          const ws = entry.ws
           if (ws.readyState === WebSocket.OPEN) {
             ws.send(payload);
           }
@@ -166,7 +205,8 @@ export default async function chatWsRoutes(fastify: FastifyInstance) {
     for (const member of members) {
       const userConns = connections.get(member.userId);
       if (userConns) {
-        for (const ws of userConns) {
+        for (const entry of userConns) {
+          const ws = entry.ws
           if (ws.readyState === WebSocket.OPEN) {
             ws.send(payload);
           }
@@ -182,7 +222,8 @@ export default async function chatWsRoutes(fastify: FastifyInstance) {
       for (const member of channel.members) {
         const userConns = connections.get(member.userId);
         if (userConns) {
-          for (const ws of userConns) {
+          for (const entry of userConns) {
+            const ws = entry.ws
             if (ws.readyState === WebSocket.OPEN) {
               ws.send(payload);
             }
@@ -196,7 +237,8 @@ export default async function chatWsRoutes(fastify: FastifyInstance) {
     const userConns = connections.get(notification.userId);
     if (userConns) {
       const payload = JSON.stringify({ type: 'notification', data: notification });
-      for (const ws of userConns) {
+      for (const entry of userConns) {
+        const ws = entry.ws
         if (ws.readyState === WebSocket.OPEN) {
           ws.send(payload);
         }
@@ -208,7 +250,8 @@ export default async function chatWsRoutes(fastify: FastifyInstance) {
     const userConns = connections.get(event.userId);
     if (userConns) {
       const payload = JSON.stringify({ type: 'notification_deleted', data: { id: event.id } });
-      for (const ws of userConns) {
+      for (const entry of userConns) {
+        const ws = entry.ws
         if (ws.readyState === WebSocket.OPEN) {
           ws.send(payload);
         }
@@ -226,7 +269,8 @@ export default async function chatWsRoutes(fastify: FastifyInstance) {
         type: 'friend_update', 
         data: { friendId: addresseeId, status: 'FRIEND' } 
       });
-      for (const ws of requesterConns) {
+      for (const entry of requesterConns) {
+        const ws = entry.ws
         if (ws.readyState === WebSocket.OPEN) ws.send(payload);
       }
     }
@@ -238,7 +282,8 @@ export default async function chatWsRoutes(fastify: FastifyInstance) {
         type: 'friend_update', 
         data: { friendId: requesterId, status: 'FRIEND' } 
       });
-      for (const ws of addresseeConns) {
+      for (const entry of addresseeConns) {
+        const ws = entry.ws
         if (ws.readyState === WebSocket.OPEN) ws.send(payload);
       }
     }
@@ -254,7 +299,8 @@ export default async function chatWsRoutes(fastify: FastifyInstance) {
         type: 'friend_update', 
         data: { friendId: addresseeId, status: 'NONE' } 
       });
-      for (const ws of requesterConns) {
+      for (const entry of requesterConns) {
+        const ws = entry.ws
         if (ws.readyState === WebSocket.OPEN) ws.send(payload);
       }
     }
@@ -266,7 +312,8 @@ export default async function chatWsRoutes(fastify: FastifyInstance) {
         type: 'friend_update', 
         data: { friendId: requesterId, status: 'NONE' } 
       });
-      for (const ws of addresseeConns) {
+      for (const entry of addresseeConns) {
+        const ws = entry.ws
         if (ws.readyState === WebSocket.OPEN) ws.send(payload);
       }
     }
@@ -282,7 +329,8 @@ export default async function chatWsRoutes(fastify: FastifyInstance) {
         type: 'relationship_update', 
         data: { userId: blockedId, status: 'BLOCKING' } 
       });
-      for (const ws of blockerConns) {
+      for (const entry of blockerConns) {
+        const ws = entry.ws
         if (ws.readyState === WebSocket.OPEN) ws.send(payload);
       }
     }
@@ -298,7 +346,8 @@ export default async function chatWsRoutes(fastify: FastifyInstance) {
         type: 'relationship_update', 
         data: { userId: blockedId, status: 'NONE' } 
       });
-      for (const ws of blockerConns) {
+      for (const entry of blockerConns) {
+        const ws = entry.ws
         if (ws.readyState === WebSocket.OPEN) ws.send(payload);
       }
     }
@@ -314,7 +363,8 @@ export default async function chatWsRoutes(fastify: FastifyInstance) {
         type: 'friend_update', 
         data: { friendId: receiverId, status: 'PENDING_SENT', requestId } 
       });
-      for (const ws of senderConns) {
+      for (const entry of senderConns) {
+        const ws = entry.ws
         if (ws.readyState === WebSocket.OPEN) ws.send(payload);
       }
     }
@@ -326,7 +376,8 @@ export default async function chatWsRoutes(fastify: FastifyInstance) {
         type: 'friend_update', 
         data: { friendId: senderId, status: 'PENDING_RECEIVED', requestId } 
       });
-      for (const ws of receiverConns) {
+      for (const entry of receiverConns) {
+        const ws = entry.ws
         if (ws.readyState === WebSocket.OPEN) ws.send(payload);
       }
     }
@@ -342,7 +393,8 @@ export default async function chatWsRoutes(fastify: FastifyInstance) {
         type: 'friend_update', 
         data: { friendId: receiverId, status: 'NONE' } 
       });
-      for (const ws of senderConns) {
+      for (const entry of senderConns) {
+        const ws = entry.ws
         if (ws.readyState === WebSocket.OPEN) ws.send(payload);
       }
     }
@@ -354,7 +406,8 @@ export default async function chatWsRoutes(fastify: FastifyInstance) {
         type: 'friend_update', 
         data: { friendId: senderId, status: 'NONE' } 
       });
-      for (const ws of receiverConns) {
+      for (const entry of receiverConns) {
+        const ws = entry.ws
         if (ws.readyState === WebSocket.OPEN) ws.send(payload);
       }
     }
@@ -370,7 +423,8 @@ export default async function chatWsRoutes(fastify: FastifyInstance) {
         type: 'friend_update', 
         data: { friendId: receiverId, status: 'NONE' } 
       });
-      for (const ws of senderConns) {
+      for (const entry of senderConns) {
+        const ws = entry.ws
         if (ws.readyState === WebSocket.OPEN) ws.send(payload);
       }
     }
@@ -382,7 +436,8 @@ export default async function chatWsRoutes(fastify: FastifyInstance) {
         type: 'friend_update', 
         data: { friendId: senderId, status: 'NONE' } 
       });
-      for (const ws of receiverConns) {
+      for (const entry of receiverConns) {
+        const ws = entry.ws
         if (ws.readyState === WebSocket.OPEN) ws.send(payload);
       }
     }
@@ -412,9 +467,11 @@ export default async function chatWsRoutes(fastify: FastifyInstance) {
     }
 
     let userId: number;
+    let sessionId: number | undefined;
     try {
       const user = fastify.jwt.verify(token) as any;
       userId = user.userId;
+      sessionId = typeof user.sessionId === 'number' ? user.sessionId : (user.sessionId ? Number(user.sessionId) : undefined);
     } catch (err) {
       socket.close(1008, 'Invalid token');
       return;
@@ -433,33 +490,21 @@ export default async function chatWsRoutes(fastify: FastifyInstance) {
       fastify.log && fastify.log.info && fastify.log.info({ userId }, 'user presence: ONLINE (first connection)')
     }
 
-    connections.get(userId)!.add(socket);
+    connections.get(userId)!.add({ ws: socket, sessionId });
     socketToUser.set(socket, userId);
+    if (sessionId) socketToSession.set(socket, sessionId);
 
     const cleanupSocket = async (s: WebSocket) => {
       try {
-        const ownerId = socketToUser.get(s) ?? userId;
-        const userConns = connections.get(ownerId);
-        if (userConns && userConns.has(s)) {
-          userConns.delete(s);
-          socketToUser.delete(s);
-          if (userConns.size === 0) {
-            connections.delete(ownerId);
-            // Last connection, set status OFFLINE
-            await fastify.prisma.user.update({
-              where: { id: ownerId },
-              data: { status: 'OFFLINE' }
-            }).catch(console.error);
-            // Notify connected friends about presence change
-            broadcastPresenceToFriends(ownerId, 'OFFLINE').catch(() => {});
-            fastify.log && fastify.log.info && fastify.log.info({ ownerId }, 'user presence: OFFLINE (last connection closed)')
-          }
-        } else {
-          // If no matching set found, attempt best-effort removal across all sets
+        const ownerId = socketToUser.get(s);
+        if (ownerId === undefined) {
+          // If no owner mapping, attempt best-effort removal across all sets
           for (const [uid, setOfSockets] of connections.entries()) {
-            if (setOfSockets.has(s)) {
-              setOfSockets.delete(s);
-              socketToUser.delete(s);
+            const entry = Array.from(setOfSockets).find(e => e.ws === s);
+            if (entry) {
+              setOfSockets.delete(entry);
+              socketToUser.delete(s as WebSocket);
+              socketToSession.delete(s as WebSocket);
               if (setOfSockets.size === 0) {
                 connections.delete(uid);
                 await fastify.prisma.user.update({ where: { id: uid }, data: { status: 'OFFLINE' } }).catch(console.error);
@@ -467,6 +512,25 @@ export default async function chatWsRoutes(fastify: FastifyInstance) {
                 fastify.log && fastify.log.info && fastify.log.info({ uid }, 'user presence: OFFLINE (cleaned up)')
               }
               break;
+            }
+          }
+          return;
+        }
+
+        const userConns = connections.get(ownerId);
+        if (userConns) {
+          const entry = Array.from(userConns).find(e => e.ws === s);
+          if (entry) {
+            userConns.delete(entry);
+            socketToUser.delete(s as WebSocket);
+            socketToSession.delete(s as WebSocket);
+            if (userConns.size === 0) {
+              connections.delete(ownerId);
+              // Last connection, set status OFFLINE
+              await fastify.prisma.user.update({ where: { id: ownerId }, data: { status: 'OFFLINE' } }).catch(console.error);
+              // Notify connected friends about presence change
+              broadcastPresenceToFriends(ownerId, 'OFFLINE').catch(() => {});
+              fastify.log && fastify.log.info && fastify.log.info({ ownerId }, 'user presence: OFFLINE (last connection closed)')
             }
           }
         }
