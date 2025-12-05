@@ -1,6 +1,6 @@
 /**
  * なぜテストが必要か:
- * - `/auth/register` と `/auth/login` の入力検証・レスポンス構造・セキュリティ要件 (Argon2 ハッシュ/セッション生成) を保証する。
+ * - `/api/auth/register` と `/api/auth/login` の入力検証・レスポンス構造・セキュリティ要件 (Argon2 ハッシュ/セッション生成) を保証する。
  * - 認証フローが `Session` テーブルと同期し、重複登録や不正ログインに適切な HTTP ステータスを返すか継続的に検証する。
  */
 import { describe, it, expect, beforeAll, afterAll, beforeEach, afterEach, vi, type Mock } from 'vitest'
@@ -85,12 +85,12 @@ afterEach(() => {
   ;(undici.fetch as unknown as Mock).mockReset()
 })
 
-describe('POST /auth/register', () => {
+describe('POST /api/auth/register', () => {
 
   it('creates a user with hashed password and returns tokens', async () => {
     const response = await server.inject({
       method: 'POST',
-      url: '/auth/register',
+      url: '/api/auth/register',
       payload: basePayload
     })
 
@@ -118,11 +118,11 @@ describe('POST /auth/register', () => {
   })
 
   it('rejects duplicate emails or usernames', async () => {
-    await server.inject({ method: 'POST', url: '/auth/register', payload: basePayload })
+    await server.inject({ method: 'POST', url: '/api/auth/register', payload: basePayload })
 
     const response = await server.inject({
       method: 'POST',
-      url: '/auth/register',
+      url: '/api/auth/register',
       payload: {
         ...basePayload,
         password: 'Another123'
@@ -137,7 +137,7 @@ describe('POST /auth/register', () => {
   it('validates payload and returns 400 for weak password', async () => {
     const response = await server.inject({
       method: 'POST',
-      url: '/auth/register',
+      url: '/api/auth/register',
       payload: {
         email: 'bad',
         username: 'p',
@@ -152,14 +152,14 @@ describe('POST /auth/register', () => {
   })
 })
 
-describe('POST /auth/login', () => {
+describe('POST /api/auth/login', () => {
   it('logs in with valid credentials and issues a new session', async () => {
-    const registerResponse = await server.inject({ method: 'POST', url: '/auth/register', payload: basePayload })
+    const registerResponse = await server.inject({ method: 'POST', url: '/api/auth/register', payload: basePayload })
     const registered = registerResponse.json<{ user: { id: number } }>()
 
     const response = await server.inject({
       method: 'POST',
-      url: '/auth/login',
+      url: '/api/auth/login',
       payload: {
         email: basePayload.email,
         password: basePayload.password
@@ -190,11 +190,11 @@ describe('POST /auth/login', () => {
   })
 
   it('rejects invalid credential pairs', async () => {
-    await server.inject({ method: 'POST', url: '/auth/register', payload: basePayload })
+    await server.inject({ method: 'POST', url: '/api/auth/register', payload: basePayload })
 
     const response = await server.inject({
       method: 'POST',
-      url: '/auth/login',
+      url: '/api/auth/login',
       payload: {
         email: basePayload.email,
         password: 'WrongPassword1'
@@ -209,7 +209,7 @@ describe('POST /auth/login', () => {
   it('validates payload shape', async () => {
     const response = await server.inject({
       method: 'POST',
-      url: '/auth/login',
+      url: '/api/auth/login',
       payload: { email: 'not-an-email', password: '123' }
     })
 
@@ -219,14 +219,14 @@ describe('POST /auth/login', () => {
   })
 })
 
-describe('POST /auth/refresh', () => {
+describe('POST /api/auth/refresh', () => {
   it('rotates the refresh token and extends the session validity', async () => {
-    const registerResponse = await server.inject({ method: 'POST', url: '/auth/register', payload: basePayload })
+    const registerResponse = await server.inject({ method: 'POST', url: '/api/auth/register', payload: basePayload })
     const registerBody = registerResponse.json<{ tokens: { refresh: string } }>()
 
     const response = await server.inject({
       method: 'POST',
-      url: '/auth/refresh',
+      url: '/api/auth/refresh',
       payload: { refreshToken: registerBody.tokens.refresh }
     })
 
@@ -249,7 +249,7 @@ describe('POST /auth/refresh', () => {
   })
 
   it('rejects expired refresh tokens and purges the session', async () => {
-    const registerResponse = await server.inject({ method: 'POST', url: '/auth/register', payload: basePayload })
+    const registerResponse = await server.inject({ method: 'POST', url: '/api/auth/register', payload: basePayload })
     const registered = registerResponse.json<{ user: { id: number } }>()
     const expiredToken = randomUUID()
 
@@ -266,7 +266,7 @@ describe('POST /auth/refresh', () => {
 
     const response = await server.inject({
       method: 'POST',
-      url: '/auth/refresh',
+      url: '/api/auth/refresh',
       payload: { refreshToken: expiredToken }
     })
 
@@ -278,14 +278,14 @@ describe('POST /auth/refresh', () => {
   })
 })
 
-describe('POST /auth/logout', () => {
+describe('POST /api/auth/logout', () => {
   it('deletes the session and is idempotent', async () => {
-    const registerResponse = await server.inject({ method: 'POST', url: '/auth/register', payload: basePayload })
+    const registerResponse = await server.inject({ method: 'POST', url: '/api/auth/register', payload: basePayload })
     const registerBody = registerResponse.json<{ tokens: { refresh: string } }>()
 
     const firstResponse = await server.inject({
       method: 'POST',
-      url: '/auth/logout',
+      url: '/api/auth/logout',
       payload: { refreshToken: registerBody.tokens.refresh }
     })
 
@@ -295,7 +295,7 @@ describe('POST /auth/logout', () => {
 
     const secondResponse = await server.inject({
       method: 'POST',
-      url: '/auth/logout',
+      url: '/api/auth/logout',
       payload: { refreshToken: registerBody.tokens.refresh }
     })
 
@@ -303,19 +303,19 @@ describe('POST /auth/logout', () => {
   })
 
   it('validates body shape and returns 400 when missing token', async () => {
-    const response = await server.inject({ method: 'POST', url: '/auth/logout', payload: {} })
+    const response = await server.inject({ method: 'POST', url: '/api/auth/logout', payload: {} })
     expect(response.statusCode).toBe(400)
     const body = response.json<{ error: { code: string } }>()
     expect(body.error.code).toBe('INVALID_BODY')
   })
 })
 
-describe('GET /auth/sessions and DELETE /auth/sessions/:sessionId', () => {
+describe('GET /api/auth/sessions and DELETE /api/auth/sessions/:sessionId', () => {
   it('lists every active session for the authenticated user', async () => {
-    await server.inject({ method: 'POST', url: '/auth/register', payload: basePayload })
+    await server.inject({ method: 'POST', url: '/api/auth/register', payload: basePayload })
     const loginResponse = await server.inject({
       method: 'POST',
-      url: '/auth/login',
+      url: '/api/auth/login',
       payload: { email: basePayload.email, password: basePayload.password }
     })
 
@@ -323,7 +323,7 @@ describe('GET /auth/sessions and DELETE /auth/sessions/:sessionId', () => {
 
     const listResponse = await server.inject({
       method: 'GET',
-      url: '/auth/sessions',
+      url: '/api/auth/sessions',
       headers: { authorization: `Bearer ${loginBody.tokens.access}` }
     })
 
@@ -341,17 +341,17 @@ describe('GET /auth/sessions and DELETE /auth/sessions/:sessionId', () => {
   })
 
   it('revokes a specific session by id', async () => {
-    await server.inject({ method: 'POST', url: '/auth/register', payload: basePayload })
+    await server.inject({ method: 'POST', url: '/api/auth/register', payload: basePayload })
     const loginResponse = await server.inject({
       method: 'POST',
-      url: '/auth/login',
+      url: '/api/auth/login',
       payload: { email: basePayload.email, password: basePayload.password }
     })
     const loginBody = loginResponse.json<{ tokens: { access: string } }>()
 
     const listBefore = await server.inject({
       method: 'GET',
-      url: '/auth/sessions',
+      url: '/api/auth/sessions',
       headers: { authorization: `Bearer ${loginBody.tokens.access}` }
     })
     const beforeBody = listBefore.json<{
@@ -364,7 +364,7 @@ describe('GET /auth/sessions and DELETE /auth/sessions/:sessionId', () => {
 
     const deleteResponse = await server.inject({
       method: 'DELETE',
-      url: `/auth/sessions/${target!.id}`,
+      url: `/api/auth/sessions/${target!.id}`,
       headers: { authorization: `Bearer ${loginBody.tokens.access}` }
     })
 
@@ -372,14 +372,14 @@ describe('GET /auth/sessions and DELETE /auth/sessions/:sessionId', () => {
 
     const deleteAgain = await server.inject({
       method: 'DELETE',
-      url: `/auth/sessions/${target!.id}`,
+      url: `/api/auth/sessions/${target!.id}`,
       headers: { authorization: `Bearer ${loginBody.tokens.access}` }
     })
     expect(deleteAgain.statusCode).toBe(404)
 
     const listAfter = await server.inject({
       method: 'GET',
-      url: '/auth/sessions',
+      url: '/api/auth/sessions',
       headers: { authorization: `Bearer ${loginBody.tokens.access}` }
     })
     const afterBody = listAfter.json<{ sessions: Array<{ id: number }> }>()
@@ -391,10 +391,10 @@ describe('MFA management and challenge flow', () => {
   const authHeader = (token: string) => ({ authorization: `Bearer ${token}` })
 
   const registerAndLogin = async () => {
-    await server.inject({ method: 'POST', url: '/auth/register', payload: basePayload })
+    await server.inject({ method: 'POST', url: '/api/auth/register', payload: basePayload })
     const loginResponse = await server.inject({
       method: 'POST',
-      url: '/auth/login',
+      url: '/api/auth/login',
       payload: { email: basePayload.email, password: basePayload.password }
     })
 
@@ -409,7 +409,7 @@ describe('MFA management and challenge flow', () => {
 
     const setupResponse = await server.inject({
       method: 'GET',
-      url: '/auth/mfa/setup',
+      url: '/api/auth/mfa/setup',
       headers: authHeader(tokens.access)
     })
 
@@ -420,7 +420,7 @@ describe('MFA management and challenge flow', () => {
 
     const verifyResponse = await server.inject({
       method: 'POST',
-      url: '/auth/mfa/verify',
+      url: '/api/auth/mfa/verify',
       headers: authHeader(tokens.access),
       payload: { code: authenticator.generate(setupBody.secret) }
     })
@@ -432,14 +432,14 @@ describe('MFA management and challenge flow', () => {
 
     const secondSetup = await server.inject({
       method: 'GET',
-      url: '/auth/mfa/setup',
+      url: '/api/auth/mfa/setup',
       headers: authHeader(tokens.access)
     })
     expect(secondSetup.statusCode).toBe(409)
 
     const disableResponse = await server.inject({
       method: 'DELETE',
-      url: '/auth/mfa',
+      url: '/api/auth/mfa',
       headers: authHeader(tokens.access),
       payload: { code: authenticator.generate(setupBody.secret) }
     })
@@ -453,18 +453,18 @@ describe('MFA management and challenge flow', () => {
   it('completes login via MFA challenge when 2FA is enabled', async () => {
     const { tokens } = await registerAndLogin()
 
-    const setupResponse = await server.inject({ method: 'GET', url: '/auth/mfa/setup', headers: authHeader(tokens.access) })
+    const setupResponse = await server.inject({ method: 'GET', url: '/api/auth/mfa/setup', headers: authHeader(tokens.access) })
     const setupBody = setupResponse.json<{ secret: string }>()
     await server.inject({
       method: 'POST',
-      url: '/auth/mfa/verify',
+      url: '/api/auth/mfa/verify',
       headers: authHeader(tokens.access),
       payload: { code: authenticator.generate(setupBody.secret) }
     })
 
     const loginResponse = await server.inject({
       method: 'POST',
-      url: '/auth/login',
+      url: '/api/auth/login',
       payload: { email: basePayload.email, password: basePayload.password }
     })
 
@@ -476,7 +476,7 @@ describe('MFA management and challenge flow', () => {
 
     const challengeResponse = await server.inject({
       method: 'POST',
-      url: '/auth/mfa/challenge',
+      url: '/api/auth/mfa/challenge',
       payload: { challengeId: loginBody.challengeId, code: authenticator.generate(setupBody.secret) }
     })
 
@@ -497,7 +497,7 @@ describe('MFA management and challenge flow', () => {
 
     const response = await server.inject({
       method: 'GET',
-      url: '/auth/mfa/backup-codes',
+      url: '/api/auth/mfa/backup-codes',
       headers: authHeader(tokens.access)
     })
 
@@ -507,7 +507,7 @@ describe('MFA management and challenge flow', () => {
 
     const invalidQuery = await server.inject({
       method: 'GET',
-      url: '/auth/mfa/backup-codes',
+      url: '/api/auth/mfa/backup-codes',
       headers: authHeader(tokens.access),
       query: { regenerate: 'maybe' }
     })
@@ -520,18 +520,18 @@ describe('MFA management and challenge flow', () => {
   it('regenerates, consumes, and exhausts MFA backup codes', async () => {
     const { user, tokens } = await registerAndLogin()
 
-    const setupResponse = await server.inject({ method: 'GET', url: '/auth/mfa/setup', headers: authHeader(tokens.access) })
+    const setupResponse = await server.inject({ method: 'GET', url: '/api/auth/mfa/setup', headers: authHeader(tokens.access) })
     const setupBody = setupResponse.json<{ secret: string }>()
     await server.inject({
       method: 'POST',
-      url: '/auth/mfa/verify',
+      url: '/api/auth/mfa/verify',
       headers: authHeader(tokens.access),
       payload: { code: authenticator.generate(setupBody.secret) }
     })
 
     const regenerateResponse = await server.inject({
       method: 'GET',
-      url: '/auth/mfa/backup-codes',
+      url: '/api/auth/mfa/backup-codes',
       headers: authHeader(tokens.access),
       query: { regenerate: 'true' }
     })
@@ -545,7 +545,7 @@ describe('MFA management and challenge flow', () => {
 
     const remainingResponse = await server.inject({
       method: 'GET',
-      url: '/auth/mfa/backup-codes',
+      url: '/api/auth/mfa/backup-codes',
       headers: authHeader(tokens.access)
     })
     expect(remainingResponse.statusCode).toBe(200)
@@ -555,7 +555,7 @@ describe('MFA management and challenge flow', () => {
 
     const loginResponse = await server.inject({
       method: 'POST',
-      url: '/auth/login',
+      url: '/api/auth/login',
       payload: { email: basePayload.email, password: basePayload.password }
     })
 
@@ -563,7 +563,7 @@ describe('MFA management and challenge flow', () => {
     const loginBody = loginResponse.json<{ challengeId: string }>()
     const backupResponse = await server.inject({
       method: 'POST',
-      url: '/auth/mfa/challenge',
+      url: '/api/auth/mfa/challenge',
       payload: { challengeId: loginBody.challengeId, backupCode: regenerateBody.codes[0] }
     })
 
@@ -573,14 +573,14 @@ describe('MFA management and challenge flow', () => {
 
     const reuseLogin = await server.inject({
       method: 'POST',
-      url: '/auth/login',
+      url: '/api/auth/login',
       payload: { email: basePayload.email, password: basePayload.password }
     })
     expect(reuseLogin.statusCode).toBe(423)
     const reuseBody = reuseLogin.json<{ challengeId: string }>()
     const reuseResponse = await server.inject({
       method: 'POST',
-      url: '/auth/mfa/challenge',
+      url: '/api/auth/mfa/challenge',
       payload: { challengeId: reuseBody.challengeId, backupCode: regenerateBody.codes[0] }
     })
 
@@ -592,14 +592,14 @@ describe('MFA management and challenge flow', () => {
 
     const exhaustedLogin = await server.inject({
       method: 'POST',
-      url: '/auth/login',
+      url: '/api/auth/login',
       payload: { email: basePayload.email, password: basePayload.password }
     })
     expect(exhaustedLogin.statusCode).toBe(423)
     const exhaustedBody = exhaustedLogin.json<{ challengeId: string }>()
     const exhaustedResponse = await server.inject({
       method: 'POST',
-      url: '/auth/mfa/challenge',
+      url: '/api/auth/mfa/challenge',
       payload: { challengeId: exhaustedBody.challengeId, backupCode: regenerateBody.codes[1] }
     })
 
@@ -615,7 +615,7 @@ describe('OAuth flow', () => {
   it('returns 404 for unsupported providers', async () => {
     const response = await server.inject({
       method: 'GET',
-      url: '/auth/oauth/unknown/url',
+      url: '/api/auth/oauth/unknown/url',
       query: { redirectUri }
     })
 
@@ -627,7 +627,7 @@ describe('OAuth flow', () => {
   it('rejects redirect URIs outside the whitelist', async () => {
     const response = await server.inject({
       method: 'GET',
-      url: '/auth/oauth/google/url',
+      url: '/api/auth/oauth/google/url',
       query: { redirectUri: 'https://evil.example.com/callback' }
     })
 
@@ -639,7 +639,7 @@ describe('OAuth flow', () => {
   it('returns a PKCE challenge for Google integrations', async () => {
     const response = await server.inject({
       method: 'GET',
-      url: '/auth/oauth/google/url',
+      url: '/api/auth/oauth/google/url',
       query: { redirectUri }
     })
 
@@ -652,7 +652,7 @@ describe('OAuth flow', () => {
   it('completes OAuth exchange and creates a new user session', async () => {
     const urlResponse = await server.inject({
       method: 'GET',
-      url: '/auth/oauth/google/url',
+      url: '/api/auth/oauth/google/url',
       query: { redirectUri }
     })
 
@@ -676,7 +676,7 @@ describe('OAuth flow', () => {
 
     const callbackResponse = await server.inject({
       method: 'POST',
-      url: '/auth/oauth/google/callback',
+      url: '/api/auth/oauth/google/callback',
       payload: {
         code: 'auth-code',
         state: urlBody.state,
@@ -715,7 +715,7 @@ describe('OAuth flow', () => {
 
     const urlResponse = await server.inject({
       method: 'GET',
-      url: '/auth/oauth/google/url',
+      url: '/api/auth/oauth/google/url',
       query: { redirectUri }
     })
     const urlBody = urlResponse.json<{ state: string }>()
@@ -739,7 +739,7 @@ describe('OAuth flow', () => {
 
     const callbackResponse = await server.inject({
       method: 'POST',
-      url: '/auth/oauth/google/callback',
+      url: '/api/auth/oauth/google/callback',
       payload: {
         code: 'auth-code',
         state: urlBody.state,
@@ -767,7 +767,7 @@ describe('OAuth flow', () => {
 
     const response = await server.inject({
       method: 'POST',
-      url: '/auth/oauth/google/callback',
+      url: '/api/auth/oauth/google/callback',
       payload: {
         code: 'late-code',
         state: stateRecord.state,
@@ -786,5 +786,5 @@ describe('OAuth flow', () => {
 1) 登録 API の正常系で Argon2 ハッシュと `Session` トークンの整合を確認し、重複登録・入力エラーの応答コードも検証する。
 2) ログイン API の正常系でユーザー状態更新・新規セッショントークン発行・レスポンス構造を保証する。
 3) 不正な資格情報や入力フォーマットに対して 401/400 を返すことを確認し、セキュリティ上のガードを自動テスト化する。
-4) MFA セットアップ/検証/チャレンジ/解除フローを通しでテストし、2FA 有効化時の 423 応答と `/auth/mfa/challenge` によるトークン発行が回帰しないようにしている。
+4) MFA セットアップ/検証/チャレンジ/解除フローを通しでテストし、2FA 有効化時の 423 応答と `/api/auth/mfa/challenge` によるトークン発行が回帰しないようにしている。
 */

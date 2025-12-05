@@ -21,7 +21,7 @@ describe('Game WebSocket', () => {
   })
 
   it('should connect and respond to ready event', async () => {
-    const ws = new WebSocket(`ws://localhost:${port}/ws/game`)
+    const ws = new WebSocket(`ws://localhost:${port}/api/ws/game`)
 
     const waitForOpen = new Promise<void>((resolve) => {
       ws.on('open', () => resolve())

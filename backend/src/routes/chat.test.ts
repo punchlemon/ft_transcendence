@@ -70,7 +70,7 @@ const registerUser = async (name: string) => {
   }
   const res = await server.inject({
     method: 'POST',
-    url: '/auth/register',
+    url: '/api/auth/register',
     payload
   })
   return res.json<{ user: { id: number }, tokens: { access: string } }>()
