@@ -510,7 +510,7 @@ export default async function chatWsRoutes(fastify: FastifyInstance) {
       })
     }
   } catch (e) {
-    console.warn('presenceService not available at startup in chatWs:', e && e.message ? e.message : e)
+    console.warn('presenceService not available at startup in chatWs:', e && (e as any).message ? (e as any).message : e)
   }
     
   try {
