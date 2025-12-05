@@ -17,7 +17,8 @@ const searchQuerySchema = z.object({
     .transform((value) => value.trim())
     .pipe(z.string().min(1).max(64))
     .optional(),
-  status: z.enum(STATUS_VALUES).optional(),
+  statuses: z.string().optional(), // Comma separated values
+  relationships: z.string().optional(), // Comma separated values: friends,blocked,none
   page: z.coerce.number().int().min(1).default(1),
   limit: z.coerce.number().int().min(1).default(20),
   excludeFriendIds: z.string().optional(),
@@ -574,7 +575,7 @@ const usersRoutes: FastifyPluginAsync = async (fastify) => {
       }
     }
 
-    const { q, status, page, limit: rawLimit, excludeFriendIds, sortBy, order } = parsed.data
+    const { q, statuses, relationships, page, limit: rawLimit, excludeFriendIds, sortBy, order } = parsed.data
     const limit = Math.min(rawLimit, 50)
     const excludeIds = parseExcludeIds(excludeFriendIds)
     const skip = (page - 1) * limit
@@ -592,12 +593,91 @@ const usersRoutes: FastifyPluginAsync = async (fastify) => {
       ]
     }
 
-    if (status) {
-      where.status = status
+    if (statuses) {
+      const statusList = statuses.split(',').filter((s) => STATUS_VALUES.includes(s as any))
+      if (statusList.length > 0) {
+        where.status = { in: statusList as any[] }
+      }
     }
 
     if (excludeIds.length > 0) {
       where.id = { notIn: excludeIds }
+    }
+
+    if (relationships && viewerId) {
+      const relList = relationships.split(',')
+      const includeFriends = relList.includes('friends')
+      const includeBlocked = relList.includes('blocked')
+      const includeSent = relList.includes('pending_sent')
+      const includeReceived = relList.includes('pending_received')
+      const includeNone = relList.includes('none')
+
+      // If all are included (or none specified), no filter needed.
+      // If some are missing, we need to filter.
+      if (!includeFriends || !includeBlocked || !includeSent || !includeReceived || !includeNone) {
+        const [friendships, blocks, sentReqs, receivedReqs] = await Promise.all([
+          fastify.prisma.friendship.findMany({
+            where: {
+              status: 'ACCEPTED',
+              OR: [{ requesterId: viewerId }, { addresseeId: viewerId }]
+            },
+            select: { requesterId: true, addresseeId: true }
+          }),
+          fastify.prisma.blocklist.findMany({
+            where: { blockerId: viewerId },
+            select: { blockedId: true }
+          }),
+          fastify.prisma.friendRequest.findMany({
+            where: { senderId: viewerId, status: 'PENDING' },
+            select: { receiverId: true }
+          }),
+          fastify.prisma.friendRequest.findMany({
+            where: { receiverId: viewerId, status: 'PENDING' },
+            select: { senderId: true }
+          })
+        ])
+
+        const friendIds = friendships.map((f) => (f.requesterId === viewerId ? f.addresseeId : f.requesterId))
+        const blockedIds = blocks.map((b) => b.blockedId)
+        const sentIds = sentReqs.map(r => r.receiverId)
+        const receivedIds = receivedReqs.map(r => r.senderId)
+        
+        // Logic:
+        // We want to INCLUDE users who match the selected relationships.
+        // - If 'friends' is selected -> include friendIds
+        // - If 'blocked' is selected -> include blockedIds
+        // - If 'pending_sent' is selected -> include sentIds
+        // - If 'pending_received' is selected -> include receivedIds
+        // - If 'none' is selected -> include IDs that are NOT in (friendIds + blockedIds + sentIds + receivedIds)
+        
+        if (includeNone) {
+          const excludeFromView: number[] = []
+          if (!includeFriends) excludeFromView.push(...friendIds)
+          if (!includeBlocked) excludeFromView.push(...blockedIds)
+          if (!includeSent) excludeFromView.push(...sentIds)
+          if (!includeReceived) excludeFromView.push(...receivedIds)
+          
+          if (excludeFromView.length > 0) {
+            if (where.id && typeof where.id === 'object' && 'notIn' in where.id) {
+              where.id = { notIn: [...(where.id as any).notIn, ...excludeFromView] }
+            } else {
+              where.id = { notIn: excludeFromView }
+            }
+          }
+        } else {
+          const includeIds: number[] = []
+          if (includeFriends) includeIds.push(...friendIds)
+          if (includeBlocked) includeIds.push(...blockedIds)
+          if (includeSent) includeIds.push(...sentIds)
+          if (includeReceived) includeIds.push(...receivedIds)
+          
+          if (where.id && typeof where.id === 'object' && 'notIn' in where.id) {
+             where.id = { in: includeIds, notIn: (where.id as any).notIn }
+          } else {
+             where.id = { in: includeIds }
+          }
+        }
+      }
     }
 
     let orderBy: Prisma.UserOrderByWithRelationInput | Prisma.UserOrderByWithRelationInput[] = []
