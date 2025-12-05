@@ -1442,27 +1442,54 @@ const authRoutes: FastifyPluginAsync = async (fastify) => {
       try {
         const remaining = await fastify.prisma.session.count({ where: { userId: existing.userId } })
         if (remaining === 0) {
-          // No more sessions: close sockets, persist OFFLINE, and broadcast.
+          // No more sessions: ensure there are no active socket connections for this user
           try {
-            await presenceService.closeUserSockets(existing.userId).catch(() => {})
-          } catch (err) {
-            fastify.log && fastify.log.warn && fastify.log.warn({ err }, 'Failed while attempting to close user sockets after logout')
-          }
+            const connCount = await presenceService.getConnectionCount(existing.userId).catch(() => 0)
+            if (connCount === 0) {
+              // No active sockets: persist OFFLINE and broadcast
+              try {
+                await fastify.prisma.user.update({ where: { id: existing.userId }, data: { status: 'OFFLINE' } })
+              } catch (err) {
+                fastify.log && fastify.log.warn && fastify.log.warn({ err }, 'Failed to persist OFFLINE status after logout')
+              }
 
-          try {
-            await fastify.prisma.user.update({ where: { id: existing.userId }, data: { status: 'OFFLINE' } })
-          } catch (err) {
-            fastify.log && fastify.log.warn && fastify.log.warn({ err }, 'Failed to persist OFFLINE status after logout')
-          }
+              // Notify friends immediately about the offline status if broadcast helper exists
+              try {
+                await presenceService.broadcast(existing.userId, 'OFFLINE').catch(() => {})
+              } catch (err) {
+                fastify.log && fastify.log.warn && fastify.log.warn({ err }, 'Failed to broadcast presence after logout')
+              }
 
-          // Notify friends immediately about the offline status if broadcast helper exists
-          try {
-            await presenceService.broadcast(existing.userId, 'OFFLINE').catch(() => {})
-          } catch (err) {
-            fastify.log && fastify.log.warn && fastify.log.warn({ err }, 'Failed to broadcast presence after logout')
-          }
+              fastify.log && fastify.log.info && fastify.log.info({ userId: existing.userId }, 'user presence: OFFLINE (logout with no remaining sessions and no active sockets)')
+            } else {
+              // There are leftover active sockets (possibly from other processes or delayed cleanup).
+              // Attempt to close sockets for the logged-out session, then recheck.
+              try {
+                await presenceService.closeSocketsBySession(existing.id).catch(() => {})
+              } catch (err) {
+                fastify.log && fastify.log.warn && fastify.log.warn({ err }, 'Failed to close sockets for logged-out session')
+              }
 
-          fastify.log && fastify.log.info && fastify.log.info({ userId: existing.userId }, 'user presence: OFFLINE (logout with no remaining sessions)')
+              const afterCount = await presenceService.getConnectionCount(existing.userId).catch(() => 0)
+              if (afterCount === 0) {
+                try {
+                  await fastify.prisma.user.update({ where: { id: existing.userId }, data: { status: 'OFFLINE' } })
+                } catch (err) {
+                  fastify.log && fastify.log.warn && fastify.log.warn({ err }, 'Failed to persist OFFLINE status after logout')
+                }
+                try {
+                  await presenceService.broadcast(existing.userId, 'OFFLINE').catch(() => {})
+                } catch (err) {
+                  fastify.log && fastify.log.warn && fastify.log.warn({ err }, 'Failed to broadcast presence after logout')
+                }
+                fastify.log && fastify.log.info && fastify.log.info({ userId: existing.userId }, 'user presence: OFFLINE (closed session sockets then no active sockets remain)')
+              } else {
+                fastify.log && fastify.log.info && fastify.log.info({ userId: existing.userId, remaining, connCount }, 'logout: session removed but active sockets remain; presence unchanged')
+              }
+            }
+          } catch (err) {
+            fastify.log && fastify.log.warn && fastify.log.warn({ err }, 'Error while verifying active socket connections during logout')
+          }
         } else {
           // There are still active sessions; close sockets for the specific
           // logged-out session only (if any), but do not change DB status.

@@ -118,6 +118,12 @@ export default async function chatWsRoutes(fastify: FastifyInstance) {
     return attempted;
   }
 
+  // Return number of active socket connections for a given userId
+  const getConnectionCount = async (userId: number) => {
+    const setOfSockets = connections.get(userId)
+    return setOfSockets ? setOfSockets.size : 0
+  }
+
 
   // Broadcast presence changes to connected friends of a user
   const broadcastPresenceToFriends = async (userId: number, status: 'ONLINE' | 'OFFLINE') => {
@@ -170,6 +176,7 @@ export default async function chatWsRoutes(fastify: FastifyInstance) {
     // Register helpers in the shared presenceService so other parts of the app can call them.
     presenceService.setCloseSockets(closeUserSockets)
     presenceService.setCloseSocketsBySession(closeSocketsBySession)
+    presenceService.setGetConnectionCount(getConnectionCount)
 
   chatService.on('message', async (message) => {
     // Get members of the channel
