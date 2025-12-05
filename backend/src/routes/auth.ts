@@ -1448,25 +1448,72 @@ const authRoutes: FastifyPluginAsync = async (fastify) => {
 
     const session = await fastify.prisma.session.findUnique({
       where: { token: parsed.data.refreshToken },
-      select: { userId: true }
+      select: { userId: true, id: true }
     })
 
     if (session) {
+      const sessionId = session.id;
+      const userId = session.userId;
+      
+      // Force close WebSocket connections for this session (load presenceService lazily)
+      try {
+        // Use require here so startup won't fail if module resolution differs inside container
+        // (e.g. during build/deploy). This keeps the behavior robust while still calling
+        // the presence helper when available.
+        // eslint-disable-next-line @typescript-eslint/no-var-requires
+        const presenceMod = require('../services/presence')
+        if (presenceMod && presenceMod.presenceService && typeof presenceMod.presenceService.closeSocketsBySession === 'function') {
+          await presenceMod.presenceService.closeSocketsBySession(sessionId)
+        }
+      } catch (err) {
+        request.log.warn({ err }, 'Failed to call presenceService.closeSocketsBySession')
+      }
+      
+      // Delete the session from DB
       await fastify.prisma.session.deleteMany({ where: { token: parsed.data.refreshToken } })
       
+      // Check remaining sessions
       const remainingSessions = await fastify.prisma.session.count({
-        where: { userId: session.userId }
+        where: { userId }
       })
 
       if (remainingSessions === 0) {
-        await fastify.prisma.user.update({
-          where: { id: session.userId },
-          data: { status: 'OFFLINE' }
-        })
-        userService.emitStatusChange(session.userId, 'OFFLINE')
-        request.log.info({ userId: session.userId }, 'Logout successful: All sessions deleted, status set to OFFLINE')
+        // If there are no DB sessions left, check active websocket connections
+        try {
+          // Lazy require presence service; if available, ask for connection count
+          // eslint-disable-next-line @typescript-eslint/no-var-requires
+          const presenceMod = require('../services/presence')
+          if (presenceMod && presenceMod.presenceService && typeof presenceMod.presenceService.getConnectionCount === 'function') {
+            const connCount = await presenceMod.presenceService.getConnectionCount(userId)
+            if (connCount === 0) {
+              await fastify.prisma.user.update({
+                where: { id: userId },
+                data: { status: 'OFFLINE' }
+              })
+              userService.emitStatusChange(userId, 'OFFLINE')
+              request.log.info({ userId }, 'Logout successful: All sessions deleted and no active sockets; status set to OFFLINE')
+            } else {
+              request.log.info({ userId, sockets: connCount }, 'Logout: sessions cleared but user still has active websocket connections; leaving ONLINE')
+            }
+          } else {
+            // presence service not available — fall back to setting OFFLINE (conservative)
+            await fastify.prisma.user.update({
+              where: { id: userId },
+              data: { status: 'OFFLINE' }
+            })
+            userService.emitStatusChange(userId, 'OFFLINE')
+            request.log.info({ userId }, 'Logout successful: All sessions deleted, presence service unavailable; status set to OFFLINE')
+          }
+        } catch (err) {
+          request.log.warn({ err }, 'Failed to query presenceService.getConnectionCount; setting OFFLINE as fallback')
+          await fastify.prisma.user.update({
+            where: { id: userId },
+            data: { status: 'OFFLINE' }
+          })
+          userService.emitStatusChange(userId, 'OFFLINE')
+        }
       } else {
-        request.log.info({ userId: session.userId, remaining: remainingSessions }, 'Logout successful: Session deleted, user remains ONLINE')
+        request.log.info({ userId, remaining: remainingSessions }, 'Logout successful: Session deleted, user remains ONLINE')
       }
     } else {
       request.log.warn({ token: parsed.data.refreshToken }, 'Logout failed: Session not found for token')

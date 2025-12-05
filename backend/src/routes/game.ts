@@ -89,6 +89,7 @@ export default async function gameRoutes(fastify: FastifyInstance) {
     const { game, sessionId } = gameResult;
     
     let playerSlot: 'p1' | 'p2' | null = null;
+    let authSessionId: number | null = null;
 
     const handleMessage = async (message: any) => {
       try {
@@ -106,8 +107,15 @@ export default async function gameRoutes(fastify: FastifyInstance) {
           let displayName: string | undefined;
           if (data.payload?.token) {
              try {
-               const decoded = fastify.jwt.verify<{ userId: number }>(data.payload.token);
+               const decoded = fastify.jwt.verify<{ userId: number; sessionId?: number }>(data.payload.token);
                userId = decoded.userId;
+               authSessionId = decoded.sessionId ?? null;
+               
+               // Bind socket to authSessionId for force-close on logout
+               if (authSessionId) {
+                 (socket as any).__sessionId = authSessionId;
+               }
+               
                if (userId) {
                  const u = await fastify.prisma.user.findUnique({ where: { id: userId }, select: { displayName: true } });
                  displayName = u?.displayName;
