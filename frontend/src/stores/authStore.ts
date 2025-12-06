@@ -5,6 +5,7 @@ export type AuthUserSnapshot = {
   displayName: string
   login: string
   status: string
+  twoFAEnabled?: boolean
   avatarUrl?: string
 }
 
@@ -18,15 +19,25 @@ type AuthStore = {
   accessToken: string | null
   refreshToken: string | null
   isHydrated: boolean
+  mfaChallenge: MfaChallenge | null
   setSession: (payload: { user: AuthUserSnapshot; tokens: AuthTokens }) => void
   updateUser: (updates: Partial<AuthUserSnapshot>) => void
   hydrateFromStorage: () => void
+  setMfaChallenge: (challenge: MfaChallenge | null) => void
+  clearMfaChallenge: () => void
   clearSession: () => void
+}
+
+export type MfaChallenge = {
+  id: string
+  redirectTo?: string | null
+  emailOrName?: string | null
 }
 
 const ACCESS_TOKEN_KEY = 'ft_access_token'
 const REFRESH_TOKEN_KEY = 'ft_refresh_token'
 const USER_SNAPSHOT_KEY = 'ft_user'
+const MFA_CHALLENGE_KEY = 'ft_mfa_challenge'
 
 const isBrowserEnvironment = () => typeof window !== 'undefined' && typeof sessionStorage !== 'undefined'
 
@@ -47,22 +58,50 @@ const readUserSnapshot = (): AuthUserSnapshot | null => {
   }
 }
 
+const readMfaChallenge = (): MfaChallenge | null => {
+  if (!isBrowserEnvironment()) {
+    return null
+  }
+  const raw = sessionStorage.getItem(MFA_CHALLENGE_KEY)
+  if (!raw) {
+    // Backward compatibility: legacy key that stored only the id string
+    const legacy = sessionStorage.getItem('ft_mfa_challenge_id')
+    if (legacy) {
+      const challenge: MfaChallenge = { id: legacy }
+      sessionStorage.setItem(MFA_CHALLENGE_KEY, JSON.stringify(challenge))
+      sessionStorage.removeItem('ft_mfa_challenge_id')
+      return challenge
+    }
+    return null
+  }
+  try {
+    return JSON.parse(raw) as MfaChallenge
+  } catch (error) {
+    console.warn('MFAチャレンジの復元に失敗したため、破棄しました。', error)
+    sessionStorage.removeItem(MFA_CHALLENGE_KEY)
+    return null
+  }
+}
+
 const useAuthStore = create<AuthStore>((set, get) => ({
   user: null,
   accessToken: null,
   refreshToken: null,
   isHydrated: false,
+  mfaChallenge: null,
   setSession: ({ user, tokens }) => {
     if (isBrowserEnvironment()) {
       sessionStorage.setItem(ACCESS_TOKEN_KEY, tokens.access)
       sessionStorage.setItem(REFRESH_TOKEN_KEY, tokens.refresh)
       sessionStorage.setItem(USER_SNAPSHOT_KEY, JSON.stringify(user))
+      sessionStorage.removeItem(MFA_CHALLENGE_KEY)
     }
     set({
       user,
       accessToken: tokens.access,
       refreshToken: tokens.refresh,
-      isHydrated: true
+      isHydrated: true,
+      mfaChallenge: null
     })
   },
   updateUser: (updates) => {
@@ -88,20 +127,39 @@ const useAuthStore = create<AuthStore>((set, get) => ({
       user: readUserSnapshot(),
       accessToken: accessToken ?? null,
       refreshToken: refreshToken ?? null,
-      isHydrated: true
+      isHydrated: true,
+      mfaChallenge: readMfaChallenge()
     })
+  },
+  setMfaChallenge: (challenge) => {
+    if (isBrowserEnvironment()) {
+      if (challenge) {
+        sessionStorage.setItem(MFA_CHALLENGE_KEY, JSON.stringify(challenge))
+      } else {
+        sessionStorage.removeItem(MFA_CHALLENGE_KEY)
+      }
+    }
+    set({ mfaChallenge: challenge })
+  },
+  clearMfaChallenge: () => {
+    if (isBrowserEnvironment()) {
+      sessionStorage.removeItem(MFA_CHALLENGE_KEY)
+    }
+    set({ mfaChallenge: null })
   },
   clearSession: () => {
     if (isBrowserEnvironment()) {
       sessionStorage.removeItem(ACCESS_TOKEN_KEY)
       sessionStorage.removeItem(REFRESH_TOKEN_KEY)
       sessionStorage.removeItem(USER_SNAPSHOT_KEY)
+      sessionStorage.removeItem(MFA_CHALLENGE_KEY)
     }
     set({
       user: null,
       accessToken: null,
       refreshToken: null,
-      isHydrated: true
+      isHydrated: true,
+      mfaChallenge: null
     })
   }
 }))
@@ -118,6 +176,7 @@ export const resetAuthStoreForTesting = () => {
     user: null,
     accessToken: null,
     refreshToken: null,
+    mfaChallenge: null,
     isHydrated: false
   })
 }

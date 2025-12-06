@@ -55,6 +55,26 @@ const usersRoutes: FastifyPluginAsync = async (fastify) => {
     ])
   })
 
+  fastify.get('/users/me', { preHandler: fastify.authenticate }, async (request, reply) => {
+    const userId = request.user.userId
+    const user = await fastify.prisma.user.findUnique({
+      where: { id: userId },
+      select: {
+        id: true,
+        displayName: true,
+        login: true,
+        status: true,
+        avatarUrl: true,
+        twoFAEnabled: true
+      }
+    })
+    if (!user) {
+      reply.code(404)
+      return { error: { code: 'USER_NOT_FOUND', message: 'User not found' } }
+    }
+    return user
+  })
+
   fastify.patch('/users/:id', { preHandler: fastify.authenticate }, async (request, reply) => {
     const paramsParsed = z.object({ id: z.coerce.number().int().positive() }).safeParse(request.params)
     if (!paramsParsed.success) {

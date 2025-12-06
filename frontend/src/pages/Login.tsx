@@ -19,6 +19,7 @@ const LoginPage = () => {
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [oauthLoadingProvider, setOauthLoadingProvider] = useState<OAuthProvider | null>(null)
   const setSession = useAuthStore((state) => state.setSession)
+  const setMfaChallenge = useAuthStore((state) => state.setMfaChallenge)
   const user = useAuthStore((state) => state.user)
   const isHydrated = useAuthStore((state) => state.isHydrated)
   const navigate = useNavigate()
@@ -80,9 +81,11 @@ const LoginPage = () => {
     } catch (error) {
       if (isAxiosError(error) && error.response?.status === 423) {
         const challengeId = (error.response.data as { challengeId?: string }).challengeId ?? null
-        if (challengeId) {
-          sessionStorage.setItem('ft_mfa_challenge_id', challengeId)
-        }
+        const redirectParam = searchParams.get('redirect')
+        const challengePayload = challengeId
+          ? { id: challengeId, redirectTo: redirectParam ?? '/', emailOrName: normalizedEmail }
+          : null
+        setMfaChallenge(challengePayload)
         setMfaChallengeId(challengeId)
         setMfaMessage('Two-factor authentication required.')
       } else if (isAxiosError(error) && error.response?.data && 'error' in error.response.data) {

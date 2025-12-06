@@ -7,6 +7,7 @@ import { describe, it, expect, beforeEach, vi } from 'vitest'
 import { render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { AxiosError, type AxiosResponse } from 'axios'
+import { MemoryRouter } from 'react-router-dom'
 import MfaChallengePage from './MfaChallenge'
 import { submitMfaChallenge } from '../lib/api'
 import { resetAuthStoreForTesting } from '../stores/authStore'
@@ -39,13 +40,17 @@ describe('MfaChallengePage', () => {
   })
 
   it('shows warning when challenge id is missing', () => {
-    render(<MfaChallengePage />)
+    render(
+      <MemoryRouter>
+        <MfaChallengePage />
+      </MemoryRouter>
+    )
     expect(screen.getByText('Valid challenge ID not found. Please log in again.')).toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Submit Code' })).toBeDisabled()
   })
 
   it('submits totp code successfully and stores tokens', async () => {
-    sessionStorage.setItem('ft_mfa_challenge_id', 'challenge-123')
+    sessionStorage.setItem('ft_mfa_challenge', JSON.stringify({ id: 'challenge-123', redirectTo: '/' }))
     const apiResponse: MfaResponse = {
       user: { id: 1, displayName: 'Alice', login: 'alice', status: 'ONLINE' },
       tokens: { access: 'access-token', refresh: 'refresh-token' },
@@ -54,7 +59,11 @@ describe('MfaChallengePage', () => {
     mockedSubmit.mockResolvedValue(apiResponse)
 
     const user = userEvent.setup()
-    render(<MfaChallengePage />)
+    render(
+      <MemoryRouter>
+        <MfaChallengePage />
+      </MemoryRouter>
+    )
 
     await user.type(screen.getByLabelText('6-digit Code'), '123456')
     await user.click(screen.getByRole('button', { name: 'Submit Code' }))
@@ -65,14 +74,18 @@ describe('MfaChallengePage', () => {
     expect(sessionStorage.getItem('ft_access_token')).toBe('access-token')
     expect(sessionStorage.getItem('ft_refresh_token')).toBe('refresh-token')
     expect(sessionStorage.getItem('ft_user')).toBe(JSON.stringify({ id: 1, displayName: 'Alice', login: 'alice', status: 'ONLINE' }))
-    expect(sessionStorage.getItem('ft_mfa_challenge_id')).toBeNull()
+    expect(sessionStorage.getItem('ft_mfa_challenge')).toBeNull()
   })
 
   it('allows switching to backup code mode', async () => {
-    sessionStorage.setItem('ft_mfa_challenge_id', 'challenge-456')
+    sessionStorage.setItem('ft_mfa_challenge', JSON.stringify({ id: 'challenge-456', redirectTo: '/' }))
     const user = userEvent.setup()
 
-    render(<MfaChallengePage />)
+    render(
+      <MemoryRouter>
+        <MfaChallengePage />
+      </MemoryRouter>
+    )
 
     await user.click(screen.getByLabelText('Use backup code'))
     await user.type(screen.getByLabelText('Backup Code'), 'abcd-efgh')
@@ -80,7 +93,7 @@ describe('MfaChallengePage', () => {
   })
 
   it('shows validation error when API reports invalid code', async () => {
-    sessionStorage.setItem('ft_mfa_challenge_id', 'challenge-789')
+    sessionStorage.setItem('ft_mfa_challenge', JSON.stringify({ id: 'challenge-789', redirectTo: '/' }))
     mockedSubmit.mockRejectedValue(
       createAxiosError(400, {
         error: { code: 'INVALID_MFA_CODE', message: 'Invalid code' }
@@ -88,17 +101,21 @@ describe('MfaChallengePage', () => {
     )
 
     const user = userEvent.setup()
-    render(<MfaChallengePage />)
+    render(
+      <MemoryRouter>
+        <MfaChallengePage />
+      </MemoryRouter>
+    )
 
     await user.type(screen.getByLabelText('6-digit Code'), '654321')
     await user.click(screen.getByRole('button', { name: 'Submit Code' }))
 
     expect(await screen.findByText('Invalid code')).toBeInTheDocument()
-    expect(sessionStorage.getItem('ft_mfa_challenge_id')).toBe('challenge-789')
+    expect(sessionStorage.getItem('ft_mfa_challenge')).toBe(JSON.stringify({ id: 'challenge-789', redirectTo: '/' }))
   })
 
   it('handles expired challenge by clearing storage', async () => {
-    sessionStorage.setItem('ft_mfa_challenge_id', 'challenge-expired')
+    sessionStorage.setItem('ft_mfa_challenge', JSON.stringify({ id: 'challenge-expired', redirectTo: '/' }))
     mockedSubmit.mockRejectedValue(
       createAxiosError(410, {
         error: { code: 'MFA_CHALLENGE_EXPIRED', message: 'challenge expired' }
@@ -106,12 +123,16 @@ describe('MfaChallengePage', () => {
     )
 
     const user = userEvent.setup()
-    render(<MfaChallengePage />)
+    render(
+      <MemoryRouter>
+        <MfaChallengePage />
+      </MemoryRouter>
+    )
 
     await user.type(screen.getByLabelText('6-digit Code'), '111111')
     await user.click(screen.getByRole('button', { name: 'Submit Code' }))
 
     expect(await screen.findByText('Challenge expired. Please log in again.')).toBeInTheDocument()
-    expect(sessionStorage.getItem('ft_mfa_challenge_id')).toBeNull()
+    expect(sessionStorage.getItem('ft_mfa_challenge')).toBeNull()
   })
 })

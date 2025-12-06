@@ -1,5 +1,5 @@
 import axios, { AxiosHeaders, type InternalAxiosRequestConfig } from 'axios'
-import useAuthStore, { readAccessTokenFromStorage } from '../stores/authStore'
+import useAuthStore, { readAccessTokenFromStorage, type AuthUserSnapshot } from '../stores/authStore'
 
 const rawBaseUrl = import.meta.env.VITE_API_BASE_URL?.trim()
 const shouldUseRelativeBase =
@@ -126,13 +126,7 @@ export type LoginPayload = {
 }
 
 export type LoginSuccessResponse = {
-  user: {
-    id: number
-    displayName: string
-    login: string
-    status: string
-    avatarUrl?: string
-  }
+  user: AuthUserSnapshot
   tokens: {
     access: string
     refresh: string
@@ -156,6 +150,11 @@ export type RegisterPayload = {
 export const register = async (payload: RegisterPayload) => {
   const response = await apiClient.post('/auth/register', payload)
   return response.data as LoginSuccessResponse
+}
+
+export const fetchMe = async () => {
+  const response = await apiClient.get('/users/me')
+  return response.data as AuthUserSnapshot
 }
 
 export type OAuthProvider = 'google'
@@ -205,6 +204,36 @@ export type MfaChallengePayload = {
 export const submitMfaChallenge = async (payload: MfaChallengePayload) => {
   const response = await apiClient.post('/auth/mfa/challenge', payload)
   return response.data as LoginSuccessResponse
+}
+
+export type MfaSetupResponse = {
+  secret: string
+  otpauthUrl: string
+}
+
+export const fetchMfaSetup = async () => {
+  const response = await apiClient.get('/auth/mfa/setup')
+  return response.data as MfaSetupResponse
+}
+
+export const verifyMfa = async (code: string) => {
+  const response = await apiClient.post('/auth/mfa/verify', { code })
+  return response.data as { twoFAEnabled: boolean }
+}
+
+export type BackupCodesResponse =
+  | { regenerated: true; codes: string[]; remaining: number }
+  | { regenerated: false; remaining: number }
+
+export const getBackupCodes = async (regenerate: boolean) => {
+  const response = await apiClient.get('/auth/mfa/backup-codes', {
+    params: { regenerate: String(regenerate) }
+  })
+  return response.data as BackupCodesResponse
+}
+
+export const disableMfa = async (payload: { code?: string; backupCode?: string }) => {
+  await apiClient.delete('/auth/mfa', { data: payload })
 }
 
 export type UserProfileResponse = {
