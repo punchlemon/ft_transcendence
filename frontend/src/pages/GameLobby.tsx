@@ -86,13 +86,13 @@ const GameLobbyPage = () => {
   return (
     <div className="mx-auto max-w-4xl px-6 py-12">
       {isMatching ? (
-        <div className="flex flex-col items-center justify-center rounded-xl border border-slate-200 bg-white p-12 shadow-sm">
-          <div className="mb-6 h-16 w-16 animate-spin rounded-full border-4 border-slate-200 border-t-indigo-600"></div>
-          <h2 className="mb-2 text-xl font-semibold text-slate-900">Looking for an opponent...</h2>
-          <p className="mb-8 text-slate-500">Please wait while we find a match for you.</p>
+        <div className="flex flex-col items-center justify-center rounded-xl border border-slate-200 bg-white p-12 shadow-sm dark:border-slate-700 dark:bg-slate-800">
+          <div className="mb-6 h-16 w-16 animate-spin rounded-full border-4 border-slate-200 border-t-indigo-600 dark:border-slate-600 dark:border-t-indigo-400"></div>
+          <h2 className="mb-2 text-xl font-semibold text-slate-900 dark:text-slate-100">Looking for an opponent...</h2>
+          <p className="mb-8 text-slate-500 dark:text-slate-400">Please wait while we find a match for you.</p>
           <button
             onClick={handleCancelMatching}
-            className="rounded-md border border-slate-300 px-6 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50"
+            className="rounded-md border border-slate-300 px-6 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50 dark:border-slate-600 dark:text-slate-300 dark:hover:bg-slate-700"
           >
             Cancel
           </button>
@@ -106,13 +106,13 @@ const GameLobbyPage = () => {
               disabled={!user}
               className={`flex flex-col items-center rounded-xl border p-8 transition-all ${
                 selectedMode === 'local'
-                  ? 'border-indigo-600 bg-indigo-50 ring-2 ring-indigo-600 ring-offset-2'
-                  : 'border-slate-200 bg-white hover:border-indigo-300 hover:shadow-md'
+                  ? 'border-indigo-600 bg-indigo-50 ring-2 ring-indigo-600 ring-offset-2 dark:bg-indigo-950 dark:ring-offset-slate-900'
+                  : 'border-slate-200 bg-white hover:border-indigo-300 hover:shadow-md dark:border-slate-600 dark:bg-slate-800 dark:hover:border-indigo-500'
               } ${!user ? 'opacity-60 cursor-not-allowed' : ''}`}
             >
               <div className="mb-4 text-4xl">👥</div>
-              <h3 className="mb-2 text-lg font-semibold text-slate-900">Local 1v1</h3>
-              <p className="text-center text-sm text-slate-500">
+              <h3 className="mb-2 text-lg font-semibold text-slate-900 dark:text-slate-100">Local 1v1</h3>
+              <p className="text-center text-sm text-slate-500 dark:text-slate-400">
                 Play against a friend on the same device.
               </p>
             </button>
@@ -122,13 +122,13 @@ const GameLobbyPage = () => {
               disabled={!user}
               className={`flex flex-col items-center rounded-xl border p-8 transition-all ${
                 selectedMode === 'remote'
-                  ? 'border-indigo-600 bg-indigo-50 ring-2 ring-indigo-600 ring-offset-2'
-                  : 'border-slate-200 bg-white hover:border-indigo-300 hover:shadow-md'
+                  ? 'border-indigo-600 bg-indigo-50 ring-2 ring-indigo-600 ring-offset-2 dark:bg-indigo-950 dark:ring-offset-slate-900'
+                  : 'border-slate-200 bg-white hover:border-indigo-300 hover:shadow-md dark:border-slate-600 dark:bg-slate-800 dark:hover:border-indigo-500'
               } ${!user ? 'opacity-60 cursor-not-allowed' : ''}`}
             >
               <div className="mb-4 text-4xl">🌍</div>
-              <h3 className="mb-2 text-lg font-semibold text-slate-900">Online PvP</h3>
-              <p className="text-center text-sm text-slate-500">
+              <h3 className="mb-2 text-lg font-semibold text-slate-900 dark:text-slate-100">Online PvP</h3>
+              <p className="text-center text-sm text-slate-500 dark:text-slate-400">
                 Challenge players from around the world.
               </p>
             </button>
@@ -138,13 +138,13 @@ const GameLobbyPage = () => {
               disabled={!user}
               className={`flex flex-col items-center rounded-xl border p-8 transition-all ${
                 selectedMode === 'ai'
-                  ? 'border-indigo-600 bg-indigo-50 ring-2 ring-indigo-600 ring-offset-2'
-                  : 'border-slate-200 bg-white hover:border-indigo-300 hover:shadow-md'
+                  ? 'border-indigo-600 bg-indigo-50 ring-2 ring-indigo-600 ring-offset-2 dark:bg-indigo-950 dark:ring-offset-slate-900'
+                  : 'border-slate-200 bg-white hover:border-indigo-300 hover:shadow-md dark:border-slate-600 dark:bg-slate-800 dark:hover:border-indigo-500'
               } ${!user ? 'opacity-60 cursor-not-allowed' : ''}`}
             >
               <div className="mb-4 text-4xl">🤖</div>
-              <h3 className="mb-2 text-lg font-semibold text-slate-900">vs AI</h3>
-              <p className="text-center text-sm text-slate-500">
+              <h3 className="mb-2 text-lg font-semibold text-slate-900 dark:text-slate-100">vs AI</h3>
+              <p className="text-center text-sm text-slate-500 dark:text-slate-400">
                 Practice your skills against a bot.
               </p>
             </button>
@@ -154,13 +154,13 @@ const GameLobbyPage = () => {
               disabled={!user}
               className={`flex flex-col items-center rounded-xl border p-8 transition-all ${
                 selectedMode === 'tournament'
-                  ? 'border-indigo-600 bg-indigo-50 ring-2 ring-indigo-600 ring-offset-2'
-                  : 'border-slate-200 bg-white hover:border-indigo-300 hover:shadow-md'
+                  ? 'border-indigo-600 bg-indigo-50 ring-2 ring-indigo-600 ring-offset-2 dark:bg-indigo-950 dark:ring-offset-slate-900'
+                  : 'border-slate-200 bg-white hover:border-indigo-300 hover:shadow-md dark:border-slate-600 dark:bg-slate-800 dark:hover:border-indigo-500'
               } ${!user ? 'opacity-60 cursor-not-allowed' : ''}`}
             >
               <div className="mb-4 text-4xl">🏆</div>
-              <h3 className="mb-2 text-lg font-semibold text-slate-900">Tournament</h3>
-              <p className="text-center text-sm text-slate-500">
+              <h3 className="mb-2 text-lg font-semibold text-slate-900 dark:text-slate-100">Tournament</h3>
+              <p className="text-center text-sm text-slate-500 dark:text-slate-400">
                 Compete in a bracket-style tournament.
               </p>
             </button>
@@ -168,25 +168,25 @@ const GameLobbyPage = () => {
 
           {/* Sub Options for Local */}
           {selectedMode === 'local' && (
-            <div className="animate-in fade-in slide-in-from-top-4 rounded-xl border border-slate-200 bg-slate-50 p-6 duration-300">
-              <h3 className="mb-4 text-lg font-medium text-slate-900">Player Aliases</h3>
+            <div className="animate-in fade-in slide-in-from-top-4 rounded-xl border border-slate-200 bg-slate-50 p-6 duration-300 dark:border-slate-700 dark:bg-slate-800/50">
+              <h3 className="mb-4 text-lg font-medium text-slate-900 dark:text-slate-100">Player Aliases</h3>
               <div className="flex flex-col gap-4 sm:flex-row">
                 <div className="flex-1">
-                  <label className="mb-1 block text-sm font-medium text-slate-700">Player 1</label>
+                  <label className="mb-1 block text-sm font-medium text-slate-700 dark:text-slate-300">Player 1</label>
                   <input
                     type="text"
                     value={localP1}
                     onChange={(e) => setLocalP1(e.target.value)}
-                    className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm focus:border-indigo-500 focus:outline-none focus:ring-1 focus:ring-indigo-500"
+                    className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm focus:border-indigo-500 focus:outline-none focus:ring-1 focus:ring-indigo-500 dark:border-slate-600 dark:bg-slate-900 dark:text-slate-100"
                   />
                 </div>
                 <div className="flex-1">
-                  <label className="mb-1 block text-sm font-medium text-slate-700">Player 2</label>
+                  <label className="mb-1 block text-sm font-medium text-slate-700 dark:text-slate-300">Player 2</label>
                   <input
                     type="text"
                     value={localP2}
                     onChange={(e) => setLocalP2(e.target.value)}
-                    className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm focus:border-indigo-500 focus:outline-none focus:ring-1 focus:ring-indigo-500"
+                    className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm focus:border-indigo-500 focus:outline-none focus:ring-1 focus:ring-indigo-500 dark:border-slate-600 dark:bg-slate-900 dark:text-slate-100"
                   />
                 </div>
               </div>
@@ -195,36 +195,36 @@ const GameLobbyPage = () => {
 
           {/* Sub Options for Remote */}
           {selectedMode === 'remote' && (
-            <div className="animate-in fade-in slide-in-from-top-4 rounded-xl border border-slate-200 bg-slate-50 p-6 duration-300">
-              <h3 className="mb-4 text-lg font-medium text-slate-900">Select Match Type</h3>
+            <div className="animate-in fade-in slide-in-from-top-4 rounded-xl border border-slate-200 bg-slate-50 p-6 duration-300 dark:border-slate-700 dark:bg-slate-800/50">
+              <h3 className="mb-4 text-lg font-medium text-slate-900 dark:text-slate-100">Select Match Type</h3>
               <div className="flex flex-col gap-4 sm:flex-row">
                 <button
                   onClick={() => setMatchType('public')}
                   className={`flex-1 rounded-lg border p-4 text-left transition-colors ${
                     matchType === 'public'
-                      ? 'border-indigo-600 bg-white ring-1 ring-indigo-600'
-                      : 'border-slate-200 bg-white hover:border-indigo-300'
+                      ? 'border-indigo-600 bg-white ring-1 ring-indigo-600 dark:bg-indigo-950 dark:border-indigo-600 dark:ring-indigo-500'
+                      : 'border-slate-200 bg-white hover:border-indigo-300 dark:border-slate-700 dark:bg-slate-800 dark:hover:border-indigo-500'
                   }`}
                 >
-                  <div className="font-medium text-slate-900">Public Match</div>
-                  <div className="text-sm text-slate-500">Find a random opponent</div>
+                  <div className="font-medium text-slate-900 dark:text-slate-100">Public Match</div>
+                  <div className="text-sm text-slate-500 dark:text-slate-400">Find a random opponent</div>
                 </button>
                 <button
                   onClick={() => setMatchType('private')}
                   className={`flex-1 rounded-lg border p-4 text-left transition-colors ${
                     matchType === 'private'
-                      ? 'border-indigo-600 bg-white ring-1 ring-indigo-600'
-                      : 'border-slate-200 bg-white hover:border-indigo-300'
+                      ? 'border-indigo-600 bg-white ring-1 ring-indigo-600 dark:bg-indigo-950 dark:border-indigo-600 dark:ring-indigo-500'
+                      : 'border-slate-200 bg-white hover:border-indigo-300 dark:border-slate-700 dark:bg-slate-800 dark:hover:border-indigo-500'
                   }`}
                 >
-                  <div className="font-medium text-slate-900">Private Room</div>
-                  <div className="text-sm text-slate-500">Create or join with a code</div>
+                  <div className="font-medium text-slate-900 dark:text-slate-100">Private Room</div>
+                  <div className="text-sm text-slate-500 dark:text-slate-400">Create or join with a code</div>
                 </button>
               </div>
 
               {matchType === 'private' && (
                 <div className="mt-4">
-                  <label className="mb-1 block text-sm font-medium text-slate-700">
+                  <label className="mb-1 block text-sm font-medium text-slate-700 dark:text-slate-300">
                     Room Code (Optional to join)
                   </label>
                   <input
@@ -232,7 +232,7 @@ const GameLobbyPage = () => {
                     value={roomCode}
                     onChange={(e) => setRoomCode(e.target.value)}
                     placeholder="Enter code to join or leave empty to create"
-                    className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm focus:border-indigo-500 focus:outline-none focus:ring-1 focus:ring-indigo-500"
+                    className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm focus:border-indigo-500 focus:outline-none focus:ring-1 focus:ring-indigo-500 dark:border-slate-600 dark:bg-slate-900 dark:text-slate-100 dark:placeholder-slate-400"
                   />
                 </div>
               )}
@@ -241,8 +241,8 @@ const GameLobbyPage = () => {
 
           {/* Sub Options for AI */}
           {selectedMode === 'ai' && (
-            <div className="animate-in fade-in slide-in-from-top-4 rounded-xl border border-slate-200 bg-slate-50 p-6 duration-300">
-              <h3 className="mb-4 text-lg font-medium text-slate-900">Select Difficulty</h3>
+            <div className="animate-in fade-in slide-in-from-top-4 rounded-xl border-2 border-slate-200 bg-slate-50 p-6 duration-300 dark:border-slate-600 dark:bg-slate-800/50">
+              <h3 className="mb-4 text-lg font-medium text-slate-900 dark:text-slate-100">Select Difficulty</h3>
               <div className="flex gap-4">
                 {(['EASY', 'NORMAL', 'HARD'] as const).map((diff) => (
                   <button
@@ -250,8 +250,8 @@ const GameLobbyPage = () => {
                     onClick={() => setAiDifficulty(diff)}
                     className={`flex-1 rounded-lg border p-3 text-center transition-colors ${
                       aiDifficulty === diff
-                        ? 'border-indigo-600 bg-white ring-1 ring-indigo-600 font-semibold text-indigo-600'
-                        : 'border-slate-200 bg-white text-slate-600 hover:border-indigo-300'
+                        ? 'border-indigo-600 bg-white ring-1 ring-indigo-600 font-semibold text-indigo-600 dark:bg-indigo-950 dark:border-indigo-600 dark:text-indigo-400 dark:ring-indigo-500'
+                        : 'border-slate-200 bg-white text-slate-600 hover:border-indigo-300 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-400 dark:hover:border-indigo-500'
                     }`}
                   >
                     {diff}
@@ -263,8 +263,8 @@ const GameLobbyPage = () => {
 
           {/* Sub Options for Tournament */}
           {selectedMode === 'tournament' && (
-            <div className="animate-in fade-in slide-in-from-top-4 rounded-xl border border-slate-200 bg-slate-50 p-6 duration-300">
-              <h3 className="mb-4 text-lg font-medium text-slate-900">Tournament Setup</h3>
+            <div className="animate-in fade-in slide-in-from-top-4 rounded-xl border border-slate-200 bg-slate-50 p-6 duration-300 dark:border-slate-700 dark:bg-slate-800/50">
+              <h3 className="mb-4 text-lg font-medium text-slate-900 dark:text-slate-100">Tournament Setup</h3>
               <TournamentAliasPanel
                 aliasInput={tournamentSetup.aliasInput}
                 onAliasChange={tournamentSetup.setAliasInput}
@@ -275,8 +275,8 @@ const GameLobbyPage = () => {
               />
               
               {tournamentSetup.players.length > 0 && (
-                <div className="mt-6 border-t border-slate-200 pt-6">
-                  <h4 className="mb-4 text-sm font-semibold uppercase tracking-wide text-slate-500">Tournament Bracket</h4>
+                <div className="mt-6 border-t border-slate-200 pt-6 dark:border-slate-700">
+                  <h4 className="mb-4 text-sm font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">Tournament Bracket</h4>
                   <BracketView 
                     matches={generatePreviewMatches(tournamentSetup.players) as any} 
                     currentMatchIndex={-1}
@@ -299,7 +299,7 @@ const GameLobbyPage = () => {
                 (selectedMode === 'tournament' && tournamentSetup.players.length < 2) ||
                 tournamentSetup.isCreating
               }
-              className="min-w-[200px] rounded-full bg-slate-900 px-8 py-3 font-semibold text-white transition-transform hover:scale-105 hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:scale-100"
+              className="min-w-[200px] rounded-full bg-slate-900 px-8 py-3 font-semibold text-white transition-transform hover:scale-105 hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:scale-100 dark:bg-indigo-600 dark:hover:bg-indigo-700 dark:hover:scale-105"
             >
               {selectedMode === 'tournament'
                 ? tournamentSetup.isCreating

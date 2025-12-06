@@ -7,15 +7,14 @@ import { connectChatWs, disconnectChatWs, onChatWsEvent } from '../../lib/chatWs
 import { inviteToGame, fetchBlockedUsers } from '../../lib/api'
 import NotificationItem from './NotificationItem'
 import UserAvatar from '../ui/UserAvatar'
+import { MessageInput } from './MessageInput'
 
 const ChatDrawer = () => {
   const [activeTab, setActiveTab] = useState<'dm' | 'system'>('dm')
-  const [messageInput, setMessageInput] = useState('')
   const [showMenu, setShowMenu] = useState(false)
   const [blockedUsers, setBlockedUsers] = useState<number[]>([])
   const [blockedByUsers, setBlockedByUsers] = useState<number[]>([])
   const messagesEndRef = useRef<HTMLDivElement>(null)
-  const inputRef = useRef<HTMLInputElement>(null)
   const navigate = useNavigate()
   
   const { user } = useAuthStore()
@@ -34,7 +33,7 @@ const ChatDrawer = () => {
   const { notifications, fetchNotifications, unreadCount } = useNotificationStore()
 
   // Ensure threads is always an array to avoid test/runtime errors when store is uninitialized
-  const threadsArr = threads ?? []
+  const threadsArr = useMemo(() => threads ?? [], [threads])
 
   const totalUnreadMessages = useMemo(() => {
     return threadsArr.reduce((acc, t) => acc + (t.unreadCount || 0), 0);
@@ -85,7 +84,7 @@ const ChatDrawer = () => {
       unsubscribeRelationship()
       unsubscribeUserUpdate()
     }
-  }, [])
+  }, [handleUserUpdate])
 
   const activeMessages = useMemo(() => {
     return activeThreadId ? (messages?.[activeThreadId] || []) : []
@@ -101,21 +100,17 @@ const ChatDrawer = () => {
     }
   }, [isDrawerOpen, activeThreadId, activeMessages])
 
-  const handleSendMessage = async (e: React.FormEvent) => {
-    e.preventDefault()
-    if (!messageInput.trim() || !activeThreadId) return
+  const handleSendMessage = async (message: string) => {
+    if (!message.trim() || !activeThreadId) return
 
     try {
-      await sendMessage(messageInput)
-      setMessageInput('')
+      await sendMessage(message)
     } catch (err: any) {
       console.error('Failed to send message', err)
       if (err.message?.includes('blocked')) {
-        // If we get a block error, assume we are blocked by them
-        // We can't easily know which user blocked us from the error message without parsing
-        // But for now, we can just alert or show a toast.
         alert('Failed to send message: You are blocked or have blocked this user.')
       }
+      throw err
     }
   }
 
@@ -135,12 +130,7 @@ const ChatDrawer = () => {
   }, [activeThread, blockedUsers, user]);
 
   useEffect(() => {
-    if (isDrawerOpen && activeThreadId && !isBlockedContext) {
-      // Focus input when chat opens or thread changes
-      setTimeout(() => {
-        inputRef.current?.focus()
-      }, 100)
-    }
+    // Auto-scroll when drawer opens or thread changes
   }, [isDrawerOpen, activeThreadId, isBlockedContext])
 
   const formatTime = (dateStr: string) => {
@@ -177,9 +167,9 @@ const ChatDrawer = () => {
   }
 
   return (
-    <div className={`fixed bottom-0 right-0 z-50 flex flex-col bg-white shadow-2xl transition-all duration-300 ease-in-out ${
+    <div className={`fixed bottom-0 right-0 z-50 flex flex-col bg-white shadow-2xl transition-all duration-300 ease-in-out dark:bg-slate-800 ${
       isDrawerOpen ? 'h-[500px] w-full sm:w-96' : 'h-12 w-72'
-    } rounded-t-xl border border-slate-200`}>
+    } rounded-t-xl border border-slate-200 dark:border-slate-700`}>
       
       {/* Header */}
       <div 
@@ -204,9 +194,13 @@ const ChatDrawer = () => {
       {isDrawerOpen && (
         <div className="flex flex-1 flex-col overflow-hidden">
           {/* Tabs */}
-          <div className="flex border-b border-slate-200 flex-shrink-0">
+          <div className="flex border-b border-slate-200 flex-shrink-0 dark:border-slate-700 dark:bg-slate-800">
             <button
-              className={`flex-1 py-2 text-sm font-medium relative ${activeTab === 'dm' ? 'border-b-2 border-indigo-600 text-indigo-600' : 'text-slate-500 hover:text-slate-700'}`}
+              className={`flex-1 py-2 text-sm font-medium relative ${
+                activeTab === 'dm'
+                  ? 'border-b-2 border-indigo-600 text-indigo-600 dark:text-indigo-400 dark:border-indigo-400'
+                  : 'text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-300'
+              }`}
               onClick={() => setActiveTab('dm')}
             >
               Messages
@@ -217,7 +211,11 @@ const ChatDrawer = () => {
               )}
             </button>
             <button
-              className={`flex-1 py-2 text-sm font-medium relative ${activeTab === 'system' ? 'border-b-2 border-indigo-600 text-indigo-600' : 'text-slate-500 hover:text-slate-700'}`}
+              className={`flex-1 py-2 text-sm font-medium relative ${
+                activeTab === 'system'
+                  ? 'border-b-2 border-indigo-600 text-indigo-600 dark:text-indigo-400 dark:border-indigo-400'
+                  : 'text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-300'
+              }`}
               onClick={() => setActiveTab('system')}
             >
               System
@@ -235,11 +233,11 @@ const ChatDrawer = () => {
               activeThreadId ? (
                 // Chat Room View
                 <>
-                  <div className="flex items-center justify-between border-b border-slate-100 px-4 py-2 flex-shrink-0">
+                  <div className="flex items-center justify-between border-b border-slate-100 px-4 py-2 flex-shrink-0 dark:border-slate-700 dark:bg-slate-800">
                     <div className="flex items-center">
                       <button 
                         onClick={() => selectThread(null)}
-                        className="mr-2 text-slate-400 hover:text-slate-600"
+                        className="mr-2 text-slate-400 hover:text-slate-600 dark:hover:text-slate-300"
                       >
                         ←
                       </button>
@@ -258,7 +256,7 @@ const ChatDrawer = () => {
                            linkToProfile={true}
                          />
                       )}
-                      <span className="font-medium text-slate-900">
+                      <span className="font-medium text-slate-900 dark:text-slate-100">
                         {activeThread?.name}
                       </span>
                     </div>
@@ -272,13 +270,13 @@ const ChatDrawer = () => {
                           ⋮
                         </button>
                         {showMenu && (
-                          <div className="absolute right-0 top-full mt-1 w-48 rounded-md bg-white py-1 shadow-lg ring-1 ring-black ring-opacity-5 z-50">
+                          <div className="absolute right-0 top-full mt-1 w-48 rounded-md bg-white py-1 shadow-lg ring-1 ring-black ring-opacity-5 z-50 dark:bg-slate-700">
                             <button
                               onClick={() => {
                                 handleInvite()
                                 setShowMenu(false)
                               }}
-                              className="block w-full px-4 py-2 text-left text-sm text-slate-700 hover:bg-slate-100"
+                              className="block w-full px-4 py-2 text-left text-sm text-slate-700 hover:bg-slate-100 dark:text-slate-200 dark:hover:bg-slate-600"
                             >
                               Invite to Game
                             </button>
@@ -288,7 +286,7 @@ const ChatDrawer = () => {
                     )}
                   </div>
 
-                  <div className="flex-1 overflow-y-auto bg-slate-50 p-4">
+                  <div className="flex-1 overflow-y-auto bg-slate-50 p-4 dark:bg-slate-900">
                     {activeMessages.map((msg, index) => {
                       const isMe = msg.userId === user?.id;
                       const isSameUser = index > 0 && activeMessages[index - 1].userId === msg.userId;
@@ -334,13 +332,13 @@ const ChatDrawer = () => {
                               </>
                             ) : (
                               <>
-                                <div className="max-w-[70%] rounded-lg px-3 py-2 text-sm bg-white border border-slate-200 text-slate-800 rounded-bl-none">
+                                <div className="max-w-[70%] rounded-lg px-3 py-2 text-sm bg-white border border-slate-200 text-slate-800 rounded-bl-none dark:bg-slate-800 dark:border-slate-600 dark:text-slate-100">
                                   {showDisplayName && (
                                     <div className="mb-1 text-xs font-bold opacity-75">{msg.user.displayName}</div>
                                   )}
                                   {msg.content}
                                 </div>
-                                <span className="text-[10px] text-slate-500 mb-1">{formatTime(msg.sentAt)}</span>
+                                <span className="text-[10px] text-slate-500 mb-1 dark:text-slate-400">{formatTime(msg.sentAt)}</span>
                               </>
                             )}
                           </div>
@@ -350,30 +348,18 @@ const ChatDrawer = () => {
                     <div ref={messagesEndRef} />
                   </div>
 
-                  <form onSubmit={handleSendMessage} className="border-t border-slate-200 p-3 flex-shrink-0">
-                    <div className="flex gap-2">
-                      <input
-                        ref={inputRef}
-                        type="text"
-                        value={messageInput}
-                        onChange={(e) => setMessageInput(e.target.value)}
-                        placeholder={isBlockedContext ? "You cannot send messages to this user" : "Type a message..."}
-                        disabled={isBlockedContext}
-                        className="flex-1 rounded-md border border-slate-300 px-3 py-2 text-sm focus:border-indigo-500 focus:outline-none disabled:bg-slate-100 disabled:text-slate-500"
-                      />
-                      <button 
-                        type="submit"
-                        disabled={!messageInput.trim() || isBlockedContext}
-                        className="rounded-md bg-indigo-600 px-3 py-2 text-sm font-medium text-white hover:bg-indigo-700 disabled:opacity-50"
-                      >
-                        Send
-                      </button>
-                    </div>
-                  </form>
+                  <div className="border-t border-slate-200 p-3 flex-shrink-0 dark:border-slate-700 dark:bg-slate-800">
+                    <MessageInput
+                      onSend={handleSendMessage}
+                      placeholder={isBlockedContext ? "You cannot send messages to this user" : "Type a message..."}
+                      disabled={isBlockedContext}
+                      autoFocus={true}
+                    />
+                  </div>
                 </>
               ) : (
                 // Thread List View
-                <div className="flex-1 overflow-y-auto">
+                <div className="flex-1 overflow-y-auto dark:bg-slate-900">
                   {threadsArr.length > 0 ? (
                     threadsArr.map((thread) => {
                       const otherMember = thread.type === 'DM' ? thread.members.find((m: any) => m.id !== user?.id) : null
@@ -381,7 +367,7 @@ const ChatDrawer = () => {
                         <div
                           key={thread.id}
                           onClick={() => selectThread(thread.id)}
-                          className="flex cursor-pointer items-center gap-3 border-b border-slate-50 p-3 hover:bg-slate-50"
+                          className="flex cursor-pointer items-center gap-3 border-b border-slate-50 p-3 hover:bg-slate-50 dark:border-slate-700 dark:hover:bg-slate-700"
                         >
                           <UserAvatar 
                             key={otherMember?.avatarUrl}
@@ -397,14 +383,14 @@ const ChatDrawer = () => {
                           />
                           <div className="flex-1 overflow-hidden">
                             <div className="flex justify-between items-center">
-                              <span className="font-medium text-slate-900">{thread.name}</span>
+                              <span className="font-medium text-slate-900 dark:text-slate-100">{thread.name}</span>
                               {thread.unreadCount > 0 && (
                                   <span className="flex h-5 w-5 items-center justify-center rounded-full bg-red-500 text-[10px] font-bold text-white">
                                       {thread.unreadCount > 9 ? '9+' : thread.unreadCount}
                                   </span>
                               )}
                             </div>
-                            <div className="truncate text-xs text-slate-500">
+                            <div className="truncate text-xs text-slate-500 dark:text-slate-400">
                               {thread.lastMessage?.content || 'No messages yet'}
                             </div>
                           </div>
@@ -412,7 +398,7 @@ const ChatDrawer = () => {
                       )
                     })
                   ) : (
-                    <div className="p-4 text-center text-sm text-slate-500">
+                    <div className="p-4 text-center text-sm text-slate-500 dark:text-slate-400">
                       No conversations yet
                     </div>
                   )}
@@ -420,14 +406,14 @@ const ChatDrawer = () => {
               )
             ) : (
               // System Notifications
-              <div className="flex-1 overflow-y-auto">
-                <div className="divide-y divide-slate-100">
+              <div className="flex-1 overflow-y-auto dark:bg-slate-900">
+                <div className="divide-y divide-slate-100 dark:divide-slate-700">
                   {notifications.length > 0 ? (
                     notifications.map((notification) => (
                       <NotificationItem key={notification.id} notification={notification} />
                     ))
                   ) : (
-                    <div className="p-4 text-center text-sm text-slate-500">
+                    <div className="p-4 text-center text-sm text-slate-500 dark:text-slate-400">
                       No system notifications
                     </div>
                   )}

@@ -11,12 +11,12 @@ const HomePage = () => {
     <div className="mx-auto min-h-screen max-w-4xl px-6 py-12">
       {user ? (
         <div className="mb-8 text-center">
-          <h1 className="mb-2 text-3xl font-bold text-slate-900">Welcome, {user.displayName}</h1>
+          <h1 className="mb-2 text-3xl font-bold text-slate-900 dark:text-slate-100">Welcome, {user.displayName}</h1>
         </div>
       ) : (
         <div className="mb-8 text-center">
-          <h1 className="mb-2 text-4xl font-bold text-slate-900">ft_transcendence</h1>
-          <p className="mb-6 text-lg text-slate-600">Welcome to the Pong-based game. Please login to start playing.</p>
+          <h1 className="mb-2 text-4xl font-bold text-slate-900 dark:text-slate-100">ft_transcendence</h1>
+          <p className="mb-6 text-lg text-slate-600 dark:text-slate-400">Welcome to the Pong-based game. Please login to start playing.</p>
         </div>
       )}
 

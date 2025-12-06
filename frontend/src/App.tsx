@@ -17,12 +17,16 @@ import { useNotificationStore } from './stores/notificationStore'
 import RequireAuth from './components/auth/RequireAuth'
 import { disconnectChatWs } from './lib/chatWs'
 import { api } from './lib/api'
+import { useDarkMode } from './hooks/useDarkMode'
 
 const App = () => {
   const user = useAuthStore((state) => state.user)
   const clearSession = useAuthStore((state) => state.clearSession)
   const resetChat = useChatStore((state) => state.reset)
   const resetNotifications = useNotificationStore((state) => state.reset)
+
+  // デバイスのダークモード設定を自動検出して適用
+  useDarkMode()
 
   const handleLogout = async () => {
     const refreshToken = useAuthStore.getState().refreshToken
@@ -71,13 +75,13 @@ const App = () => {
   return (
     <BrowserRouter>
       <AuthRedirectOnLogout />
-      <div className="min-h-screen bg-gradient-to-b from-slate-50 via-white to-slate-100">
-        <header className="border-b border-slate-200 bg-white/80 backdrop-blur">
+      <div className="min-h-screen bg-slate-50 dark:bg-slate-900">
+        <header className="border-b border-slate-200 bg-white/80 backdrop-blur dark:border-slate-700 dark:bg-slate-900/80">
           <div className="mx-auto flex max-w-5xl items-center justify-between px-6 py-4">
-            <Link to="/" className="text-xl font-semibold text-slate-900">
+            <Link to="/" className="text-xl font-semibold text-slate-900 dark:text-slate-100">
               ft_transcendence
             </Link>
-            <nav className="flex flex-wrap items-center gap-4 text-sm text-slate-600">
+            <nav className="flex flex-wrap items-center gap-4 text-sm text-slate-600 dark:text-slate-400">
               {user && <Link to="/">Home</Link>}
               {user ? (
                 <>
@@ -89,7 +93,7 @@ const App = () => {
                   <UserMenu />
                   <button
                     onClick={handleLogout}
-                    className="rounded-md border border-slate-300 bg-white px-3 py-1.5 text-sm font-medium text-slate-700 hover:bg-slate-50 hover:text-slate-900 transition-colors"
+                    className="rounded-md border border-slate-300 bg-white px-3 py-1.5 text-sm font-medium text-slate-700 hover:bg-slate-50 hover:text-slate-900 transition-colors dark:border-slate-600 dark:bg-slate-800 dark:text-slate-300 dark:hover:bg-slate-700 dark:hover:text-slate-100"
                   >
                     Logout
                   </button>

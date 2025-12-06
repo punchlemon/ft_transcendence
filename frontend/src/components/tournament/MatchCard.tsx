@@ -45,17 +45,17 @@ export const MatchCard = ({
 
     return (
       <div 
-        className={`relative flex flex-col items-center justify-center rounded-md border bg-white p-2 shadow-sm transition-all ${
-          isWinner ? 'border-indigo-500 ring-1 ring-indigo-500' : 'border-slate-200'
+        className={`relative flex flex-col items-center justify-center rounded-md border bg-white p-2 shadow-sm transition-all dark:bg-slate-800 ${
+          isWinner ? 'border-indigo-500 ring-1 ring-indigo-500 dark:border-indigo-400 dark:ring-indigo-400' : 'border-slate-200 dark:border-slate-700'
         }`}
         style={{ width: `${playerWidth}px`, height: '40px' }}
       >
-        <span className={`truncate text-xs font-bold ${isWinner ? 'text-indigo-700' : (isPlaceholder && !isAI ? 'text-slate-400 italic' : 'text-slate-700')}`}>
+        <span className={`truncate text-xs font-bold ${isWinner ? 'text-indigo-700 dark:text-indigo-400' : (isPlaceholder && !isAI ? 'text-slate-400 italic dark:text-slate-500' : 'text-slate-700 dark:text-slate-300')}`}>
           {isPlaceholder ? (isAI ? 'AI' : 'Waiting...') : (player?.alias ?? 'Unknown')}
         </span>
         
         {isAI && (
-          <span className="absolute -top-1 -right-1 rounded bg-amber-100 px-1 text-[8px] font-bold text-amber-600">AI</span>
+          <span className="absolute -top-1 -right-1 rounded bg-amber-100 px-1 text-[8px] font-bold text-amber-600 dark:bg-amber-900/50 dark:text-amber-300">AI</span>
         )}
 
         {showRemove && (
@@ -64,7 +64,7 @@ export const MatchCard = ({
               e.stopPropagation()
               onRemovePlayer!(player!.alias)
             }}
-            className="absolute -top-2 -right-2 flex h-4 w-4 items-center justify-center rounded-full bg-white border border-slate-200 text-slate-400 shadow-sm hover:text-red-500"
+            className="absolute -top-2 -right-2 flex h-4 w-4 items-center justify-center rounded-full bg-white border border-slate-200 text-slate-400 shadow-sm hover:text-red-500 dark:bg-slate-700 dark:border-slate-600 dark:text-slate-400 dark:hover:text-red-400"
           >
             <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
               <line x1="18" y1="6" x2="6" y2="18"></line>
@@ -121,6 +121,7 @@ export const MatchCard = ({
                 d={`M ${midA} ${totalHeight} L ${midA} ${midY} L ${center} ${midY}`}
                 fill="none"
                 stroke="#cbd5e1" 
+                className="dark:stroke-slate-600"
                 strokeWidth="4"
                 strokeLinecap="round"
                 strokeLinejoin="round"
@@ -129,6 +130,7 @@ export const MatchCard = ({
                 d={`M ${midB} ${totalHeight} L ${midB} ${midY} L ${center} ${midY}`}
                 fill="none"
                 stroke="#cbd5e1" 
+                className="dark:stroke-slate-600"
                 strokeWidth="4"
                 strokeLinecap="round"
                 strokeLinejoin="round"
@@ -137,6 +139,7 @@ export const MatchCard = ({
                 d={`M ${center} ${midY} L ${center} 0`}
                 fill="none"
                 stroke="#cbd5e1" 
+                className="dark:stroke-slate-600"
                 strokeWidth="4"
                 strokeLinecap="round"
             />
@@ -170,8 +173,8 @@ export const MatchCard = ({
             className="absolute w-full flex justify-center text-xs font-bold z-10"
             style={{ top: `${midY - 15}px` }}
         >
-            <span className={`mr-1.5 ${isWinnerA ? 'text-indigo-700' : 'text-slate-500'}`}>{scoreA ?? '-'}</span>
-            <span className={`ml-1.5 ${isWinnerB ? 'text-indigo-700' : 'text-slate-500'}`}>{scoreB ?? '-'}</span>
+            <span className={`mr-1.5 ${isWinnerA ? 'text-indigo-700 dark:text-indigo-400' : 'text-slate-500 dark:text-slate-400'}`}>{scoreA ?? '-'}</span>
+            <span className={`ml-1.5 ${isWinnerB ? 'text-indigo-700 dark:text-indigo-400' : 'text-slate-500 dark:text-slate-400'}`}>{scoreB ?? '-'}</span>
         </div>
       </div>
 

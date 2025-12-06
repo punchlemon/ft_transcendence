@@ -12,8 +12,8 @@ describe('Button', () => {
     render(<Button>プライマリ</Button>)
 
     const button = screen.getByRole('button', { name: 'プライマリ' })
-    expect(button.className).toContain('bg-brand')
-    expect(button.className).toContain('text-slate-900')
+    expect(button.className).toContain('bg-indigo-600')
+    expect(button.className).toContain('text-white')
   })
 
   it('renders secondary variant and disabled state', () => {

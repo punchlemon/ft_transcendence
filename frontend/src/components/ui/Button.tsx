@@ -11,8 +11,8 @@ const baseClasses =
   'rounded-lg px-4 py-2 text-sm font-semibold transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 disabled:opacity-50 disabled:cursor-not-allowed'
 
 const variants: Record<NonNullable<ButtonProps['variant']>, string> = {
-  primary: 'bg-brand text-slate-900 hover:bg-brand-dark focus-visible:outline-brand-dark',
-  secondary: 'border border-slate-300 text-slate-700 hover:bg-slate-100 focus-visible:outline-slate-500'
+  primary: 'bg-indigo-600 text-white hover:bg-indigo-700 focus-visible:outline-indigo-600 dark:bg-indigo-600 dark:text-white dark:hover:bg-indigo-700',
+  secondary: 'border border-slate-300 text-slate-700 hover:bg-slate-100 focus-visible:outline-slate-500 dark:border-slate-600 dark:text-slate-300 dark:hover:bg-slate-700 dark:focus-visible:outline-slate-400'
 }
 
 export const Button = forwardRef<HTMLButtonElement, ButtonProps>(function Button(
