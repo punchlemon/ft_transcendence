@@ -78,15 +78,16 @@ apiClient.interceptors.response.use(
           })
       }
 
-      ;(originalRequest as any)._retry = true
-      isRefreshing = true
-
       const refreshToken = useAuthStore.getState().refreshToken
 
       if (!refreshToken) {
+        // No refresh token available: do not enter refresh mode; fail fast and keep queue usable
         useAuthStore.getState().clearSession()
         return Promise.reject(error)
       }
+
+      ;(originalRequest as any)._retry = true
+      isRefreshing = true
 
       try {
         const response = await apiClient.post('/auth/refresh', { refreshToken })
