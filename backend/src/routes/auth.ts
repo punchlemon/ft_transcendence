@@ -239,6 +239,23 @@ const otpCodeSchema = z.object({
     .regex(/^\d{6}$/)
 })
 
+const disableMfaSchema = z
+  .object({
+    code: z
+      .string()
+      .trim()
+      .regex(/^\d{6}$/)
+      .optional(),
+    backupCode: z
+      .string()
+      .trim()
+      .regex(BACKUP_CODE_REGEX)
+      .optional()
+  })
+  .refine((value) => Boolean(value.code || value.backupCode), {
+    message: 'Either code or backupCode is required'
+  })
+
 const backupCodesQuerySchema = z.object({
   regenerate: z.enum(['true', 'false']).optional()
 })
@@ -1102,7 +1119,7 @@ const authRoutes: FastifyPluginAsync = async (fastify) => {
       }
     }
 
-    const parsed = otpCodeSchema.safeParse(request.body)
+    const parsed = disableMfaSchema.safeParse(request.body)
     if (!parsed.success) {
       reply.code(400)
       return {
@@ -1119,7 +1136,7 @@ const authRoutes: FastifyPluginAsync = async (fastify) => {
       select: { twoFASecret: true, twoFAEnabled: true }
     })
 
-    if (!user?.twoFAEnabled || !user.twoFASecret) {
+    if (!user?.twoFAEnabled) {
       reply.code(409)
       return {
         error: {
@@ -1129,13 +1146,62 @@ const authRoutes: FastifyPluginAsync = async (fastify) => {
       }
     }
 
-    const valid = authenticator.verify({ token: parsed.data.code, secret: user.twoFASecret })
-    if (!valid) {
-      reply.code(400)
-      return {
-        error: {
-          code: 'INVALID_MFA_CODE',
-          message: 'Provided MFA code is not valid'
+    const otpCode = parsed.data.code
+    const normalizedBackupCode = parsed.data.backupCode ? normalizeBackupCode(parsed.data.backupCode) : undefined
+
+    if (otpCode) {
+      if (!user.twoFASecret) {
+        // Should not happen if twoFAEnabled is true, but for safety
+        reply.code(409)
+        return {
+          error: {
+            code: 'MFA_NOT_ENABLED',
+            message: 'Two-factor authentication secret is missing'
+          }
+        }
+      }
+      const valid = authenticator.verify({ token: otpCode, secret: user.twoFASecret })
+      if (!valid) {
+        reply.code(400)
+        return {
+          error: {
+            code: 'INVALID_MFA_CODE',
+            message: 'Provided MFA code is not valid'
+          }
+        }
+      }
+    } else if (normalizedBackupCode) {
+      const availableCodes = await fastify.prisma.twoFactorBackupCode.findMany({
+        where: { userId, usedAt: null },
+        select: { id: true, codeHash: true }
+      })
+
+      if (!availableCodes.length) {
+        reply.code(409)
+        return {
+          error: {
+            code: 'MFA_BACKUP_CODES_EXHAUSTED',
+            message: 'All backup codes have been used'
+          }
+        }
+      }
+
+      let matched = false
+      for (const candidate of availableCodes) {
+        const matches = await argon2.verify(candidate.codeHash, normalizedBackupCode)
+        if (matches) {
+          matched = true
+          break
+        }
+      }
+
+      if (!matched) {
+        reply.code(400)
+        return {
+          error: {
+            code: 'INVALID_BACKUP_CODE',
+            message: 'Provided backup code is invalid'
+          }
         }
       }
     }
