@@ -33,7 +33,7 @@ const ChatDrawer = () => {
   const { notifications, fetchNotifications, unreadCount } = useNotificationStore()
 
   // Ensure threads is always an array to avoid test/runtime errors when store is uninitialized
-  const threadsArr = threads ?? []
+  const threadsArr = useMemo(() => threads ?? [], [threads])
 
   const totalUnreadMessages = useMemo(() => {
     return threadsArr.reduce((acc, t) => acc + (t.unreadCount || 0), 0);
@@ -84,7 +84,7 @@ const ChatDrawer = () => {
       unsubscribeRelationship()
       unsubscribeUserUpdate()
     }
-  }, [])
+  }, [handleUserUpdate])
 
   const activeMessages = useMemo(() => {
     return activeThreadId ? (messages?.[activeThreadId] || []) : []

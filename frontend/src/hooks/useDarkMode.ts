@@ -6,6 +6,12 @@ import { useEffect } from 'react'
  */
 export const useDarkMode = () => {
   useEffect(() => {
+    // Skip if matchMedia is unavailable (e.g., test environment)
+    if (typeof window === 'undefined' || typeof window.matchMedia !== 'function') {
+      document.documentElement.classList.remove('dark')
+      return
+    }
+
     // デバイスのカラースキーム設定を取得
     const mediaQuery = window.matchMedia('(prefers-color-scheme: dark)')
 
