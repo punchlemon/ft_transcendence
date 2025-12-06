@@ -26,14 +26,14 @@ const TournamentAliasPanel = ({
           value={aliasInput}
           onChange={(event) => onAliasChange(event.target.value)}
           placeholder="e.g. Meteor"
-          className="flex-1 rounded-lg border border-slate-300 px-4 py-2 text-sm focus:border-brand focus:outline-none"
+          className="flex-1 rounded-lg border border-slate-300 px-4 py-2 text-sm focus:border-brand focus:outline-none dark:border-slate-600 dark:bg-slate-900 dark:text-slate-100 dark:placeholder-slate-400"
         />
         <Button type="submit" disabled={isSubmitDisabled}>
           Register
         </Button>
       </form>
-      {errorMessage && <p className="mt-2 text-sm text-red-600">{errorMessage}</p>}
-      {infoMessage && <p className="mt-2 text-sm text-brand-dark">{infoMessage}</p>}
+      {errorMessage && <p className="mt-2 text-sm text-red-600 dark:text-red-400">{errorMessage}</p>}
+      {infoMessage && <p className="mt-2 text-sm text-brand-dark dark:text-indigo-400">{infoMessage}</p>}
     </div>
   )
 }

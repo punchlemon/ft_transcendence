@@ -10,7 +10,7 @@ const UserMenu = () => {
   return (
     <Link
       to={`/${user.login}`}
-      className="relative flex items-center gap-2 rounded-full p-1 transition-colors hover:bg-slate-100"
+      className="relative flex items-center gap-2 rounded-full p-1 transition-colors hover:bg-slate-100 dark:hover:bg-slate-700"
       data-testid="user-menu-link"
     >
       <div className="relative">

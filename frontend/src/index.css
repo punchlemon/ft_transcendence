@@ -4,8 +4,21 @@
 
 :root {
   font-family: 'Inter', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
-  color: #0f172a;
-  background-color: #f8fafc;
+  --color-text: #0f172a;
+  --color-bg: #f8fafc;
+  --color-border: #e2e8f0;
+  --color-surface: #ffffff;
+  color: var(--color-text);
+  background-color: var(--color-bg);
+}
+
+/* ダークモード用のカラー変数と背景設定 */
+.dark {
+  color-scheme: dark;
+  --color-text: #e2e8f0;
+  --color-bg: #0f172a;
+  --color-border: #334155;
+  --color-surface: #1e293b;
 }
 
 body {
@@ -13,4 +26,26 @@ body {
   min-height: 100vh;
   background-image: radial-gradient(circle at 25% 25%, rgba(74, 222, 128, 0.15), transparent 45%),
     radial-gradient(circle at 70% 40%, rgba(59, 130, 246, 0.15), transparent 50%);
+}
+
+/* ダークモード時のbody背景 */
+.dark body {
+  background-color: #0f172a;
+  background-image: radial-gradient(circle at 25% 25%, rgba(74, 222, 128, 0.05), transparent 45%),
+    radial-gradient(circle at 70% 40%, rgba(59, 130, 246, 0.05), transparent 50%);
+}
+
+/* フォーカスリング共通スタイル */
+@layer components {
+  .focus-ring {
+    @apply focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2;
+  }
+
+  .dark .focus-ring {
+    @apply focus-visible:outline-indigo-400;
+  }
+
+  .light .focus-ring {
+    @apply focus-visible:outline-indigo-600;
+  }
 }

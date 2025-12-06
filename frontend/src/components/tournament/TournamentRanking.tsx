@@ -100,32 +100,32 @@ const TournamentRanking = ({ tournament, onClose }: TournamentRankingProps) => {
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/80 backdrop-blur-sm p-4">
-      <div className="w-full max-w-2xl rounded-2xl bg-white p-8 shadow-2xl animate-in fade-in zoom-in duration-300">
+      <div className="w-full max-w-2xl rounded-2xl bg-white p-8 shadow-2xl animate-in fade-in zoom-in duration-300 dark:bg-slate-800">
         <div className="text-center mb-8">
-          <h2 className="text-3xl font-black text-slate-900">🏆 Tournament Results</h2>
-          <p className="text-slate-500 mt-2">{tournament.name}</p>
+          <h2 className="text-3xl font-black text-slate-900 dark:text-slate-100">🏆 Tournament Results</h2>
+          <p className="text-slate-500 mt-2 dark:text-slate-400">{tournament.name}</p>
         </div>
 
-        <div className="overflow-hidden rounded-xl border border-slate-200">
+        <div className="overflow-hidden rounded-xl border border-slate-200 dark:border-slate-700">
           <table className="w-full text-left text-sm">
-            <thead className="bg-slate-50 text-slate-500">
+            <thead className="bg-slate-50 text-slate-500 dark:bg-slate-700 dark:text-slate-400">
               <tr>
                 <th className="px-6 py-3 font-medium">Rank</th>
                 <th className="px-6 py-3 font-medium">Player</th>
                 <th className="px-6 py-3 font-medium text-right">Total Score</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-slate-200 bg-white">
+            <tbody className="divide-y divide-slate-200 bg-white dark:divide-slate-700 dark:bg-slate-800">
               {ranking.map((p, i) => (
-                <tr key={i} className={p.rank === 1 ? 'bg-yellow-50/50' : ''}>
-                  <td className="px-6 py-4 font-bold text-slate-700">
+                <tr key={i} className={p.rank === 1 ? 'bg-yellow-50/50 dark:bg-yellow-900/20' : ''}>
+                  <td className="px-6 py-4 font-bold text-slate-700 dark:text-slate-300">
                     {p.rank === 1 ? '🥇' : p.rank === 2 ? '🥈' : p.rank === 3 ? '🥉' : `#${p.rank}`}
                   </td>
-                  <td className="px-6 py-4 font-medium text-slate-900">
+                  <td className="px-6 py-4 font-medium text-slate-900 dark:text-slate-100">
                     {p.alias}
-                    {p.isWinner && <span className="ml-2 inline-flex items-center rounded-full bg-yellow-100 px-2 py-0.5 text-xs font-medium text-yellow-800">Winner</span>}
+                    {p.isWinner && <span className="ml-2 inline-flex items-center rounded-full bg-yellow-100 px-2 py-0.5 text-xs font-medium text-yellow-800 dark:bg-yellow-900/50 dark:text-yellow-300">Winner</span>}
                   </td>
-                  <td className="px-6 py-4 text-right font-mono text-slate-600">
+                  <td className="px-6 py-4 text-right font-mono text-slate-600 dark:text-slate-400">
                     {p.totalScore}
                   </td>
                 </tr>

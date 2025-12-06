@@ -296,21 +296,21 @@ const UsersPage = () => {
     <div className="mx-auto max-w-5xl px-6 py-8">
       <div className="mb-8 flex flex-col gap-4">
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-          <h1 className="text-2xl font-bold text-slate-900">User Search</h1>
+          <h1 className="text-2xl font-bold text-slate-900 dark:text-slate-100">User Search</h1>
           <form onSubmit={handleSearch} className="flex items-center gap-2 w-full sm:w-auto">
             <input
               type="text"
               placeholder="Search by name..."
-              className="rounded-md border border-slate-300 px-3 py-2 text-sm focus:border-indigo-500 focus:outline-none focus:ring-1 focus:ring-indigo-500 w-full sm:w-64"
+              className="rounded-md border border-slate-300 px-3 py-2 text-sm focus:border-indigo-500 focus:outline-none focus:ring-1 focus:ring-indigo-500 w-full sm:w-64 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100 dark:placeholder-slate-400"
               value={filters.query}
               onChange={(e) => setFilters((prev) => ({ ...prev, query: e.target.value, page: 1 }))}
             />
           </form>
         </div>
 
-        <div className="flex flex-col gap-4 bg-white p-4 rounded-lg border border-slate-200 shadow-sm">
+        <div className="flex flex-col gap-4 bg-white p-4 rounded-lg border border-slate-200 shadow-sm dark:bg-slate-800 dark:border-slate-700">
           <div className="flex flex-wrap gap-2 items-center">
-            <span className="text-xs font-semibold text-slate-500 uppercase tracking-wider">Filters:</span>
+            <span className="text-xs font-semibold text-slate-500 uppercase tracking-wider dark:text-slate-400">Filters:</span>
             <Button
               type="button"
               variant={filters.friendsOnly ? 'primary' : 'secondary'}
@@ -338,8 +338,8 @@ const UsersPage = () => {
           </div>
 
           {/* Sort Row */}
-          <div className="flex flex-wrap gap-2 items-center border-t border-slate-100 pt-4">
-            <span className="text-xs font-semibold text-slate-500 uppercase tracking-wider">Sort By:</span>
+          <div className="flex flex-wrap gap-2 items-center border-t border-slate-100 pt-4 dark:border-slate-700">
+            <span className="text-xs font-semibold text-slate-500 uppercase tracking-wider dark:text-slate-400">Sort By:</span>
             <div className="flex gap-2 items-center">
               {filters.sortOrder.map((sortType) => {
                 const isWinRate = sortType === 'winRate'
@@ -378,14 +378,14 @@ const UsersPage = () => {
       </div>
 
       {loading ? (
-        <div className="py-12 text-center text-slate-500">Loading...</div>
+        <div className="py-12 text-center text-slate-500 dark:text-slate-400">Loading...</div>
       ) : (
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
           {users?.map((user) => (
             <Link
               key={user.id}
               to={`/${user.login}`}
-              className="flex items-center gap-4 rounded-lg border border-slate-200 bg-white p-4 transition-shadow hover:shadow-md"
+              className="flex items-center gap-4 rounded-lg border border-slate-200 bg-white p-4 transition-shadow hover:shadow-md dark:border-slate-700 dark:bg-slate-800 dark:hover:shadow-lg"
             >
               <UserAvatar 
                 user={user}
@@ -395,38 +395,38 @@ const UsersPage = () => {
               />
               <div className="flex-1 min-w-0 flex items-center justify-between gap-4">
                 <div className="flex-1 min-w-0">
-                  <h3 className="truncate font-medium text-slate-900">{user.displayName}</h3>
-                  <div className="flex items-center gap-2 text-xs text-slate-500 mt-1">
+                  <h3 className="truncate font-medium text-slate-900 dark:text-slate-100">{user.displayName}</h3>
+                  <div className="flex items-center gap-2 text-xs text-slate-500 mt-1 dark:text-slate-400">
                     {currentUser?.id === user.id && (
-                      <span className="rounded-full bg-slate-100 px-2 py-0.5 text-slate-600 font-medium">
+                      <span className="rounded-full bg-slate-100 px-2 py-0.5 text-slate-600 font-medium dark:bg-slate-700 dark:text-slate-300">
                         You
                       </span>
                     )}
                     {myFriends.includes(user.id) && (
-                      <span className="rounded-full bg-green-100 px-2 py-0.5 text-green-700 font-medium">
+                      <span className="rounded-full bg-green-100 px-2 py-0.5 text-green-700 font-medium dark:bg-green-900 dark:text-green-300">
                         Friend
                       </span>
                     )}
                     {sentRequests.includes(user.id) && (
-                      <span className="rounded-full bg-blue-100 px-2 py-0.5 text-blue-700 font-medium">
+                      <span className="rounded-full bg-blue-100 px-2 py-0.5 text-blue-700 font-medium dark:bg-blue-900 dark:text-blue-300">
                         Request Sent
                       </span>
                     )}
                     {receivedRequests.includes(user.id) && (
-                      <span className="rounded-full bg-yellow-100 px-2 py-0.5 text-yellow-700 font-medium">
+                      <span className="rounded-full bg-yellow-100 px-2 py-0.5 text-yellow-700 font-medium dark:bg-yellow-900 dark:text-yellow-300">
                         Request Received
                       </span>
                     )}
                     {blockedUsers.includes(user.id) && (
-                      <span className="rounded-full bg-red-100 px-2 py-0.5 text-red-700 font-medium">
+                      <span className="rounded-full bg-red-100 px-2 py-0.5 text-red-700 font-medium dark:bg-red-900 dark:text-red-300">
                         Blocked
                       </span>
                     )}
                   </div>
                 </div>
-                <div className="flex flex-col items-end text-xs text-slate-600 flex-shrink-0">
-                  <div className="font-medium">{formatWinRate(calculateWinRate(user.wins, user.gamesPlayed))}</div>
-                  <div className="text-slate-500">{formatGamesCount(user.gamesPlayed)}</div>
+                <div className="flex flex-col items-end text-xs text-slate-600 flex-shrink-0 dark:text-slate-400">
+                  <div className="font-medium dark:text-slate-200">{formatWinRate(calculateWinRate(user.wins, user.gamesPlayed))}</div>
+                  <div className="text-slate-500 dark:text-slate-500">{formatGamesCount(user.gamesPlayed)}</div>
                 </div>
               </div>
             </Link>
@@ -435,7 +435,7 @@ const UsersPage = () => {
       )}
 
       {users.length === 0 && !loading && (
-        <div className="py-12 text-center text-slate-500">No users found</div>
+        <div className="py-12 text-center text-slate-500 dark:text-slate-400">No users found</div>
       )}
 
       <div className="mt-8 flex justify-center gap-2">
@@ -446,7 +446,7 @@ const UsersPage = () => {
         >
           Previous
         </Button>
-        <span className="flex items-center px-4 text-sm text-slate-600">
+        <span className="flex items-center px-4 text-sm text-slate-600 dark:text-slate-400">
           {meta.page} / {Math.max(1, Math.ceil(meta.total / meta.limit))}
         </span>
         <Button

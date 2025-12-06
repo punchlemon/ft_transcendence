@@ -39,7 +39,7 @@ export const useTournamentSetup = () => {
     setPlayers((previous) => [...previous, normalizedAlias])
     setAliasInput('')
     setErrorMessage(null)
-    setInfoMessage('参加者を追加しました。')
+    setInfoMessage('Participant added.')
   }
 
   const handleRemovePlayer = (alias: string) => {
