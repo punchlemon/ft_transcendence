@@ -411,6 +411,16 @@ export const createTournament = async (payload: CreateTournamentPayload) => {
   return response.data as { data: Tournament }
 }
 
+export const inviteTournamentParticipant = async (tournamentId: number, userId: number) => {
+  const response = await apiClient.post(`/tournaments/${tournamentId}/invite`, { userId })
+  return response.data as { data: { id: number; tournamentId: number; userId: number; alias: string; inviteState: string } }
+}
+
+export const respondTournamentParticipant = async (tournamentId: number, participantId: number, action: 'ACCEPT' | 'DECLINE') => {
+  const response = await apiClient.patch(`/tournaments/${tournamentId}/participants/${participantId}`, { action })
+  return response.data as { data: any }
+}
+
 export type UpdateProfilePayload = {
   displayName?: string
   bio?: string

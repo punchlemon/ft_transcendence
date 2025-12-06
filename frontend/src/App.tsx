@@ -11,6 +11,7 @@ import UsersPage from './pages/Users'
 import GameRoomPage from './pages/GameRoom'
 import ChatDrawer from './components/chat/ChatDrawer'
 import UserMenu from './components/ui/UserMenu'
+import NotificationToast from './components/ui/NotificationToast'
 import useAuthStore from './stores/authStore'
 import { useChatStore } from './stores/chatStore'
 import { useNotificationStore } from './stores/notificationStore'
@@ -138,6 +139,7 @@ const App = () => {
         </main>
 
         {user && <ChatDrawer />}
+        {user && <NotificationToast />}
       </div>
     </BrowserRouter>
   )

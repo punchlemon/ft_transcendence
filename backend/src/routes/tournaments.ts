@@ -2,6 +2,8 @@ import fp from 'fastify-plugin'
 import type { FastifyPluginAsync } from 'fastify'
 import { z } from 'zod'
 import { tournamentService } from '../services/tournamentService'
+import { presenceService } from '../services/presence'
+import { notificationService } from '../services/notification'
 
 const STATUS_VALUES = ['DRAFT', 'READY', 'RUNNING', 'COMPLETED'] as const
 const BRACKET_VALUES = ['SINGLE_ELIMINATION', 'DOUBLE_ELIMINATION'] as const
@@ -50,6 +52,44 @@ const matchParamSchema = z.object({
 })
 
 const tournamentsRoutes: FastifyPluginAsync = async (fastify) => {
+  // In-memory timers for INVITED participants (participantId -> Timeout)
+  const inviteTimers = new Map<number, NodeJS.Timeout>()
+
+  const scheduleInviteExpiry = (participantId: number) => {
+    // clear existing
+    if (inviteTimers.has(participantId)) {
+      clearTimeout(inviteTimers.get(participantId)!)
+    }
+    const ttl = Number(process.env.TOURNAMENT_INVITE_TTL_SEC || 20)
+    const t = setTimeout(async () => {
+      try {
+        const p = await fastify.prisma.tournamentParticipant.findUnique({ where: { id: participantId } })
+        if (!p) return
+        if (p.inviteState === 'INVITED') {
+          await fastify.prisma.tournamentParticipant.update({ where: { id: participantId }, data: { inviteState: 'DECLINED' } })
+          // notify owner
+          const tournament = await fastify.prisma.tournament.findUnique({ where: { id: p.tournamentId }, select: { createdById: true, name: true } })
+          if (tournament) {
+            await notificationService.createNotification(
+              tournament.createdById,
+              'TOURNAMENT_INVITE',
+              'Invite expired',
+              `Invite for ${p.alias} expired for tournament ${tournament.name}`,
+              { tournamentId: p.tournamentId, participantId }
+            )
+            fastify.log.info({ participantId }, 'Invite expired and marked DECLINED')
+          }
+        }
+      } catch (e) {
+        fastify.log.error(e)
+      } finally {
+        inviteTimers.delete(participantId)
+      }
+    }, ttl * 1000)
+
+    inviteTimers.set(participantId, t)
+  }
+
   fastify.post('/tournaments', async (request, reply) => {
     const parsed = createTournamentSchema.safeParse(request.body)
 
@@ -225,6 +265,167 @@ const tournamentsRoutes: FastifyPluginAsync = async (fastify) => {
     }
   })
 
+  // Invite endpoints: POST /tournaments/:id/invite and PATCH participant action
+  const inviteBodySchema = z.object({ userId: z.coerce.number().int().positive() })
+
+  fastify.post('/tournaments/:id/invite', { preHandler: fastify.authenticate }, async (request, reply) => {
+    const params = detailParamSchema.safeParse(request.params)
+    const body = inviteBodySchema.safeParse(request.body)
+
+    if (!params.success || !body.success) {
+      reply.code(400)
+      return { error: { code: 'INVALID_REQUEST', message: 'Invalid params or body' } }
+    }
+
+    const tournamentId = params.data.id
+    const targetUserId = body.data.userId
+    const inviterId = request.user?.userId
+    if (!inviterId) {
+      reply.code(401)
+      return { error: { code: 'UNAUTHORIZED', message: 'Authentication required' } }
+    }
+
+    const tournament = await fastify.prisma.tournament.findUnique({ where: { id: tournamentId } })
+    if (!tournament) {
+      reply.code(404)
+      return { error: { code: 'TOURNAMENT_NOT_FOUND', message: 'Tournament not found' } }
+    }
+
+    if (tournament.createdById !== inviterId) {
+      reply.code(403)
+      return { error: { code: 'FORBIDDEN', message: 'Only tournament owner can invite' } }
+    }
+
+    // verify target exists
+    const targetUser = await fastify.prisma.user.findUnique({ where: { id: targetUserId }, select: { id: true, displayName: true } })
+    if (!targetUser) {
+      reply.code(404)
+      return { error: { code: 'USER_NOT_FOUND', message: 'Target user not found' } }
+    }
+
+    // verify friendship
+    const friendship = await fastify.prisma.friendship.findFirst({
+      where: {
+        OR: [
+          { requesterId: inviterId, addresseeId: targetUserId, status: 'ACCEPTED' },
+          { requesterId: targetUserId, addresseeId: inviterId, status: 'ACCEPTED' }
+        ]
+      }
+    })
+
+    if (!friendship) {
+      reply.code(403)
+      return { error: { code: 'NOT_FRIEND', message: 'Can only invite friends' } }
+    }
+
+    // only online friends can be invited
+    const online = await presenceService.isOnline(targetUserId)
+    if (!online) {
+      reply.code(400)
+      return { error: { code: 'USER_OFFLINE', message: 'Target user is offline' } }
+    }
+
+    // ensure not already participating
+    const existing = await fastify.prisma.tournamentParticipant.findFirst({ where: { tournamentId, userId: targetUserId } })
+    if (existing) {
+      reply.code(409)
+      return { error: { code: 'ALREADY_PARTICIPANT', message: 'User already participant' } }
+    }
+
+    // create participant with INVITED state
+    const participant = await fastify.prisma.tournamentParticipant.create({
+      data: {
+        tournamentId,
+        userId: targetUserId,
+        alias: targetUser.displayName,
+        inviteState: 'INVITED'
+      }
+    })
+
+    // schedule TTL expiry
+    scheduleInviteExpiry(participant.id)
+
+    // create notification which will be emitted over WS by notificationService -> chatWs
+    await notificationService.createNotification(
+      targetUserId,
+      'TOURNAMENT_INVITE',
+      'Tournament Invite',
+      `${(request.user as any).displayName || 'Someone'} invited you to a tournament`,
+      { tournamentId, participantId: participant.id, inviterId }
+    )
+
+    reply.code(201)
+    return { data: { id: participant.id, tournamentId, userId: targetUserId, alias: participant.alias, inviteState: participant.inviteState } }
+  })
+
+  const participantActionSchema = z.object({ action: z.enum(['ACCEPT', 'DECLINE']) })
+
+  fastify.patch('/tournaments/:id/participants/:participantId', { preHandler: fastify.authenticate }, async (request, reply) => {
+    const params = z.object({ id: z.coerce.number().int().positive(), participantId: z.coerce.number().int().positive() }).safeParse(request.params)
+    const body = participantActionSchema.safeParse(request.body)
+
+    if (!params.success || !body.success) {
+      reply.code(400)
+      return { error: { code: 'INVALID_REQUEST', message: 'Invalid params or body' } }
+    }
+
+    const participant = await fastify.prisma.tournamentParticipant.findUnique({ where: { id: params.data.participantId } })
+    if (!participant) {
+      reply.code(404)
+      return { error: { code: 'PARTICIPANT_NOT_FOUND', message: 'Participant not found' } }
+    }
+
+    const callerId = request.user?.userId
+    if (!callerId) {
+      reply.code(401)
+      return { error: { code: 'UNAUTHORIZED', message: 'Authentication required' } }
+    }
+
+    if (participant.userId !== callerId) {
+      reply.code(403)
+      return { error: { code: 'FORBIDDEN', message: 'Only invited user can accept/decline' } }
+    }
+
+    if (body.data.action === 'ACCEPT') {
+      // cancel TTL timer if any
+      if (inviteTimers.has(participant.id)) {
+        clearTimeout(inviteTimers.get(participant.id)!)
+        inviteTimers.delete(participant.id)
+      }
+      const updated = await fastify.prisma.tournamentParticipant.update({ where: { id: participant.id }, data: { inviteState: 'ACCEPTED', joinedAt: new Date() } })
+      // notify owner
+      const tournament = await fastify.prisma.tournament.findUnique({ where: { id: participant.tournamentId }, select: { createdById: true, name: true } })
+      if (tournament) {
+        await notificationService.createNotification(
+          tournament.createdById,
+          'TOURNAMENT_INVITE',
+          'Invite accepted',
+          `${(request.user as any).displayName || 'A user'} accepted invite for ${tournament.name}`,
+          { tournamentId: tournament.id, participantId: updated.id }
+        )
+      }
+      return { data: updated }
+    } else {
+      // DECLINE: mark declined and notify owner; allow owner to re-invite
+      if (inviteTimers.has(participant.id)) {
+        clearTimeout(inviteTimers.get(participant.id)!)
+        inviteTimers.delete(participant.id)
+      }
+      const updated = await fastify.prisma.tournamentParticipant.update({ where: { id: participant.id }, data: { inviteState: 'DECLINED' } })
+      const tournament = await fastify.prisma.tournament.findUnique({ where: { id: participant.tournamentId }, select: { createdById: true, name: true } })
+      if (tournament) {
+        await notificationService.createNotification(
+          tournament.createdById,
+          'TOURNAMENT_INVITE',
+          'Invite declined',
+          `${(request.user as any).displayName || 'A user'} declined invite for ${tournament.name}`,
+          { tournamentId: tournament.id, participantId: updated.id }
+        )
+      }
+      return { data: updated }
+    }
+  })
+
   fastify.get('/tournaments', async (request, reply) => {
     const parsed = listQuerySchema.safeParse(request.query)
 
@@ -298,6 +499,7 @@ const tournamentsRoutes: FastifyPluginAsync = async (fastify) => {
           details: parsed.error.flatten().fieldErrors
         }
       }
+
     }
 
     const tournament = await fastify.prisma.tournament.findUnique({
