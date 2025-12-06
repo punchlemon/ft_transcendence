@@ -97,7 +97,8 @@ describe('OAuthCallbackPage', () => {
     renderWithRouter('/oauth/callback?code=zzz&state=state-2')
 
     expect(await screen.findByText('Please complete two-factor authentication.')).toBeInTheDocument()
-    expect(sessionStorage.getItem('ft_mfa_challenge_id')).toBe('challenge-xyz')
+    const stored = sessionStorage.getItem('ft_mfa_challenge')
+    expect(stored ? JSON.parse(stored) : null).toEqual({ id: 'challenge-xyz', redirectTo: '/', emailOrName: null })
     expect(screen.getByRole('button', { name: 'Go to 2FA Code Entry' })).toBeInTheDocument()
   })
 

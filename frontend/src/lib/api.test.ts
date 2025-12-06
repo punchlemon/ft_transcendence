@@ -5,7 +5,7 @@
  */
 import { describe, it, expect, beforeEach } from 'vitest'
 import { AxiosHeaders, type InternalAxiosRequestConfig } from 'axios'
-import { attachAuthorizationHeader } from './api'
+import { api, attachAuthorizationHeader } from './api'
 import useAuthStore, { resetAuthStoreForTesting } from '../stores/authStore'
 
 const createConfig = (): InternalAxiosRequestConfig => ({
@@ -50,5 +50,38 @@ describe('attachAuthorizationHeader', () => {
     const updated = attachAuthorizationHeader(createConfig())
 
     expect(readAuthorizationHeader(updated)).toBeUndefined()
+  })
+})
+
+describe('response interceptor (401 handling)', () => {
+  const getResponseRejector = () => {
+    const handlers = (api.interceptors.response as any).handlers as Array<{
+      fulfilled?: (value: unknown) => unknown
+      rejected?: (error: any) => Promise<any>
+    }>
+    const handler = handlers.find((h) => typeof h?.rejected === 'function')
+    if (!handler?.rejected) {
+      throw new Error('Response interceptor not registered')
+    }
+    return handler.rejected
+  }
+
+  const createAxios401Error = () => {
+    const error: any = new Error('Request failed with status 401')
+    error.config = { url: '/auth/login', headers: {} }
+    error.response = { status: 401, data: { error: { message: 'Unauthorized' } } }
+    return error
+  }
+
+  beforeEach(() => {
+    resetAuthStoreForTesting()
+    sessionStorage.clear()
+  })
+
+  it('rejects promptly when refresh token is absent, even after repeated 401 responses', async () => {
+    const rejector = getResponseRejector()
+
+    await expect(rejector(createAxios401Error())).rejects.toBeTruthy()
+    await expect(rejector(createAxios401Error())).rejects.toBeTruthy()
   })
 })

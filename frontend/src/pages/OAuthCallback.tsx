@@ -13,14 +13,13 @@ import {
 } from '../lib/oauth'
 import useAuthStore from '../stores/authStore'
 
-const MFA_CHALLENGE_KEY = 'ft_mfa_challenge_id'
-
 type CallbackStatus = 'validating' | 'success' | 'needsMfa' | 'error'
 
 const isOAuthProvider = (value: string | null): value is OAuthProvider => value === 'google'
 
 const OAuthCallbackPage = () => {
   const setSession = useAuthStore((state) => state.setSession)
+  const setMfaChallenge = useAuthStore((state) => state.setMfaChallenge)
   const user = useAuthStore((state) => state.user)
   const isHydrated = useAuthStore((state) => state.isHydrated)
   const navigate = useNavigate()
@@ -52,7 +51,7 @@ const OAuthCallbackPage = () => {
         return
       }
       if (response.challengeId) {
-        sessionStorage.setItem(MFA_CHALLENGE_KEY, response.challengeId)
+        setMfaChallenge({ id: response.challengeId, redirectTo: '/', emailOrName: null })
       }
       setStatus('needsMfa')
       setMessage('Please complete two-factor authentication.')
@@ -138,7 +137,7 @@ const OAuthCallbackPage = () => {
     return () => {
       isMounted = false
     }
-  }, [redirectUri, searchParams, setSession])
+  }, [redirectUri, searchParams, setSession, setMfaChallenge])
 
   useEffect(() => {
     if (status !== 'success') {

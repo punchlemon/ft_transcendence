@@ -18,6 +18,7 @@ import {
 } from '../lib/api'
 import { EditProfileModal } from '../components/profile/EditProfileModal'
 import { SendMessageModal } from '../components/profile/SendMessageModal'
+import Profile2FASection from '../components/profile/Profile2FASection'
 import UserAvatar from '../components/ui/UserAvatar'
 import { calculateWinRate, formatWinRate, formatGamesCount } from '../utils/stats'
 
@@ -363,7 +364,7 @@ const ProfilePage = () => {
       {/* Hero Section */}
       <div className="mb-8 flex flex-col items-center gap-6 rounded-xl border border-slate-200 bg-white p-8 shadow-sm sm:flex-row sm:items-start dark:border-slate-700 dark:bg-slate-800">
         <div 
-          className={`relative cursor-pointer group`} 
+          className={`relative cursor-pointer group shrink-0`} 
           onClick={() => {
             if (isOwnProfile) {
               setEditModalField('avatar')
@@ -391,7 +392,7 @@ const ProfilePage = () => {
             </div>
           )}
         </div>
-        <div className="flex-1 text-center sm:text-left">
+        <div className="flex-1 min-w-0 text-center sm:text-left">
           <div className="flex flex-col items-center sm:items-start">
             {editingField === 'displayName' ? (
               <div className="relative inline-grid items-center justify-items-center sm:justify-items-start">
@@ -442,7 +443,7 @@ const ProfilePage = () => {
           ) : (
             (profile.bio || isOwnProfile) && (
               <p 
-                className={`mt-2 text-slate-600 dark:text-slate-400 ${isOwnProfile ? 'cursor-pointer hover:bg-slate-50 dark:hover:bg-slate-700/50 rounded px-2 -mx-2 transition-colors' : ''}`}
+                className={`mt-2 text-slate-600 dark:text-slate-400 break-words whitespace-pre-wrap ${isOwnProfile ? 'cursor-pointer hover:bg-slate-50 dark:hover:bg-slate-700/50 rounded px-2 -mx-2 transition-colors' : ''}`}
                 onClick={() => isOwnProfile && startEditing('bio', profile.bio)}
                 title={isOwnProfile ? "Click to edit bio" : undefined}
               >
@@ -450,6 +451,8 @@ const ProfilePage = () => {
               </p>
             )
           )}
+
+          {isOwnProfile ? <Profile2FASection /> : null}
           
           <div className="mt-4 flex flex-wrap justify-center gap-2 sm:justify-start">
             {!isOwnProfile && (

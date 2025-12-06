@@ -119,7 +119,8 @@ describe('LoginPage', () => {
     await user.click(screen.getByRole('button', { name: 'Login with Email' }))
 
     expect(await screen.findByText('Two-factor authentication required.')).toBeInTheDocument()
-    expect(sessionStorage.getItem('ft_mfa_challenge_id')).toBe('challenge-123')
+    const stored = sessionStorage.getItem('ft_mfa_challenge')
+    expect(stored ? JSON.parse(stored) : null).toEqual({ id: 'challenge-123', redirectTo: '/', emailOrName: 'user@example.com' })
     expect(screen.getByRole('link', { name: 'Open 2FA Code Entry Page' })).toHaveAttribute('href', '/auth/2fa')
   })
 
