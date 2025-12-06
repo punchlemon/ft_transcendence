@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { fetchMe, getBackupCodes } from '../../lib/api'
 import useAuthStore from '../../stores/authStore'
 import MfaBackupCodesModal from './MfaBackupCodesModal'
@@ -37,8 +37,13 @@ const Profile2FASection = () => {
     }
   }, [twoFAEnabled])
 
+  const setupStartedRef = useRef(false)
+
   useEffect(() => {
     // Ensure latest twoFAEnabled is reflected by fetching /users/me once
+    if (setupStartedRef.current || !user) return
+    setupStartedRef.current = true
+
     const syncMe = async () => {
       try {
         const me = await fetchMe()
@@ -47,7 +52,7 @@ const Profile2FASection = () => {
         // ignore
       }
     }
-    if (user) void syncMe()
+    void syncMe()
   }, [user, updateUser])
 
   useEffect(() => {

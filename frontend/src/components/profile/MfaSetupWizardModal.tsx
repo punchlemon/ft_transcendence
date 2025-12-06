@@ -47,15 +47,15 @@ const MfaSetupWizardModal = ({ onClose, onEnabled, onBackupCodes }: MfaSetupWiza
     }
 
     // Dynamically import the QR code renderer (non-blocking)
-    void (async () => {
-      try {
-        const mod = await import('qrcode.react')
-        const comp = mod?.QRCodeSVG ?? mod?.default ?? null
-        setQRCodeComponent(comp)
-      } catch (err) {
-        setQRCodeComponent(null)
-      }
-    })()
+    // void (async () => {
+    //   try {
+    //     const mod = await import('qrcode.react')
+    //     const comp = mod?.QRCodeSVG ?? mod?.default ?? null
+    //     setQRCodeComponent(comp)
+    //   } catch (err) {
+    //     setQRCodeComponent(null)
+    //   }
+    // })()
   }, [])
 
   const handleVerify = async () => {
@@ -127,11 +127,19 @@ const MfaSetupWizardModal = ({ onClose, onEnabled, onBackupCodes }: MfaSetupWiza
             <div className="mx-auto flex w-full flex-col items-center gap-3 rounded-xl border border-slate-200 bg-slate-50 p-4">
               {loading ? (
                 <div className="w-full text-center py-10 text-sm text-slate-500">Loading setup…</div>
+              ) : (
+                <div className="w-full text-center text-sm text-slate-700 py-4">
+                  <p>QR Code rendering is temporarily disabled for debugging.</p>
+                  <p className="mt-2 text-xs text-slate-500 break-all">{otpauthUrl}</p>
+                </div>
+              )}
+              {/* {loading ? (
+                <div className="w-full text-center py-10 text-sm text-slate-500">Loading setup…</div>
               ) : otpauthUrl && QRCodeComponent ? (
                 <QRCodeComponent value={otpauthUrl} size={160} />
               ) : otpauthUrl ? (
                 <div className="w-full text-center text-sm text-slate-700">QR preview unavailable — copy the secret into your authenticator app.</div>
-              ) : null}
+              ) : null} */}
               <div className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm">
                 <div className="flex items-center justify-between gap-2">
                   <span className="font-semibold text-slate-800">Secret (Base32)</span>
