@@ -18,6 +18,7 @@ import {
 } from '../lib/api'
 import { EditProfileModal } from '../components/profile/EditProfileModal'
 import { SendMessageModal } from '../components/profile/SendMessageModal'
+import Profile2FASection from '../components/profile/Profile2FASection'
 import UserAvatar from '../components/ui/UserAvatar'
 import { calculateWinRate, formatWinRate, formatGamesCount } from '../utils/stats'
 
@@ -450,6 +451,8 @@ const ProfilePage = () => {
               </p>
             )
           )}
+
+          {isOwnProfile ? <Profile2FASection /> : null}
           
           <div className="mt-4 flex flex-wrap justify-center gap-2 sm:justify-start">
             {!isOwnProfile && (

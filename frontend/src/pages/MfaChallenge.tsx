@@ -1,9 +1,11 @@
 import { FormEvent, useEffect, useState } from 'react'
 import { isAxiosError } from 'axios'
+import { useNavigate } from 'react-router-dom'
 import { submitMfaChallenge } from '../lib/api'
 import useAuthStore from '../stores/authStore'
 
 const MfaChallengePage = () => {
+  const navigate = useNavigate()
   const [challengeId, setChallengeId] = useState<string | null>(null)
   const [code, setCode] = useState('')
   const [backupCode, setBackupCode] = useState('')
@@ -16,23 +18,49 @@ const MfaChallengePage = () => {
   const setSession = useAuthStore((state) => state.setSession)
   const user = useAuthStore((state) => state.user)
   const isHydrated = useAuthStore((state) => state.isHydrated)
+  const storedChallenge = useAuthStore((state) => state.mfaChallenge)
+  const clearMfaChallenge = useAuthStore((state) => state.clearMfaChallenge)
+  const hydrateFromStorage = useAuthStore((state) => state.hydrateFromStorage)
+
+  const readChallengeId = () => {
+    if (storedChallenge?.id) {
+      return storedChallenge.id
+    }
+    const raw = sessionStorage.getItem('ft_mfa_challenge')
+    if (raw) {
+      try {
+        const parsed = JSON.parse(raw) as { id?: string }
+        if (parsed.id) {
+          return parsed.id
+        }
+      } catch {
+        // Ignore malformed storage.
+      }
+    }
+    return sessionStorage.getItem('ft_mfa_challenge_id')
+  }
 
   const refreshChallengeId = () => {
-    const storedId = sessionStorage.getItem('ft_mfa_challenge_id')
-    setChallengeId(storedId)
-    setChallengeMissing(!storedId)
+    const candidate = readChallengeId()
+    setChallengeId(candidate)
+    setChallengeMissing(!candidate)
   }
 
   useEffect(() => {
-    refreshChallengeId()
-  }, [])
+    const candidate = readChallengeId()
+    setChallengeId(candidate)
+    setChallengeMissing(!candidate)
+  }, [storedChallenge?.id])
+
+  useEffect(() => {
+    hydrateFromStorage()
+  }, [hydrateFromStorage])
 
   useEffect(() => {
     if (isHydrated && user) {
-      // already authenticated, navigate away to home
-      window.location.href = '/'
+      navigate('/', { replace: true })
     }
-  }, [isHydrated, user])
+  }, [isHydrated, user, navigate])
 
   const resetMessages = () => {
     setErrorMessage(null)
@@ -84,21 +112,23 @@ const MfaChallengePage = () => {
     try {
       const response = await submitMfaChallenge(payload)
       setSession({ user: response.user, tokens: response.tokens })
-      sessionStorage.removeItem('ft_mfa_challenge_id')
+      clearMfaChallenge()
       setStatusMessage(`Logged in as ${response.user.displayName}.`)
       setChallengeMissing(false)
       setCode('')
       setBackupCode('')
+      navigate(storedChallenge?.redirectTo ?? '/', { replace: true })
     } catch (error) {
       if (isAxiosError(error) && error.response) {
         const status = error.response.status
         const data = error.response.data as { error?: { message?: string; code?: string } }
 
         if (status === 404 || status === 410) {
-          sessionStorage.removeItem('ft_mfa_challenge_id')
+          clearMfaChallenge()
           setChallengeId(null)
           setChallengeMissing(true)
           setErrorMessage('Challenge expired. Please log in again.')
+          setTimeout(() => navigate('/login', { replace: true }), 800)
           return
         }
 
