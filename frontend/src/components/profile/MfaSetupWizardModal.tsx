@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import type { ComponentType } from 'react'
+import QRCode from 'qrcode'
 import { fetchMfaSetup, fetchMe, getBackupCodes, verifyMfa } from '../../lib/api'
 import useAuthStore from '../../stores/authStore'
 
@@ -16,7 +16,7 @@ const MfaSetupWizardModal = ({ onClose, onEnabled, onBackupCodes }: MfaSetupWiza
   const [step, setStep] = useState<Step>(1)
   const [secret, setSecret] = useState('')
   const [otpauthUrl, setOtpauthUrl] = useState('')
-  const [QRCodeComponent, setQRCodeComponent] = useState<ComponentType<{ value: string; size?: number } | any> | null>(null)
+  const [qrDataUrl, setQrDataUrl] = useState<string | null>(null)
   const [showSecret, setShowSecret] = useState(false)
   const [code, setCode] = useState('')
   const [backupCodes, setBackupCodes] = useState<string[] | null>(null)
@@ -45,18 +45,17 @@ const MfaSetupWizardModal = ({ onClose, onEnabled, onBackupCodes }: MfaSetupWiza
       setupStartedRef.current = true
       void startSetup()
     }
-
-    // Dynamically import the QR code renderer (non-blocking)
-    // void (async () => {
-    //   try {
-    //     const mod = await import('qrcode.react')
-    //     const comp = mod?.QRCodeSVG ?? mod?.default ?? null
-    //     setQRCodeComponent(comp)
-    //   } catch (err) {
-    //     setQRCodeComponent(null)
-    //   }
-    // })()
   }, [])
+
+  useEffect(() => {
+    if (otpauthUrl) {
+      QRCode.toDataURL(otpauthUrl)
+        .then((url: string) => setQrDataUrl(url))
+        .catch(() => setQrDataUrl(null))
+    } else {
+      setQrDataUrl(null)
+    }
+  }, [otpauthUrl])
 
   const handleVerify = async () => {
     setLoading(true)
@@ -127,19 +126,11 @@ const MfaSetupWizardModal = ({ onClose, onEnabled, onBackupCodes }: MfaSetupWiza
             <div className="mx-auto flex w-full flex-col items-center gap-3 rounded-xl border border-slate-200 bg-slate-50 p-4">
               {loading ? (
                 <div className="w-full text-center py-10 text-sm text-slate-500">Loading setup…</div>
-              ) : (
-                <div className="w-full text-center text-sm text-slate-700 py-4">
-                  <p>QR Code rendering is temporarily disabled for debugging.</p>
-                  <p className="mt-2 text-xs text-slate-500 break-all">{otpauthUrl}</p>
-                </div>
-              )}
-              {/* {loading ? (
-                <div className="w-full text-center py-10 text-sm text-slate-500">Loading setup…</div>
-              ) : otpauthUrl && QRCodeComponent ? (
-                <QRCodeComponent value={otpauthUrl} size={160} />
+              ) : qrDataUrl ? (
+                <img src={qrDataUrl} alt="QR Code" className="h-40 w-40" />
               ) : otpauthUrl ? (
                 <div className="w-full text-center text-sm text-slate-700">QR preview unavailable — copy the secret into your authenticator app.</div>
-              ) : null} */}
+              ) : null}
               <div className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm">
                 <div className="flex items-center justify-between gap-2">
                   <span className="font-semibold text-slate-800">Secret (Base32)</span>

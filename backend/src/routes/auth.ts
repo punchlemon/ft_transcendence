@@ -1000,6 +1000,12 @@ const authRoutes: FastifyPluginAsync = async (fastify) => {
 
     const valid = authenticator.verify({ token: parsed.data.code, secret: user.twoFASecret })
     if (!valid) {
+      request.log.warn({
+        msg: 'MFA verification failed',
+        userId,
+        token: parsed.data.code,
+        secretPrefix: user.twoFASecret.substring(0, 4)
+      })
       reply.code(400)
       return {
         error: {
