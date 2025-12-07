@@ -6,6 +6,7 @@ import { api, fetchTournament, TournamentDetail } from '../lib/api'
 import BracketView from '../components/tournament/BracketView'
 import TournamentRanking from '../components/tournament/TournamentRanking'
 import { MatchQueueItem, advanceToNextMatch } from '../lib/tournament'
+import PrivateRoomInviteModal from '../components/game/PrivateRoomInviteModal'
 
 type GameStatus = 'connecting' | 'playing' | 'paused' | 'finished'
 
@@ -27,6 +28,7 @@ const GameRoomPage = () => {
   const playerSlotRef = useRef<'p1' | 'p2' | null>(null)
   const [reconnectKey, setReconnectKey] = useState(0)
   const [sessionId, setSessionId] = useState<string | null>(null)
+  const [showInviteModal, setShowInviteModal] = useState(false)
 
   const mode = searchParams.get('mode')
 
@@ -116,6 +118,9 @@ const GameRoomPage = () => {
         if (p1Name === 'AI') query.set('aiSlot', 'p1')
         if (p2Name === 'AI') query.set('aiSlot', 'p2')
       }
+    } else if (id) {
+      // For private rooms and explicit session ids, pass sessionId so backend uses the correct game
+      query.append('sessionId', id)
     }
 
     const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:'
@@ -137,7 +142,13 @@ const GameRoomPage = () => {
         if (data.event === 'match:event') {
           if (data.payload.type === 'CONNECTED') {
             setPlayerSlot(data.payload.slot)
-            if (data.payload.sessionId) setSessionId(data.payload.sessionId)
+            if (data.payload.sessionId) {
+              setSessionId(data.payload.sessionId)
+              // If URL asked to show invite modal, enable it when we have sessionId
+              if (searchParams.get('showInvite')) {
+                setShowInviteModal(true)
+              }
+            }
             // connection handled
           } else if (data.payload.type === 'START') {
             setStatus('playing')
@@ -234,6 +245,16 @@ const GameRoomPage = () => {
     }
     // reconnectKey is used to force a reconnect when user wants to play again
   }, [token, searchParams, reconnectKey, id])
+
+  // Close invite modal helper
+  const handleCloseInviteModal = () => {
+    setShowInviteModal(false)
+    // remove param from URL without reloading
+    const params = new URLSearchParams(Array.from(searchParams.entries()))
+    params.delete('showInvite')
+    const base = window.location.pathname + (params.toString() ? `?${params.toString()}` : '')
+    window.history.replaceState({}, '', base)
+  }
 
   // Input handling
   useEffect(() => {
@@ -468,6 +489,9 @@ const GameRoomPage = () => {
 
   return (
     <div className="flex min-h-[calc(100vh-64px)] flex-col dark:bg-slate-900">
+      {showInviteModal && sessionId && (
+        <PrivateRoomInviteModal sessionId={sessionId} onClose={handleCloseInviteModal} />
+      )}
       {showRanking && activeTournament && (
         <TournamentRanking 
             tournament={activeTournament} 

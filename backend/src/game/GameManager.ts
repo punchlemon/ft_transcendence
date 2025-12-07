@@ -20,9 +20,17 @@ export class GameManager {
     if (this.games.has(sessionId)) {
       return this.games.get(sessionId)!;
     }
-    const game = new GameEngine(sessionId, undefined, (result) => {
-      this.handleGameEnd(sessionId, result);
-    });
+    const game = new GameEngine(
+      sessionId,
+      undefined,
+      (result) => {
+        this.handleGameEnd(sessionId, result);
+      },
+      // onEmpty: remove the game from the registry when no players remain
+      () => {
+        this.games.delete(sessionId);
+      }
+    );
     this.games.set(sessionId, game);
     return game;
   }

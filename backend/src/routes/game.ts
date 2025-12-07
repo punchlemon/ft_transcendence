@@ -46,6 +46,14 @@ export default async function gameRoutes(fastify: FastifyInstance) {
       const manager = GameManager.getInstance()
       const { sessionId } = manager.createPrivateGame()
 
+      // Log sessionId and invite URL for debugging
+      try {
+        const invitePath = `/game/${sessionId}?mode=remote&private=true`
+        fastify.log.info({ sessionId, invitePath }, 'Created private game for invite')
+      } catch (e) {
+        fastify.log.warn({ err: e }, 'Failed to log private game creation')
+      }
+
       if (!blocked) {
         const inviterDisplay = await getDisplayNameOrFallback(fastify, user.userId)
 
@@ -90,6 +98,23 @@ export default async function gameRoutes(fastify: FastifyInstance) {
 
     // Unreachable due to schema, but keep for safety
     return reply.code(400).send({ error: 'Invalid invite type' } as any)
+  })
+
+  // Create a private room without inviting anyone. Returns sessionId for the created private game.
+  fastify.post('/game/private', {
+    preValidation: [fastify.authenticate]
+  }, async (req, reply) => {
+    const manager = GameManager.getInstance()
+    const { sessionId } = manager.createPrivateGame()
+    // Log sessionId and returned URL for debugging
+    try {
+      const invitePath = `/game/${sessionId}?mode=remote&private=true`
+      fastify.log.info({ sessionId, invitePath }, 'Created private game (direct)')
+    } catch (e) {
+      fastify.log.warn({ err: e }, 'Failed to log private game creation (direct)')
+    }
+
+    return { sessionId }
   })
 
   fastify.get('/ws/game', { websocket: true }, (connection, req) => {

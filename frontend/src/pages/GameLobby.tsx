@@ -18,7 +18,7 @@ const GameLobbyPage = () => {
   const [matchType, setMatchType] = useState<MatchType | null>(null)
   const [aiDifficulty, setAiDifficulty] = useState<AIDifficulty>('NORMAL')
   const [isMatching, setIsMatching] = useState(false)
-  const [roomCode, setRoomCode] = useState('')
+  
 
   // Local 1v1 State
   const [localP1, setLocalP1] = useState('Player 1')
@@ -67,8 +67,19 @@ const GameLobbyPage = () => {
           navigate(`/game/remote-${Date.now()}?mode=remote`)
         }, 3000)
       } else if (matchType === 'private') {
-        // ルーム作成ロジック（未実装）
-        alert('Custom room creation is not implemented yet')
+        try {
+          // Create a new private room via API (no manual code entry)
+          setIsMatching(true)
+          const res = await (await import('../lib/api')).createPrivateRoom()
+          const sessionId = res.sessionId
+          setIsMatching(false)
+          // Navigate into the room and request GameRoom to show invite modal
+          navigate(`/game/${sessionId}?mode=remote&private=true&showInvite=1`)
+        } catch (err) {
+          console.error('Failed to create private room', err)
+          setIsMatching(false)
+          alert('Failed to create private room')
+        }
       }
     }
   }
@@ -231,24 +242,12 @@ const GameLobbyPage = () => {
                   }`}
                 >
                   <div className="font-medium text-slate-900 dark:text-slate-100">Private Room</div>
-                  <div className="text-sm text-slate-500 dark:text-slate-400">Create or join with a code</div>
+                  <div className="text-sm text-slate-500 dark:text-slate-400">Create a private room</div>
+                  
                 </button>
               </div>
 
-              {matchType === 'private' && (
-                <div className="mt-4">
-                  <label className="mb-1 block text-sm font-medium text-slate-700 dark:text-slate-300">
-                    Room Code (Optional to join)
-                  </label>
-                  <input
-                    type="text"
-                    value={roomCode}
-                    onChange={(e) => setRoomCode(e.target.value)}
-                    placeholder="Enter code to join or leave empty to create"
-                    className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm focus:border-indigo-500 focus:outline-none focus:ring-1 focus:ring-indigo-500 dark:border-slate-600 dark:bg-slate-900 dark:text-slate-100 dark:placeholder-slate-400"
-                  />
-                </div>
-              )}
+              {/* private rooms create immediately; no manual code entry */}
             </div>
           )}
 

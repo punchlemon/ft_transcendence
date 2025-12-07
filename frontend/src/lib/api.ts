@@ -547,6 +547,11 @@ export const inviteToGame = async (targetUserId: number) => {
   return response.data as InviteResponse
 }
 
+export const createPrivateRoom = async () => {
+  const response = await apiClient.post('/game/private')
+  return response.data as { sessionId: string }
+}
+
 /*
 解説:
 
