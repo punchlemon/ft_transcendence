@@ -90,7 +90,7 @@ const tournamentsRoutes: FastifyPluginAsync = async (fastify) => {
     inviteTimers.set(participantId, t)
   }
 
-  fastify.post('/tournaments', async (request, reply) => {
+  fastify.post('/', async (request, reply) => {
     const parsed = createTournamentSchema.safeParse(request.body)
 
     if (!parsed.success) {
@@ -268,7 +268,7 @@ const tournamentsRoutes: FastifyPluginAsync = async (fastify) => {
   // Invite endpoints: POST /tournaments/:id/invite and PATCH participant action
   const inviteBodySchema = z.object({ userId: z.coerce.number().int().positive() })
 
-  fastify.post('/tournaments/:id/invite', { preHandler: fastify.authenticate }, async (request, reply) => {
+  fastify.post('/:id/invite', { preHandler: fastify.authenticate }, async (request, reply) => {
     const params = detailParamSchema.safeParse(request.params)
     const body = inviteBodySchema.safeParse(request.body)
 
@@ -360,7 +360,7 @@ const tournamentsRoutes: FastifyPluginAsync = async (fastify) => {
 
   const participantActionSchema = z.object({ action: z.enum(['ACCEPT', 'DECLINE']) })
 
-  fastify.patch('/tournaments/:id/participants/:participantId', { preHandler: fastify.authenticate }, async (request, reply) => {
+  fastify.patch('/:id/participants/:participantId', { preHandler: fastify.authenticate }, async (request, reply) => {
     const params = z.object({ id: z.coerce.number().int().positive(), participantId: z.coerce.number().int().positive() }).safeParse(request.params)
     const body = participantActionSchema.safeParse(request.body)
 
@@ -401,7 +401,7 @@ const tournamentsRoutes: FastifyPluginAsync = async (fastify) => {
           'TOURNAMENT_INVITE',
           'Invite accepted',
           `${(request.user as any).displayName || 'A user'} accepted invite for ${tournament.name}`,
-          { tournamentId: tournament.id, participantId: updated.id }
+          { tournamentId: participant.tournamentId, participantId: updated.id }
         )
       }
       return { data: updated }
@@ -419,14 +419,14 @@ const tournamentsRoutes: FastifyPluginAsync = async (fastify) => {
           'TOURNAMENT_INVITE',
           'Invite declined',
           `${(request.user as any).displayName || 'A user'} declined invite for ${tournament.name}`,
-          { tournamentId: tournament.id, participantId: updated.id }
+          { tournamentId: participant.tournamentId, participantId: updated.id }
         )
       }
       return { data: updated }
     }
   })
 
-  fastify.get('/tournaments', async (request, reply) => {
+  fastify.get('/', async (request, reply) => {
     const parsed = listQuerySchema.safeParse(request.query)
 
     if (!parsed.success) {
@@ -487,7 +487,7 @@ const tournamentsRoutes: FastifyPluginAsync = async (fastify) => {
     }
   })
 
-  fastify.get('/tournaments/:id', async (request, reply) => {
+  fastify.get('/:id', async (request, reply) => {
     const parsed = detailParamSchema.safeParse(request.params)
 
     if (!parsed.success) {
@@ -579,7 +579,7 @@ const tournamentsRoutes: FastifyPluginAsync = async (fastify) => {
     }
   })
 
-  fastify.post('/tournaments/matches/:matchId/result', async (request, reply) => {
+  fastify.post('/matches/:matchId/result', async (request, reply) => {
     const params = matchParamSchema.safeParse(request.params)
     const body = matchResultSchema.safeParse(request.body)
 

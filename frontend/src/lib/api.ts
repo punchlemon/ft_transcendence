@@ -1,16 +1,12 @@
 import axios, { AxiosHeaders, type InternalAxiosRequestConfig } from 'axios'
 import useAuthStore, { readAccessTokenFromStorage, type AuthUserSnapshot } from '../stores/authStore'
 
-const rawBaseUrl = import.meta.env.VITE_API_BASE_URL?.trim()
-const shouldUseRelativeBase =
-  !rawBaseUrl ||
-  rawBaseUrl === '/' ||
-  rawBaseUrl === '/api' ||
-  rawBaseUrl.startsWith('http://backend') ||
-  rawBaseUrl.startsWith('https://backend')
-
-const resolvedBaseUrl = shouldUseRelativeBase ? '/api' : rawBaseUrl
-export const baseURL = resolvedBaseUrl?.endsWith('/') ? resolvedBaseUrl.slice(0, -1) : resolvedBaseUrl
+const envBaseUrl = import.meta.env.VITE_API_BASE_URL
+let url = envBaseUrl || '/api'
+if (typeof url === 'string' && url.endsWith('/')) {
+  url = url.slice(0, -1)
+}
+export const baseURL = url
 
 const apiClient = axios.create({
   baseURL
