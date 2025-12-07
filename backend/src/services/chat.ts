@@ -157,6 +157,40 @@ export class ChatService extends EventEmitter {
     return message;
   }
 
+  // Create a structured invite message with type 'INVITE' and metadata JSON
+  async sendInviteMessage(channelId: number, userId: number, payload: { sessionId: string; url: string; label?: string }) {
+    // Ensure membership and permissions similar to sendMessage
+    const member = await prisma.channelMember.findUnique({
+      where: { channelId_userId: { channelId, userId } }
+    });
+    if (!member) throw new Error('User is not a member of this channel');
+
+    const metadata = JSON.stringify(payload);
+
+    const message = await prisma.message.create({
+      data: {
+        channelId,
+        userId,
+        content: payload.label ? payload.label : 'Game invite',
+        type: 'INVITE',
+        metadata,
+      },
+      include: {
+        user: {
+          select: {
+            id: true,
+            displayName: true,
+            avatarUrl: true,
+            login: true,
+          },
+        },
+      },
+    });
+
+    this.emit('message', message);
+    return message;
+  }
+
   async getMessages(channelId: number, limit = 50, beforeId?: number) {
     return prisma.message.findMany({
       where: {

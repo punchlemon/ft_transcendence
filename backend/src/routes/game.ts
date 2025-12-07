@@ -117,6 +117,14 @@ export default async function gameRoutes(fastify: FastifyInstance) {
     return { sessionId }
   })
 
+  // Check whether a game session exists / is available. Returns { sessionId, available }
+  fastify.get('/game/:sessionId/status', async (req, reply) => {
+    const { sessionId } = req.params as { sessionId: string }
+    const manager = GameManager.getInstance()
+    const existing = manager.getGame(sessionId)
+    return { sessionId, available: !!existing }
+  })
+
   fastify.get('/ws/game', { websocket: true }, (connection, req) => {
     fastify.log.info('Client connected to game websocket')
     
