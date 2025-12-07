@@ -118,6 +118,9 @@ const GameRoomPage = () => {
         if (p1Name === 'AI') query.set('aiSlot', 'p1')
         if (p2Name === 'AI') query.set('aiSlot', 'p2')
       }
+    } else if (id) {
+      // For private rooms and explicit session ids, pass sessionId so backend uses the correct game
+      query.append('sessionId', id)
     }
 
     const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:'
