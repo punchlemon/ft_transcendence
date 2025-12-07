@@ -1,16 +1,12 @@
 import axios, { AxiosHeaders, type InternalAxiosRequestConfig } from 'axios'
 import useAuthStore, { readAccessTokenFromStorage, type AuthUserSnapshot } from '../stores/authStore'
 
-const rawBaseUrl = import.meta.env.VITE_API_BASE_URL?.trim()
-const shouldUseRelativeBase =
-  !rawBaseUrl ||
-  rawBaseUrl === '/' ||
-  rawBaseUrl === '/api' ||
-  rawBaseUrl.startsWith('http://backend') ||
-  rawBaseUrl.startsWith('https://backend')
-
-const resolvedBaseUrl = shouldUseRelativeBase ? '/api' : rawBaseUrl
-export const baseURL = resolvedBaseUrl?.endsWith('/') ? resolvedBaseUrl.slice(0, -1) : resolvedBaseUrl
+const envBaseUrl = import.meta.env.VITE_API_BASE_URL
+let url = envBaseUrl || '/api'
+if (typeof url === 'string' && url.endsWith('/')) {
+  url = url.slice(0, -1)
+}
+export const baseURL = url
 
 const apiClient = axios.create({
   baseURL
@@ -439,6 +435,16 @@ export const fetchTournament = async (id: number) => {
 export const createTournament = async (payload: CreateTournamentPayload) => {
   const response = await apiClient.post('/tournaments', payload)
   return response.data as { data: Tournament }
+}
+
+export const inviteTournamentParticipant = async (tournamentId: number, userId: number) => {
+  const response = await apiClient.post(`/tournaments/${tournamentId}/invite`, { userId })
+  return response.data as { data: { id: number; tournamentId: number; userId: number; alias: string; inviteState: string } }
+}
+
+export const respondTournamentParticipant = async (tournamentId: number, participantId: number, action: 'ACCEPT' | 'DECLINE') => {
+  const response = await apiClient.patch(`/tournaments/${tournamentId}/participants/${participantId}`, { action })
+  return response.data as { data: any }
 }
 
 export type UpdateProfilePayload = {

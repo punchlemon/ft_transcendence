@@ -38,11 +38,13 @@ export const buildServer = async () => {
   await server.register(multipartPlugin)
   await server.register(staticPlugin)
   await server.register(authRoutes, { prefix: '/api/auth' })
-  await server.register(usersRoutes, { prefix: '/api' })
-  await server.register(tournamentsRoutes, { prefix: '/api' })
+  await server.register(usersRoutes, { prefix: '/api/users' })
+  await server.register(tournamentsRoutes, { prefix: '/api/tournaments' })
   await server.register(gameRoutes, { prefix: '/api' })
   await server.register(chatRoutes, { prefix: '/api/chat' })
+  // keep chat WS under '/api/ws/...' for compatibility with frontend
   await server.register(chatWsRoutes, { prefix: '/api' })
+  // friend and block endpoints keep their existing paths under /api
   await server.register(friendRoutes, { prefix: '/api' })
   await server.register(notificationsRoutes, { prefix: '/api/notifications' })
 
