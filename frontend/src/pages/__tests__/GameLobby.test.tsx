@@ -11,7 +11,7 @@ vi.mock('react-router-dom', () => ({
 // Mock API createPrivateRoom (use inline factory to avoid hoisting issues)
 vi.mock('../../../src/lib/api', () => ({
   createPrivateRoom: vi.fn(() => Promise.resolve({ sessionId: 'game_private_abc123' }))
-}), { virtual: true })
+}))
 
 // Ensure auth store has a user
 import useAuthStore from '../../stores/authStore'
