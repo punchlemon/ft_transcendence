@@ -1,4 +1,4 @@
-import { prisma } from '../utils/prisma'
+import type { PrismaClient } from '@prisma/client'
 
 type CloseSocketsFn = (sessionId: number) => Promise<number>
 type GetConnectionCountFn = (userId: number) => Promise<number>
@@ -6,6 +6,11 @@ type GetConnectionCountFn = (userId: number) => Promise<number>
 class PresenceService {
   private closeSocketsBySessionImpl: CloseSocketsFn | null = null
   private getConnectionCountImpl: GetConnectionCountFn | null = null
+  private prisma: PrismaClient | null = null
+
+  setPrisma(prisma: PrismaClient) {
+    this.prisma = prisma
+  }
 
   setCloseSocketsBySession(fn: CloseSocketsFn) {
     this.closeSocketsBySessionImpl = fn
@@ -28,8 +33,11 @@ class PresenceService {
     if (count > 0) return count
 
     // fallback: check user.status field
-    const user = await prisma.user.findUnique({ where: { id: userId }, select: { status: true } })
-    return user && user.status === 'ONLINE' ? 1 : 0
+    if (this.prisma) {
+      const user = await this.prisma.user.findUnique({ where: { id: userId }, select: { status: true } })
+      return user && user.status === 'ONLINE' ? 1 : 0
+    }
+    return 0
   }
 
   async isOnline(userId: number) {
@@ -39,3 +47,4 @@ class PresenceService {
 }
 
 export const presenceService = new PresenceService()
+
