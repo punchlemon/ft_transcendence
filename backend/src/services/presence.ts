@@ -1,35 +1,41 @@
-export type PresenceStatus = 'ONLINE' | 'OFFLINE'
-export type PresenceBroadcastFn = (userId: number, status: PresenceStatus) => Promise<void>
-export type CloseSocketsFn = (userId: number) => Promise<number>
+import { prisma } from '../utils/prisma'
 
-let broadcastImpl: PresenceBroadcastFn = async () => {}
-let closeSocketsImpl: CloseSocketsFn = async () => 0
-let closeSocketsBySessionImpl: (sessionId: number) => Promise<number> = async () => 0
-let getConnectionCountImpl: (userId: number) => Promise<number> = async () => 0
+type CloseSocketsFn = (sessionId: number) => Promise<number>
+type GetConnectionCountFn = (userId: number) => Promise<number>
 
-export const presenceService = {
-  setBroadcast(fn: PresenceBroadcastFn) {
-    broadcastImpl = fn
-  },
-  setCloseSockets(fn: CloseSocketsFn) {
-    closeSocketsImpl = fn
-  },
-  setCloseSocketsBySession(fn: (sessionId: number) => Promise<number>) {
-    closeSocketsBySessionImpl = fn
-  },
-  setGetConnectionCount(fn: (userId: number) => Promise<number>) {
-    getConnectionCountImpl = fn
-  },
-  async broadcast(userId: number, status: PresenceStatus) {
-    await broadcastImpl(userId, status)
-  },
-  async closeUserSockets(userId: number) {
-    return closeSocketsImpl(userId)
-  },
+class PresenceService {
+  private closeSocketsBySessionImpl: CloseSocketsFn | null = null
+  private getConnectionCountImpl: GetConnectionCountFn | null = null
+
+  setCloseSocketsBySession(fn: CloseSocketsFn) {
+    this.closeSocketsBySessionImpl = fn
+  }
+
+  setGetConnectionCount(fn: GetConnectionCountFn) {
+    this.getConnectionCountImpl = fn
+  }
+
   async closeSocketsBySession(sessionId: number) {
-    return closeSocketsBySessionImpl(sessionId)
-  },
+    if (this.closeSocketsBySessionImpl) return this.closeSocketsBySessionImpl(sessionId)
+    return 0
+  }
+
   async getConnectionCount(userId: number) {
-    return getConnectionCountImpl(userId)
+    let count = 0
+    if (this.getConnectionCountImpl) {
+      count = await this.getConnectionCountImpl(userId)
+    }
+    if (count > 0) return count
+
+    // fallback: check user.status field
+    const user = await prisma.user.findUnique({ where: { id: userId }, select: { status: true } })
+    return user && user.status === 'ONLINE' ? 1 : 0
+  }
+
+  async isOnline(userId: number) {
+    const cnt = await this.getConnectionCount(userId)
+    return cnt > 0
   }
 }
+
+export const presenceService = new PresenceService()
