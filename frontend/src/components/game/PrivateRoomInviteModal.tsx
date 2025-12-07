@@ -35,7 +35,7 @@ const PrivateRoomInviteModal: React.FC<Props> = ({ sessionId, onClose }) => {
         onClose()
       } else {
         // No active thread selected; inform user to choose one
-        alert('チャットを開き、送信先のスレッドを選択してから「Send to chat」を再度押してください。')
+        alert('Please open the chat, select the thread you want to send to, then press "Send to chat" again.')
       }
     } catch (err) {
       console.error('Failed to send invite to chat', err)
