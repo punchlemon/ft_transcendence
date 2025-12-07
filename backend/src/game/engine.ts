@@ -4,6 +4,21 @@ import { AIOpponent, AIDifficulty } from './ai';
 
 export class GameEngine {
   public readonly sessionId: string;
+  // If set, the userId of the player who created this private session.
+  public creatorUserId?: number;
+  // If true, this session was created as a private room and should be
+  // torn down when the creator leaves to avoid orphaned private rooms.
+  public isPrivate: boolean = false;
+  // If true, this is a local/demo session (not an online match).
+  public isLocal: boolean = false;
+  // Prevent re-entrant destruction logic when we programmatically close sockets
+  // during teardown.
+  private isBeingDestroyed: boolean = false;
+  // Timer used to delay teardown when the last player disconnects to avoid
+  // immediately marking freshly-created sessions as expired due to racey
+  // connect/disconnect events. If a new player joins during the grace window
+  // the timer will be cleared.
+  private teardownTimer?: NodeJS.Timeout;
   private state: GameState;
   private config: GameConfig;
   private clients: { p1?: WebSocket; p2?: WebSocket } = {};
@@ -62,7 +77,16 @@ export class GameEngine {
 
   addPlayer(socket: WebSocket, userId?: number, alias?: string): 'p1' | 'p2' | null {
     const aiSlot = (this as any).aiSlot;
-
+    // If a player joins while a previous empty-game teardown was scheduled,
+    // cancel that teardown — the game is active again.
+    try {
+      if (this.teardownTimer) {
+        clearTimeout(this.teardownTimer);
+        this.teardownTimer = undefined;
+      }
+    } catch (e) {
+      // swallow
+    }
     if (!this.clients.p1 && aiSlot !== 'p1') {
       this.clients.p1 = socket;
       if (userId) this.players.p1 = userId;
@@ -110,22 +134,139 @@ export class GameEngine {
   }
 
   removePlayer(socket: WebSocket) {
+    // Short-circuit if we are already tearing this game down.
+    if (this.isBeingDestroyed) return;
+    let removedSlot: 'p1' | 'p2' | null = null;
     if (this.clients.p1 === socket) {
       this.clients.p1 = undefined;
+      removedSlot = 'p1'
       this.pauseGame('Player 1 disconnected');
     } else if (this.clients.p2 === socket) {
       this.clients.p2 = undefined;
+      removedSlot = 'p2'
       this.pauseGame('Player 2 disconnected');
+    }
+
+    // If the removed player's userId matches the creator of this private room,
+    // log this event for audit/monitoring purposes.
+    try {
+      if (removedSlot) {
+        const removedUserId = this.players[removedSlot]
+        if (typeof this.creatorUserId === 'number' && removedUserId === this.creatorUserId) {
+          // Use console.info to ensure the message appears in logs; the Fastify
+          // request instance isn't available here.
+          console.info(`[game:${this.sessionId}] Creator user ${removedUserId} has left the room (slot=${removedSlot})`)
+        }
+      }
+    } catch (e) {
+      // swallow logging errors
+    }
+    
+    // If this is a private room and the creator left, tear down the room
+    // immediately to avoid leaving an orphaned private session for other
+    // players to join. Notify remaining clients, attempt to close their
+    // sockets, and invoke onEmpty so the manager removes the game.
+    try {
+      if (removedSlot) {
+        const removedUserId = this.players[removedSlot]
+        if (this.isPrivate && typeof this.creatorUserId === 'number' && removedUserId === this.creatorUserId) {
+          // Notify remaining participants that the room was closed by the creator.
+          this.broadcast({ event: 'match:event', payload: { type: 'CLOSED_BY_CREATOR', message: 'Creator closed the private room' } });
+
+          // Attempt to close remaining sockets (if any). It's okay if this
+          // triggers their close handlers — removePlayer is idempotent enough.
+          try {
+            if (this.clients.p1 && this.clients.p1 !== socket) {
+              this.clients.p1.close();
+            }
+          } catch (e) {
+            // ignore
+          }
+          try {
+            if (this.clients.p2 && this.clients.p2 !== socket) {
+              this.clients.p2.close();
+            }
+          } catch (e) {
+            // ignore
+          }
+
+          // Mark destruction in progress so subsequent removePlayer calls
+          // triggered by socket close events are no-ops.
+          this.isBeingDestroyed = true;
+
+          // Stop the engine and notify manager that the game is empty.
+          try {
+            this.stop();
+          } catch (e) {
+            // swallow
+          }
+          try {
+            try { console.info(`[game:${this.sessionId}] calling onEmpty (creator left)`); } catch (e) {}
+            if (this.onEmpty) this.onEmpty();
+          } catch (e) {
+            // swallow
+          }
+
+          // We're done — return early so normal empty-game logic doesn't run twice.
+          return;
+        }
+      }
+    } catch (e) {
+      // swallow
+    }
+
+    // Public online PvP behavior: if this is a non-private, non-local, non-AI
+    // online match and one player leaves, immediately tear down the room and
+    // force remaining players out. This avoids leaving a half-empty public
+    // match that other players could incorrectly join.
+    try {
+      if (removedSlot) {
+        const removedUserId = this.players[removedSlot]
+        if (!this.isPrivate && !this.isLocal && !this.isAIEnabled) {
+          // Notify remaining participants that the room is closed because a
+          // participant left.
+          this.broadcast({ event: 'match:event', payload: { type: 'CLOSED', message: 'Player left; match closed' } });
+
+          // Prevent re-entrant cleanup
+          this.isBeingDestroyed = true;
+
+          try {
+            if (this.clients.p1 && this.clients.p1 !== socket) this.clients.p1.close();
+          } catch (e) {}
+          try {
+            if (this.clients.p2 && this.clients.p2 !== socket) this.clients.p2.close();
+          } catch (e) {}
+
+          try { this.stop(); } catch (e) {}
+          try { if (this.onEmpty) this.onEmpty(); } catch (e) {}
+          return;
+        }
+      }
+    } catch (e) {
+      // swallow
     }
     
     if (!this.clients.p1 && (!this.clients.p2 && !this.isAIEnabled)) {
-      // No players left: stop and notify manager so it can remove this game from its registry
-      this.stop();
-      try {
-        if (this.onEmpty) this.onEmpty();
-      } catch (e) {
-        // Swallow errors from manager callback
-        // Manager will also remove games on finish via onGameEnd
+      // No players left: schedule a delayed teardown rather than immediately
+      // calling onEmpty. This prevents transient disconnects or immediate
+      // re-checks (caused by e.g. the client refreshing or modal flows)
+      // from causing the session to be marked expired right away.
+      if (!this.teardownTimer) {
+        try {
+          this.teardownTimer = setTimeout(() => {
+            this.teardownTimer = undefined;
+            try { this.stop(); } catch (e) {}
+            try {
+              if (this.onEmpty) this.onEmpty();
+            } catch (e) {
+              // swallow
+            }
+          }, 1000);
+        } catch (e) {
+          // fallback: immediate teardown
+          try { this.stop(); } catch (err) {}
+          try { if (this.onEmpty) this.onEmpty(); } catch (err) {}
+        }
       }
     }
   }
