@@ -132,7 +132,7 @@ describe('POST /api/auth/register', () => {
 
     expect(response.statusCode).toBe(409)
     const body = response.json<{ error: { code: string } }>()
-    expect(body.error.code).toBe('USER_ALREADY_EXISTS')
+    expect(body.error.code).toBe('EMAIL_TAKEN')
   })
 
   it('validates payload and returns 400 for weak password', async () => {
@@ -162,7 +162,7 @@ describe('POST /api/auth/register', () => {
     const user2Response = await server.inject({
       method: 'POST',
       url: '/api/auth/register',
-      payload: { ...basePayload, email: 'test2@example.com', username: 'testuser2' }
+      payload: { ...basePayload, email: 'test2@example.com', username: 'testuser2', displayName: 'Player Two' }
     })
 
     const user1 = await prisma.user.findUniqueOrThrow({ where: { email: 'test1@example.com' } })
