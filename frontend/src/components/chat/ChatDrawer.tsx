@@ -10,6 +10,11 @@ import UserAvatar from '../ui/UserAvatar'
 import { MessageInput } from './MessageInput'
 import PropTypes from 'prop-types'
 
+// Cache and pending maps for invite availability checks.
+// Once a sessionId is discovered to be unavailable, we store `false` and never allow join again.
+const inviteAvailabilityCache: Map<string, boolean> = new Map()
+const invitePending: Map<string, Promise<boolean>> = new Map()
+
 const ChatDrawer = () => {
   const [activeTab, setActiveTab] = useState<'dm' | 'system'>('dm')
   const [showMenu, setShowMenu] = useState(false)
@@ -91,6 +96,13 @@ const ChatDrawer = () => {
     return activeThreadId ? (messages?.[activeThreadId] || []) : []
   }, [activeThreadId, messages])
 
+  // In-memory cache to avoid re-checking invite availability repeatedly.
+  // Once a sessionId is known to be unavailable, we permanently treat it as unavailable.
+  // Use module-level Maps so multiple renders/components share the cache during app lifetime.
+  // Note: we intentionally only persist the 'unavailable' state here (false). If a session is
+  // available we may still check again later; but once unavailable we never allow join.
+  
+
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
   }
@@ -168,45 +180,108 @@ const ChatDrawer = () => {
   }
 
   const InviteMessage: React.FC<{ parsed: any; senderId?: number; currentUserId?: number }> = ({ parsed, senderId, currentUserId }) => {
-    const [available, setAvailable] = useState<boolean | null>(null)
+    // Initialize availability from cache synchronously to avoid flicker.
+    const sessionId = parsed?.sessionId
+    const cached = sessionId ? inviteAvailabilityCache.get(sessionId) : undefined
+    const [available, setAvailable] = useState<boolean | null>(typeof cached === 'boolean' ? cached : null)
     const isSender = typeof senderId === 'number' && typeof currentUserId === 'number' && senderId === currentUserId
 
     useEffect(() => {
       let mounted = true
-      const check = async () => {
-        try {
-          const res = await api.get(`/game/${encodeURIComponent(parsed.sessionId)}/status`)
-          if (!mounted) return
-          const data = res.data ?? res
-          setAvailable(Boolean(data.available))
-        } catch (err) {
+      if (!sessionId) {
+        setAvailable(false)
+        return () => { mounted = false }
+      }
+
+      // If a pending check exists, attach to its result so we update state
+      if (invitePending.has(sessionId)) {
+        invitePending.get(sessionId)!.then((av) => {
+          if (mounted) setAvailable(av)
+        }).catch(() => {
           if (mounted) setAvailable(false)
+        })
+      } else {
+        // Only fetch from server if we don't already have a cached answer
+        if (!inviteAvailabilityCache.has(sessionId)) {
+          const p = (async () => {
+            try {
+              const res = await api.get(`/game/${encodeURIComponent(sessionId)}/status`)
+              const data = res.data ?? res
+              const av = Boolean(data.available)
+              // Cache both available and unavailable states; unavailable is permanent per UX requirement
+              inviteAvailabilityCache.set(sessionId, av)
+              if (mounted) setAvailable(av)
+              return av
+            } catch (err) {
+              inviteAvailabilityCache.set(sessionId, false)
+              if (mounted) setAvailable(false)
+              return false
+            } finally {
+              invitePending.delete(sessionId)
+            }
+          })()
+
+          invitePending.set(sessionId, p)
         }
       }
-      check()
-      return () => { mounted = false }
-    }, [parsed.sessionId])
 
-    const disabled = available === false || isSender
-    const title = isSender ? 'You cannot join an invite you sent' : (available === false ? 'This private room is no longer available' : undefined)
+      // Also listen for session_expired from chat WS and update availability
+      const unsubscribeExpired = onChatWsEvent('session_expired', (data: any) => {
+        try {
+          if (!sessionId) return
+          if (data?.sessionId === sessionId || data?.data?.sessionId === sessionId) {
+            // Mark unavailable in cache and update local state
+            inviteAvailabilityCache.set(sessionId, false)
+            if (mounted) setAvailable(false)
+          }
+        } catch (e) {
+          // ignore
+        }
+      })
+
+      return () => {
+        mounted = false
+        unsubscribeExpired()
+      }
+    }, [sessionId])
+
+    const disabled = available === false || isSender || available === null
+    const title = isSender ? 'You cannot join an invite you sent' : (available === false ? 'This private room is no longer available' : (available === null ? 'Checking availability...' : undefined))
 
     return (
       <div className="flex items-center gap-2">
         <div className="text-sm mr-2">{parsed.label ?? 'Join Game'}</div>
         <button
-          onClick={() => { if (!disabled) navigate(parsed.url) }}
+          onClick={async () => {
+            if (disabled) return
+            // Re-check availability immediately before navigating to avoid
+            // races where the inviteAvailabilityCache was stale (missed
+            // session_expired events). This ensures the server final say
+            // prevents joining an expired room.
+            try {
+              const res = await api.get(`/game/${encodeURIComponent(sessionId)}/status`)
+              const data = res.data ?? res
+              const freshAvailable = Boolean(data.available)
+              // Update cache with latest result; if unavailable, block navigation
+              inviteAvailabilityCache.set(sessionId!, freshAvailable)
+              setAvailable(freshAvailable)
+              if (freshAvailable) navigate(parsed.url)
+            } catch (e) {
+              inviteAvailabilityCache.set(sessionId!, false)
+              setAvailable(false)
+            }
+          }}
           disabled={disabled}
           title={title}
           className={`rounded-md px-3 py-1 text-sm text-white ${disabled ? 'bg-slate-400 cursor-not-allowed opacity-70' : 'bg-amber-600 hover:bg-amber-700'}`}
         >
-          {isSender ? 'You' : (available === false ? 'Unavailable' : 'Join')}
+          {isSender ? 'You' : (available === null ? 'Checking...' : (available === false ? 'Unavailable' : 'Join'))}
         </button>
       </div>
     )
   }
 
   // Add propTypes to satisfy ESLint (CI lint enforces react/prop-types)
-  // eslint-disable-next-line @typescript-eslint/ban-ts-comment
   // @ts-ignore
   InviteMessage.propTypes = {
     parsed: PropTypes.object.isRequired,

@@ -1,4 +1,5 @@
 import { GameEngine } from './engine';
+import { notificationService } from '../services/notification';
 import { WebSocket } from 'ws';
 import { AIDifficulty } from './ai';
 import { prisma } from '../utils/prisma';
@@ -6,6 +7,10 @@ import { prisma } from '../utils/prisma';
 export class GameManager {
   private static instance: GameManager;
   private games: Map<string, GameEngine> = new Map();
+  // Track session IDs that have been removed/expired so they cannot be
+  // re-created or re-joined using the same ID. This prevents recreated
+  // rooms from appearing after a room was intentionally destroyed.
+  private expiredSessions: Set<string> = new Set();
 
   private constructor() {}
 
@@ -17,6 +22,16 @@ export class GameManager {
   }
 
   createGame(sessionId: string): GameEngine {
+    try {
+      try { console.info(`[game-manager] createGame called for ${sessionId}`) } catch (e) {}
+      if (this.expiredSessions.has(sessionId)) {
+        try { console.info(`[game-manager] createGame refused: session expired ${sessionId}`) } catch (e) {}
+        throw new Error('SessionExpired');
+      }
+    } catch (e) {
+      // rethrow after logging
+      throw e;
+    }
     if (this.games.has(sessionId)) {
       return this.games.get(sessionId)!;
     }
@@ -28,11 +43,45 @@ export class GameManager {
       },
       // onEmpty: remove the game from the registry when no players remain
       () => {
-        this.games.delete(sessionId);
+        // When a game becomes empty, remove it and mark the session as
+        // expired so that it cannot be re-joined or re-created with the
+        // same sessionId. Also emit a lightweight event so chat WS clients
+        // can update invite UI (join buttons) in real time.
+        try {
+          // Diagnostic logging to help debug cases where sessions appear
+          // to remain joinable after a creator leaves.
+          try {
+            console.info(`[game-manager] Marking session expired: ${sessionId}`);
+          } catch (e) {
+            // ignore logging failures
+          }
+
+          this.expiredSessions.add(sessionId);
+
+          // Emit an event for other services (chat WS) to broadcast.
+          try {
+            notificationService.emit('session_expired', { sessionId });
+          } catch (e) {
+            // swallow
+          }
+        } catch (e) {
+          // swallow
+        }
+
+        try {
+          this.games.delete(sessionId);
+        } catch (e) {
+          // swallow delete errors
+        }
       }
     );
     this.games.set(sessionId, game);
     return game;
+  }
+
+  isExpired(sessionId: string) {
+    try { console.info(`[game-manager] isExpired? ${sessionId} => ${this.expiredSessions.has(sessionId)}`) } catch (e) {}
+    return this.expiredSessions.has(sessionId);
   }
 
   private async handleGameEnd(sessionId: string, result: { winner: 'p1' | 'p2'; score: { p1: number; p2: number }; p1Id?: number; p2Id?: number; p1Alias?: string; p2Alias?: string; startedAt?: Date }) {
@@ -148,14 +197,25 @@ export class GameManager {
     return { game: this.createGame(sessionId), sessionId };
   }
 
-  createPrivateGame(): { game: GameEngine; sessionId: string } {
+  createPrivateGame(creatorUserId?: number): { game: GameEngine; sessionId: string } {
     const sessionId = `game_private_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
-    return { game: this.createGame(sessionId), sessionId };
+    const game = this.createGame(sessionId);
+    if (typeof creatorUserId === 'number') {
+      game.creatorUserId = creatorUserId;
+    }
+    // Mark as a private session so the engine can apply private-room rules
+    // (for example: destroy the session when the creator leaves).
+    game.isPrivate = true;
+    return { game, sessionId };
   }
 
   createLocalGame(): { game: GameEngine; sessionId: string } {
     const sessionId = `game_local_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
-    return { game: this.createGame(sessionId), sessionId };
+    const game = this.createGame(sessionId);
+    // Mark local/demo sessions so engine can treat them differently from
+    // online public matches.
+    game.isLocal = true;
+    return { game, sessionId };
   }
 
   private async handleTournamentMatchEnd(matchId: number, result: { winner: 'p1' | 'p2' }) {

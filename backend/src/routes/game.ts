@@ -44,7 +44,7 @@ export default async function gameRoutes(fastify: FastifyInstance) {
     // For match invites we create a private session and return sessionId
     if (inviteType === 'match') {
       const manager = GameManager.getInstance()
-      const { sessionId } = manager.createPrivateGame()
+      const { sessionId } = manager.createPrivateGame(user.userId)
 
       // Log sessionId and invite URL for debugging
       try {
@@ -105,7 +105,7 @@ export default async function gameRoutes(fastify: FastifyInstance) {
     preValidation: [fastify.authenticate]
   }, async (req, reply) => {
     const manager = GameManager.getInstance()
-    const { sessionId } = manager.createPrivateGame()
+    const { sessionId } = manager.createPrivateGame((req.user as any)?.userId)
     // Log sessionId and returned URL for debugging
     try {
       const invitePath = `/game/${sessionId}?mode=remote&private=true`
@@ -122,7 +122,8 @@ export default async function gameRoutes(fastify: FastifyInstance) {
     const { sessionId } = req.params as { sessionId: string }
     const manager = GameManager.getInstance()
     const existing = manager.getGame(sessionId)
-    return { sessionId, available: !!existing }
+    const expired = manager.isExpired(sessionId)
+    return { sessionId, available: !!existing && !expired }
   })
 
   fastify.get('/ws/game', { websocket: true }, (connection, req) => {
@@ -145,13 +146,36 @@ export default async function gameRoutes(fastify: FastifyInstance) {
     if (query.sessionId) {
       // If client provides a specific session ID (e.g. tournament match), use it.
       // This allows the frontend to dictate the session ID for tournament matches.
-      const existingGame = manager.getGame(query.sessionId);
-      if (existingGame) {
-        gameResult = { game: existingGame, sessionId: query.sessionId };
-      } else {
-        // Create new game with this specific ID
-        gameResult = { game: manager.createGame(query.sessionId), sessionId: query.sessionId };
-      }
+        // If the sessionId has been marked expired/removed, refuse to allow
+        // re-creation and notify the client that the session is unavailable.
+        if (manager.isExpired(query.sessionId)) {
+          // Attempt to notify client and close socket immediately.
+          try {
+            const resp = JSON.stringify({ event: 'match:event', payload: { type: 'UNAVAILABLE', message: 'Session is no longer available', sessionId: query.sessionId } });
+            if (typeof (socket as any).send === 'function') (socket as any).send(resp);
+          } catch (e) {}
+          try { if (typeof (socket as any).close === 'function') (socket as any).close(); } catch (e) {}
+          return;
+        }
+
+        const existingGame = manager.getGame(query.sessionId);
+        if (existingGame) {
+          gameResult = { game: existingGame, sessionId: query.sessionId };
+        } else {
+          // Create new game with this specific ID
+          try {
+            gameResult = { game: manager.createGame(query.sessionId), sessionId: query.sessionId };
+          } catch (err) {
+            try { fastify.log.warn({ err, sessionId: query.sessionId }, 'createGame threw when handling provided sessionId') } catch (e) {}
+            // If createGame refused due to expiration, notify client and close socket.
+            try {
+              const resp = JSON.stringify({ event: 'match:event', payload: { type: 'UNAVAILABLE', message: 'Session is no longer available', sessionId: query.sessionId } });
+              if (typeof (socket as any).send === 'function') (socket as any).send(resp);
+            } catch (e) {}
+            try { if (typeof (socket as any).close === 'function') (socket as any).close(); } catch (e) {}
+            return;
+          }
+        }
 
       if (query.mode === 'ai') {
         gameResult.game.addAIPlayer((query.difficulty as any) || 'NORMAL', (query.aiSlot as any));
@@ -181,6 +205,24 @@ export default async function gameRoutes(fastify: FastifyInstance) {
         }
 
         if (data.event === 'ready') {
+          // Defensive: re-check expiration at the time the client declares
+          // readiness. Fastify accepts websocket connections before this
+          // handler runs, so a client may connect briefly even for an
+          // expired session. Prevent any further processing if the
+          // session is expired.
+          try {
+            const mgr = GameManager.getInstance();
+            if (mgr.isExpired(sessionId)) {
+              try {
+                const resp = JSON.stringify({ event: 'match:event', payload: { type: 'UNAVAILABLE', message: 'Session is no longer available', sessionId } });
+                if (typeof (socket as any).send === 'function') (socket as any).send(resp);
+              } catch (e) {}
+              try { if (typeof (socket as any).close === 'function') (socket as any).close(); } catch (e) {}
+              return;
+            }
+          } catch (e) {
+            // swallow
+          }
           let userId: number | undefined;
           let displayName: string | undefined;
           if (data.payload?.token) {
@@ -253,6 +295,34 @@ export default async function gameRoutes(fastify: FastifyInstance) {
               }
             } catch (e) {
               fastify.log.error({ err: e }, 'Failed to abort game')
+            }
+          } else if (type === 'LEAVE') {
+            // Explicit leave: remove this player immediately instead of
+            // waiting for socket close. This covers SPA navigation away
+            // from the game or an explicit "leave" button.
+            try {
+              game.removePlayer(socket as any)
+
+              // Send an optional confirmation event to the client
+              const resp = JSON.stringify({
+                event: 'match:event',
+                payload: { type: 'LEFT', message: 'You have left the match', sessionId }
+              })
+              if (typeof (socket as any).send === 'function') {
+                (socket as any).send(resp)
+              }
+            } catch (e) {
+              fastify.log.warn({ err: e, sessionId }, 'Error while handling LEAVE control event')
+            } finally {
+              // Try to close the socket from server side to ensure a clean
+              // deterministic removal; client may already close itself.
+              try {
+                if (typeof (socket as any).close === 'function') {
+                  ;(socket as any).close()
+                }
+              } catch (e) {
+                // ignore
+              }
             }
           }
         }

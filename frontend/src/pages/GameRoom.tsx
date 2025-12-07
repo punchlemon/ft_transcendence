@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, useCallback } from 'react'
-import { useParams, useNavigate, useSearchParams } from 'react-router-dom'
+import { useParams, useNavigate, useSearchParams, useLocation } from 'react-router-dom'
 import useAuthStore from '../stores/authStore'
 import { soundManager } from '../lib/sound'
 import { api, fetchTournament, TournamentDetail } from '../lib/api'
@@ -27,10 +27,29 @@ const GameRoomPage = () => {
   const [playerSlot, setPlayerSlot] = useState<'p1' | 'p2' | null>(null)
   const playerSlotRef = useRef<'p1' | 'p2' | null>(null)
   const [reconnectKey, setReconnectKey] = useState(0)
-  const [sessionId, setSessionId] = useState<string | null>(null)
+  // Initialize sessionId from the route param so the invite modal can
+  // be shown immediately when navigating to `/game/:id?showInvite=1`.
+  const [sessionId, setSessionId] = useState<string | null>(id ?? null)
   const [showInviteModal, setShowInviteModal] = useState(false)
 
   const mode = searchParams.get('mode')
+
+  const location = useLocation()
+  const prevLocationRef = useRef<string | null>(null)
+
+  // Helper to send LEAVE and close socket (centralized so multiple places can call)
+  const sendLeaveAndClose = () => {
+    try {
+      const ws = socketRef.current
+      if (ws && ws.readyState === (WebSocket as any).OPEN) {
+        try { ws.send(JSON.stringify({ event: 'control', payload: { type: 'LEAVE' } })) } catch (e) { /* ignore */ }
+      }
+    } catch (e) {
+      // ignore
+    } finally {
+      try { socketRef.current?.close() } catch (e) { /* ignore */ }
+    }
+  }
 
   const getPlayerName = (slot: 'p1' | 'p2') => {
     const paramName = searchParams.get(`${slot}Name`)
@@ -145,13 +164,19 @@ const GameRoomPage = () => {
             if (data.payload.sessionId) {
               setSessionId(data.payload.sessionId)
               // If URL asked to show invite modal, enable it when we have sessionId
-              if (searchParams.get('showInvite')) {
-                setShowInviteModal(true)
-              }
+                          if (searchParams.get('showInvite')) {
+                            setShowInviteModal(true)
+                          }
             }
             // connection handled
           } else if (data.payload.type === 'START') {
             setStatus('playing')
+          } else if (data.payload.type === 'UNAVAILABLE' || data.payload.type === 'CLOSED' || data.payload.type === 'CLOSED_BY_CREATOR') {
+            // If the server indicates the session is no longer available or was closed,
+            // ensure any invite modal is hidden and update UI accordingly.
+            setShowInviteModal(false)
+            // Optionally navigate back to home or show a toast — keep current behavior minimal.
+            // navigate('/')
           } else if (data.payload.type === 'PAUSE') {
             setStatus('paused')
           } else if (data.payload.type === 'FINISHED') {
@@ -241,10 +266,51 @@ const GameRoomPage = () => {
     }
 
     return () => {
-      ws.close()
+      try {
+        // Send explicit LEAVE control so server can remove player deterministically
+        if ((ws as any) && (ws as any).readyState === (WebSocket as any).OPEN) {
+          try { (ws as any).send(JSON.stringify({ event: 'control', payload: { type: 'LEAVE' } })) } catch (e) { /* ignore */ }
+        }
+      } catch (e) {
+        // ignore
+      } finally {
+        try { ws.close() } catch (e) { /* ignore */ }
+      }
     }
     // reconnectKey is used to force a reconnect when user wants to play again
   }, [token, searchParams, reconnectKey, id])
+
+  // Send LEAVE on page unload (reload/close) to ensure server removes player
+  useEffect(() => {
+    const handleBeforeUnload = (e: BeforeUnloadEvent) => {
+      try {
+        const ws = socketRef.current
+        if (ws && ws.readyState === (WebSocket as any).OPEN) {
+          try { ws.send(JSON.stringify({ event: 'control', payload: { type: 'LEAVE' } })) } catch (err) { /* ignore */ }
+          try { ws.close() } catch (err) { /* ignore */ }
+        }
+      } catch (err) {
+        // ignore
+      }
+    }
+
+    window.addEventListener('beforeunload', handleBeforeUnload)
+    return () => window.removeEventListener('beforeunload', handleBeforeUnload)
+  }, [])
+
+  // Detect route/location changes while component is mounted. If user navigates
+  // away from the game route without unmounting for some reason, proactively
+  // send LEAVE. This is an extra safeguard (component unmount cleanup also
+  // sends LEAVE).
+  useEffect(() => {
+    const prev = prevLocationRef.current
+    const curr = location.pathname
+    // If we have a prev and the new path is not the game path, send leave.
+    if (prev && !curr.startsWith('/game')) {
+      sendLeaveAndClose()
+    }
+    prevLocationRef.current = curr
+  }, [location.pathname])
 
   // Close invite modal helper
   const handleCloseInviteModal = () => {
@@ -255,6 +321,18 @@ const GameRoomPage = () => {
     const base = window.location.pathname + (params.toString() ? `?${params.toString()}` : '')
     window.history.replaceState({}, '', base)
   }
+
+  // Ensure invite modal state is initialized/reset whenever the sessionId or
+  // search params change. This prevents a previous cancelled modal state from
+  // bleeding into a newly-created private room (create -> cancel -> home -> create again).
+  useEffect(() => {
+    if (!sessionId) {
+      setShowInviteModal(false)
+      return
+    }
+    const shouldShow = Boolean(searchParams.get('showInvite'))
+    setShowInviteModal(shouldShow)
+  }, [sessionId, searchParams])
 
   // Input handling
   useEffect(() => {
@@ -638,6 +716,26 @@ const GameRoomPage = () => {
                 }`}
           >
             {status === 'playing' ? 'Pause' : 'Resume'}
+          </button>
+          <button
+            onClick={() => {
+              try {
+                const ws = socketRef.current
+                if (ws && ws.readyState === (WebSocket as any).OPEN) {
+                  try { ws.send(JSON.stringify({ event: 'control', payload: { type: 'LEAVE' } })) } catch (e) { /* ignore */ }
+                }
+              } catch (e) {
+                // ignore
+              } finally {
+                try { socketRef.current?.close() } catch (e) { /* ignore */ }
+                setStatus('connecting')
+                setPlayerSlot(null)
+                navigate('/')
+              }
+            }}
+            className="rounded-md border border-rose-400 bg-rose-500 px-4 py-2 text-sm font-medium text-white hover:bg-rose-600"
+          >
+            Leave
           </button>
         </div>
 

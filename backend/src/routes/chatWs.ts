@@ -175,6 +175,21 @@ export default async function chatWsRoutes(fastify: FastifyInstance) {
   notificationService.on('notification', onNotification);
   notificationService.on('notification_deleted', onNotificationDeleted);
 
+  // Session expiration events (emitted from GameManager) are broadcast
+  // to all connected chat clients so UI like invite Join buttons can be
+  // invalidated in real time.
+  const onSessionExpired = (event: any) => {
+    const payload = JSON.stringify({ type: 'session_expired', data: event });
+    for (const userSockets of connections.values()) {
+      for (const ws of userSockets) {
+        if (ws.readyState === WebSocket.OPEN) {
+          ws.send(payload);
+        }
+      }
+    }
+  };
+  notificationService.on('session_expired', onSessionExpired);
+
   fastify.addHook('onClose', (instance, done) => {
     userService.off('status_change', onStatusChange);
     userService.off('user_created', onUserCreated);
@@ -193,6 +208,7 @@ export default async function chatWsRoutes(fastify: FastifyInstance) {
     chatService.off('channel_created', onChannelCreated);
     notificationService.off('notification', onNotification);
     notificationService.off('notification_deleted', onNotificationDeleted);
+    notificationService.off('session_expired', onSessionExpired);
     
     done();
   });
