@@ -40,6 +40,6 @@ describe('GameLobby private room flow', () => {
     await new Promise((r) => setTimeout(r, 10))
     const api = await import('../../../src/lib/api')
     expect((api as any).createPrivateRoom).toHaveBeenCalled()
-    expect(mockNavigate).toHaveBeenCalledWith('/game/game_private_abc123?mode=remote&private=true')
+    expect(mockNavigate).toHaveBeenCalledWith('/game/game_private_abc123?mode=remote&private=true&showInvite=1')
   })
 })
