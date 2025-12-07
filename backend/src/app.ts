@@ -8,6 +8,7 @@ import dbPlugin from './plugins/db'
 import jwtPlugin from './plugins/jwt'
 import multipartPlugin from './plugins/multipart'
 import staticPlugin from './plugins/static'
+import blockPlugin from './plugins/block'
 import usersRoutes from './routes/users'
 import tournamentsRoutes from './routes/tournaments'
 import authRoutes from './routes/auth'
@@ -35,6 +36,7 @@ export const buildServer = async () => {
   await server.register(swaggerUi, { routePrefix: '/docs' })
   await server.register(dbPlugin)
   await server.register(jwtPlugin)
+  await server.register(blockPlugin)
   await server.register(multipartPlugin)
   await server.register(staticPlugin)
   await server.register(authRoutes, { prefix: '/api/auth' })

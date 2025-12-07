@@ -165,7 +165,7 @@ describe('ChatDrawer', () => {
       return Promise.resolve({ data: [] })
     })
 
-    vi.mocked(inviteToGame).mockResolvedValue({ sessionId: 'sess-123' })
+    vi.mocked(inviteToGame).mockResolvedValue({ success: true, type: 'match', sessionId: 'sess-123' })
 
     render(<ChatDrawer />)
 

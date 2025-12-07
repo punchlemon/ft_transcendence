@@ -536,9 +536,15 @@ export const fetchUsers = async (params: UserSearchParams = {}) => {
   return response.data as UserSearchResponse
 }
 
+export type InviteResponse = {
+  success: boolean
+  type: 'match' | 'tournament'
+  sessionId: string | null
+}
+
 export const inviteToGame = async (targetUserId: number) => {
   const response = await apiClient.post('/game/invite', { targetUserId })
-  return response.data as { sessionId: string }
+  return response.data as InviteResponse
 }
 
 /*
