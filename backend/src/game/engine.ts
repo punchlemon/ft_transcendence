@@ -18,6 +18,7 @@ export class GameEngine {
 
   // Input buffers
   private inputQueue: { p1: PlayerInput[]; p2: PlayerInput[] } = { p1: [], p2: [] };
+  private lastMoves: { p1: number; p2: number } = { p1: 0, p2: 0 };
 
   private onGameEnd?: (result: { winner: 'p1' | 'p2'; score: { p1: number; p2: number }; p1Id?: number; p2Id?: number; p1Alias?: string; p2Alias?: string; startedAt?: Date }) => Promise<void> | void;
 
@@ -197,10 +198,13 @@ export class GameEngine {
     // For now, just drain queue and apply last known direction
     // Real implementation should handle timestamps
     
-    let move = 0;
-    while(inputs.length > 0) {
-      const input = inputs.shift();
-      if (input) move = input.axis;
+    let move = this.lastMoves[slot];
+    if (inputs.length > 0) {
+      while(inputs.length > 0) {
+        const input = inputs.shift();
+        if (input) move = input.axis;
+      }
+      this.lastMoves[slot] = move;
     }
     
     // Apply movement
