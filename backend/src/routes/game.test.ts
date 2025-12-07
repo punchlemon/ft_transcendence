@@ -95,3 +95,40 @@ describe('gameRoutes POST /api/game/invite', () => {
   })
 })
 
+
+describe('gameRoutes POST /api/game/private', () => {
+  let fastify: ReturnType<typeof Fastify>
+
+  beforeEach(() => {
+    fastify = Fastify()
+    // minimal authenticate stub
+    fastify.decorate('authenticate', async (req: any, reply: any) => {
+      req.user = { userId: 1, displayName: 'Tester' }
+    })
+  })
+
+  afterEach(async () => {
+    await fastify.close()
+    vi.clearAllMocks()
+  })
+
+  it('creates a private room and returns sessionId', async () => {
+    // prisma mock not needed for private creation
+    fastify.decorate('prisma', {
+      user: { findUnique: async () => ({ displayName: 'Tester' }) }
+    } as any)
+
+    await fastify.register(gameRoutes, { prefix: '/api' })
+
+    const res = await fastify.inject({
+      method: 'POST',
+      url: '/api/game/private',
+      payload: {}
+    })
+
+    expect(res.statusCode).toBe(200)
+    const body = JSON.parse(res.body)
+    expect(body.sessionId).toBe('test-session-123')
+  })
+})
+
