@@ -7,6 +7,7 @@ import { authenticator } from 'otplib'
 import { z } from 'zod'
 import type { PrismaClient } from '@prisma/client'
 import { userService } from '../services/user'
+import { presenceService } from '../services/presence'
 
 const SESSION_TTL_MS = 1000 * 60 * 60 * 24 * 7 // 7 days
 const MFA_CHALLENGE_TTL_MS = 1000 * 60 * 5 // 5 minutes
@@ -1561,16 +1562,9 @@ const authRoutes: FastifyPluginAsync = async (fastify) => {
       const sessionId = session.id;
       const userId = session.userId;
       
-      // Force close WebSocket connections for this session (load presenceService lazily)
+      // Force close WebSocket connections for this session
       try {
-        // Use require here so startup won't fail if module resolution differs inside container
-        // (e.g. during build/deploy). This keeps the behavior robust while still calling
-        // the presence helper when available.
-        // eslint-disable-next-line @typescript-eslint/no-var-requires
-        const presenceMod = require('../services/presence')
-        if (presenceMod && presenceMod.presenceService && typeof presenceMod.presenceService.closeSocketsBySession === 'function') {
-          await presenceMod.presenceService.closeSocketsBySession(sessionId)
-        }
+        await presenceService.closeSocketsBySession(sessionId)
       } catch (err) {
         request.log.warn({ err }, 'Failed to call presenceService.closeSocketsBySession')
       }
@@ -1586,29 +1580,16 @@ const authRoutes: FastifyPluginAsync = async (fastify) => {
       if (remainingSessions === 0) {
         // If there are no DB sessions left, check active websocket connections
         try {
-          // Lazy require presence service; if available, ask for connection count
-          // eslint-disable-next-line @typescript-eslint/no-var-requires
-          const presenceMod = require('../services/presence')
-          if (presenceMod && presenceMod.presenceService && typeof presenceMod.presenceService.getConnectionCount === 'function') {
-            const connCount = await presenceMod.presenceService.getConnectionCount(userId)
-            if (connCount === 0) {
-              await fastify.prisma.user.update({
-                where: { id: userId },
-                data: { status: 'OFFLINE' }
-              })
-              userService.emitStatusChange(userId, 'OFFLINE')
-              request.log.info({ userId }, 'Logout successful: All sessions deleted and no active sockets; status set to OFFLINE')
-            } else {
-              request.log.info({ userId, sockets: connCount }, 'Logout: sessions cleared but user still has active websocket connections; leaving ONLINE')
-            }
-          } else {
-            // presence service not available — fall back to setting OFFLINE (conservative)
+          const connCount = await presenceService.getConnectionCount(userId)
+          if (connCount === 0) {
             await fastify.prisma.user.update({
               where: { id: userId },
               data: { status: 'OFFLINE' }
             })
             userService.emitStatusChange(userId, 'OFFLINE')
-            request.log.info({ userId }, 'Logout successful: All sessions deleted, presence service unavailable; status set to OFFLINE')
+            request.log.info({ userId }, 'Logout successful: All sessions deleted and no active sockets; status set to OFFLINE')
+          } else {
+            request.log.info({ userId, sockets: connCount }, 'Logout: sessions cleared but user still has active websocket connections; leaving ONLINE')
           }
         } catch (err) {
           request.log.warn({ err }, 'Failed to query presenceService.getConnectionCount; setting OFFLINE as fallback')

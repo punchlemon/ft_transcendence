@@ -3,6 +3,7 @@ import { chatService } from '../services/chat';
 import { notificationService } from '../services/notification';
 import { friendService } from '../services/friend';
 import { userService } from '../services/user';
+import { presenceService } from '../services/presence';
 import { WebSocket } from 'ws';
 
 interface SocketStream {
@@ -487,45 +488,29 @@ export default async function chatWsRoutes(fastify: FastifyInstance) {
     done();
   });
 
-  // Register closeSocketsBySession implementation for presenceService (lazy require)
-  try {
-    // eslint-disable-next-line @typescript-eslint/no-var-requires
-    const presenceMod = require('../services/presence')
-    if (presenceMod && presenceMod.presenceService && typeof presenceMod.presenceService.setCloseSocketsBySession === 'function') {
-      presenceMod.presenceService.setCloseSocketsBySession(async (sessionId: number) => {
-        let count = 0;
-        const sockets = sessionSockets.get(sessionId);
-        if (sockets) {
-          for (const ws of sockets) {
-            try {
-              ws.close(4000, 'session_revoked');
-              count++;
-            } catch (e) {
-              console.error(`[WS] Error closing socket for sessionId ${sessionId}:`, e);
-            }
-          }
-          sessionSockets.delete(sessionId);
+  // Register closeSocketsBySession implementation for presenceService
+  presenceService.setCloseSocketsBySession(async (sessionId: number) => {
+    let count = 0;
+    const sockets = sessionSockets.get(sessionId);
+    if (sockets) {
+      for (const ws of sockets) {
+        try {
+          ws.close(4000, 'session_revoked');
+          count++;
+        } catch (e) {
+          console.error(`[WS] Error closing socket for sessionId ${sessionId}:`, e);
         }
-        return count;
-      })
+      }
+      sessionSockets.delete(sessionId);
     }
-  } catch (e) {
-    console.warn('presenceService not available at startup in chatWs:', e && (e as any).message ? (e as any).message : e)
-  }
+    return count;
+  });
     
-  try {
-    // Also register getConnectionCount implementation if presenceService is available
-    // eslint-disable-next-line @typescript-eslint/no-var-requires
-    const presenceMod2 = require('../services/presence')
-    if (presenceMod2 && presenceMod2.presenceService && typeof presenceMod2.presenceService.setGetConnectionCount === 'function') {
-      presenceMod2.presenceService.setGetConnectionCount(async (userId: number) => {
-        const set = connections.get(userId);
-        return set ? set.size : 0;
-      })
-    }
-  } catch (e) {
-    // non-fatal
-  }
+  // Also register getConnectionCount implementation
+  presenceService.setGetConnectionCount(async (userId: number) => {
+    const set = connections.get(userId);
+    return set ? set.size : 0;
+  });
 
   fastify.get('/ws/chat', { websocket: true }, async (connection: any, req: any) => {
     // Guard: if this route was reached without a websocket connection object
