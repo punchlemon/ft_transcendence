@@ -55,7 +55,7 @@ const usersRoutes: FastifyPluginAsync = async (fastify) => {
     ])
   })
 
-  fastify.get('/users/me', { preHandler: fastify.authenticate }, async (request, reply) => {
+  fastify.get('/me', { preHandler: fastify.authenticate }, async (request, reply) => {
     const userId = request.user.userId
     const user = await fastify.prisma.user.findUnique({
       where: { id: userId },
@@ -75,7 +75,7 @@ const usersRoutes: FastifyPluginAsync = async (fastify) => {
     return user
   })
 
-  fastify.patch('/users/:id', { preHandler: fastify.authenticate }, async (request, reply) => {
+  fastify.patch('/:id', { preHandler: fastify.authenticate }, async (request, reply) => {
     const paramsParsed = z.object({ id: z.coerce.number().int().positive() }).safeParse(request.params)
     if (!paramsParsed.success) {
       reply.code(400)
@@ -142,7 +142,7 @@ const usersRoutes: FastifyPluginAsync = async (fastify) => {
     return updatedUser
   })
 
-  fastify.post('/users/:id/avatar', { preHandler: fastify.authenticate }, async (request, reply) => {
+  fastify.post('/:id/avatar', { preHandler: fastify.authenticate }, async (request, reply) => {
     const paramsParsed = z.object({ id: z.coerce.number().int().positive() }).safeParse(request.params)
     if (!paramsParsed.success) {
       reply.code(400)
@@ -218,7 +218,7 @@ const usersRoutes: FastifyPluginAsync = async (fastify) => {
     }
   })
 
-  fastify.delete('/users/:id/avatar', { preHandler: fastify.authenticate }, async (request, reply) => {
+  fastify.delete('/:id/avatar', { preHandler: fastify.authenticate }, async (request, reply) => {
     const paramsParsed = z.object({ id: z.coerce.number().int().positive() }).safeParse(request.params)
     if (!paramsParsed.success) {
       reply.code(400)
@@ -264,7 +264,7 @@ const usersRoutes: FastifyPluginAsync = async (fastify) => {
     return updatedUser
   })
 
-  fastify.get('/users/:id', { preHandler: fastify.authenticate }, async (request, reply) => {
+  fastify.get('/:id', { preHandler: fastify.authenticate }, async (request, reply) => {
     const parsed = paramsSchema.safeParse(request.params)
     if (!parsed.success) {
       reply.code(400)
@@ -395,7 +395,7 @@ const usersRoutes: FastifyPluginAsync = async (fastify) => {
     }
   })
 
-  fastify.get('/users/:id/matches', { preHandler: fastify.authenticate }, async (request, reply) => {
+  fastify.get('/:id/matches', { preHandler: fastify.authenticate }, async (request, reply) => {
     const paramsParsed = z.object({
       id: z.union([
         z.coerce.number().int().positive(),
@@ -529,7 +529,7 @@ const usersRoutes: FastifyPluginAsync = async (fastify) => {
     }
   })
 
-  fastify.get('/users/:id/friends', { preHandler: fastify.authenticate }, async (request, reply) => {
+  fastify.get('/:id/friends', { preHandler: fastify.authenticate }, async (request, reply) => {
     const paramsParsed = z.object({
       id: z.union([
         z.coerce.number().int().positive(),
@@ -579,7 +579,7 @@ const usersRoutes: FastifyPluginAsync = async (fastify) => {
     return { data: friends }
   })
 
-  fastify.get('/users', { preHandler: fastify.authenticate }, async (request, reply) => {
+  fastify.get('/', { preHandler: fastify.authenticate }, async (request, reply) => {
     const parsed = searchQuerySchema.safeParse(request.query)
 
     if (!parsed.success) {

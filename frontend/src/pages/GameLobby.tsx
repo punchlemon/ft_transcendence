@@ -5,6 +5,7 @@ import TournamentAliasPanel from '../components/tournament/TournamentAliasPanel'
 import BracketView from '../components/tournament/BracketView'
 import { useTournamentSetup } from '../hooks/useTournamentSetup'
 import { generatePreviewMatches } from '../lib/tournament'
+import FriendSelectorModal from '../components/tournament/FriendSelectorModal'
 
 type GameMode = 'local' | 'remote' | 'ai' | 'tournament'
 type MatchType = 'public' | 'private'
@@ -25,6 +26,10 @@ const GameLobbyPage = () => {
 
   // Tournament State
   const tournamentSetup = useTournamentSetup()
+  const [createdTournament, setCreatedTournament] = useState<any | null>(null)
+  const [isCreatingTournament, setIsCreatingTournament] = useState(false)
+  const [isStartDisabled, setIsStartDisabled] = useState(true)
+  const [isInviteModalOpen, setIsInviteModalOpen] = useState(false)
 
   const handleModeSelect = (mode: GameMode) => {
     if (!user) return
@@ -43,26 +48,15 @@ const GameLobbyPage = () => {
       const mockGameId = `game-${selectedMode}-${Date.now()}`
       navigate(`/game/${mockGameId}?mode=ai&difficulty=${aiDifficulty}`)
     } else if (selectedMode === 'tournament') {
+      // Create tournament but do not immediately navigate: allow inviting friends first
+      setIsCreatingTournament(true)
       const tournament = await tournamentSetup.create()
+      setIsCreatingTournament(false)
       if (tournament) {
-        // Find the first match
-        const firstMatch = tournament.matches.find(m => !m.winnerId)
-        if (firstMatch) {
-          const p1 = firstMatch.playerA?.alias ?? 'Unknown'
-          const p2 = firstMatch.playerB?.alias ?? null
-          const p1Id = firstMatch.playerA?.participantId ?? -1
-          const p2Id = firstMatch.playerB?.participantId ?? null
-          
-          let url = `/game/local-match-${firstMatch.id}?mode=local&p1Name=${encodeURIComponent(p1)}&p2Name=${encodeURIComponent(p2 ?? '')}`
-          url += `&tournamentId=${tournament.id}`
-          if (p1Id) url += `&p1Id=${p1Id}`
-          if (p2Id) url += `&p2Id=${p2Id}`
-          
-          navigate(url)
-        } else {
-          // Should not happen for a new tournament
-          console.error('No matches found in new tournament')
-        }
+        setCreatedTournament(tournament)
+        setIsStartDisabled(false)
+        // show invite modal automatically (optional)
+        setIsInviteModalOpen(true)
       }
     } else if (selectedMode === 'remote') {
       if (matchType === 'public') {
@@ -76,6 +70,24 @@ const GameLobbyPage = () => {
         // ルーム作成ロジック（未実装）
         alert('Custom room creation is not implemented yet')
       }
+    }
+  }
+
+  const handleStartTournamentNow = async () => {
+    if (!createdTournament) return
+    // Find the first match and navigate similarly to previous flow
+    const firstMatch = createdTournament.matches.find((m: any) => !m.winnerId)
+    if (firstMatch) {
+      const p1 = firstMatch.playerA?.alias ?? 'Unknown'
+      const p2 = firstMatch.playerB?.alias ?? null
+      const p1Id = firstMatch.playerA?.participantId ?? -1
+      const p2Id = firstMatch.playerB?.participantId ?? null
+
+      let url = `/game/local-match-${firstMatch.id}?mode=local&p1Name=${encodeURIComponent(p1)}&p2Name=${encodeURIComponent(p2 ?? '')}`
+      url += `&tournamentId=${createdTournament.id}`
+      if (p1Id) url += `&p1Id=${p1Id}`
+      if (p2Id) url += `&p2Id=${p2Id}`
+      navigate(url)
     }
   }
 
@@ -190,6 +202,7 @@ const GameLobbyPage = () => {
                   />
                 </div>
               </div>
+              <FriendSelectorModal open={isInviteModalOpen} onClose={() => setIsInviteModalOpen(false)} tournamentId={createdTournament?.id ?? -1} />
             </div>
           )}
 
@@ -273,6 +286,23 @@ const GameLobbyPage = () => {
                 infoMessage={tournamentSetup.infoMessage}
                 isSubmitDisabled={!tournamentSetup.aliasInput.trim()}
               />
+
+              {createdTournament && (
+                <div className="mt-4 flex items-center gap-3">
+                  <button
+                    onClick={() => setIsInviteModalOpen(true)}
+                    className="rounded-md border px-4 py-2 text-sm"
+                  >
+                    フレンドを招待
+                  </button>
+                  <button
+                    onClick={handleStartTournamentNow}
+                    className="ml-2 rounded-md bg-indigo-600 px-4 py-2 text-sm text-white"
+                  >
+                    トーナメント開始
+                  </button>
+                </div>
+              )}
               
               {tournamentSetup.players.length > 0 && (
                 <div className="mt-6 border-t border-slate-200 pt-6 dark:border-slate-700">

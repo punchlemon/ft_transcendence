@@ -1,51 +1,96 @@
 import { FastifyInstance } from 'fastify'
 import { GameManager } from '../game/GameManager'
 import { notificationService } from '../services/notification'
+import { getDisplayNameOrFallback } from '../services/user'
+
+// Request/Response types for invite endpoint
+interface InviteBody {
+  targetUserId: number
+  inviteType?: 'match' | 'tournament'
+  tournamentId?: number
+  participantId?: number
+}
+
+interface InviteResponse {
+  success: true
+  type: 'match' | 'tournament'
+  sessionId: string | null
+}
+
+const inviteSchema = {
+  body: {
+    type: 'object',
+    required: ['targetUserId'],
+    properties: {
+      targetUserId: { type: 'number' },
+      inviteType: { type: 'string', enum: ['match', 'tournament'], default: 'match' },
+      tournamentId: { type: 'number' },
+      participantId: { type: 'number' }
+    }
+  }
+} as const
 
 export default async function gameRoutes(fastify: FastifyInstance) {
-  fastify.post('/game/invite', {
-    preValidation: [fastify.authenticate]
+  fastify.post<{ Body: InviteBody; Reply: InviteResponse }>('/game/invite', {
+    preValidation: [fastify.authenticate],
+    schema: inviteSchema
   }, async (req, reply) => {
-    const { targetUserId } = req.body as { targetUserId: number };
-    const user = req.user;
-    
-    if (!targetUserId) {
-      return reply.code(400).send({ error: 'targetUserId is required' });
-    }
+    // Support both 1v1 match invites and tournament invites
+    const { targetUserId, inviteType = 'match', tournamentId, participantId } = req.body
+    const user = req.user as any
 
-    // Check for blocks
-    const blocked = await fastify.prisma.blocklist.findFirst({
-      where: {
-        OR: [
-          { blockerId: targetUserId, blockedId: user.userId }, // Target blocked sender
-          { blockerId: user.userId, blockedId: targetUserId }  // Sender blocked target
-        ]
+    const blocked = await fastify.isBlocked(user.userId, targetUserId)
+
+    // For match invites we create a private session and return sessionId
+    if (inviteType === 'match') {
+      const manager = GameManager.getInstance()
+      const { sessionId } = manager.createPrivateGame()
+
+      if (!blocked) {
+        const inviterDisplay = await getDisplayNameOrFallback(fastify, user.userId)
+
+        await notificationService.createNotification(
+          targetUserId,
+          'MATCH_INVITE',
+          'Game Invitation',
+          `${inviterDisplay} invited you to a game!`,
+          { sessionId, inviterId: user.userId }
+        )
       }
-    });
 
-    const manager = GameManager.getInstance();
-    const { sessionId } = manager.createPrivateGame();
-
-    if (blocked) {
-      // Stealth block: Return success but do not send notification
-      return { sessionId };
+      return { success: true, type: 'match', sessionId }
     }
 
-    const inviter = await fastify.prisma.user.findUnique({
-      where: { id: user.userId },
-      select: { displayName: true }
-    });
+    // Tournament invite flow (no session created here)
+    if (inviteType === 'tournament') {
+      if (!blocked) {
+        // Optionally fetch tournament name for message if tournamentId provided
+        let tournamentName: string | null = null
+        if (typeof tournamentId === 'number') {
+          const t = await fastify.prisma.tournament.findUnique({ where: { id: tournamentId }, select: { name: true } })
+          tournamentName = t?.name ?? null
+        }
 
-    await notificationService.createNotification(
-      targetUserId,
-      'MATCH_INVITE',
-      'Game Invitation',
-      `${inviter?.displayName || 'Someone'} invited you to a game!`,
-      { sessionId, inviterId: user.userId }
-    );
+        const inviterDisplay = await getDisplayNameOrFallback(fastify, user.userId)
+        const message = tournamentName
+          ? `${inviterDisplay} invited you to tournament ${tournamentName}`
+          : `${inviterDisplay} invited you to a tournament`
 
-    return { sessionId };
-  });
+        await notificationService.createNotification(
+          targetUserId,
+          'TOURNAMENT_INVITE',
+          'Tournament Invite',
+          message,
+          { tournamentId, participantId, inviterId: user.userId }
+        )
+      }
+
+      return { success: true, type: 'tournament', sessionId: null }
+    }
+
+    // Unreachable due to schema, but keep for safety
+    return reply.code(400).send({ error: 'Invalid invite type' } as any)
+  })
 
   fastify.get('/ws/game', { websocket: true }, (connection, req) => {
     fastify.log.info('Client connected to game websocket')

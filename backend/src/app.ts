@@ -8,6 +8,7 @@ import dbPlugin from './plugins/db'
 import jwtPlugin from './plugins/jwt'
 import multipartPlugin from './plugins/multipart'
 import staticPlugin from './plugins/static'
+import blockPlugin from './plugins/block'
 import usersRoutes from './routes/users'
 import tournamentsRoutes from './routes/tournaments'
 import authRoutes from './routes/auth'
@@ -35,14 +36,17 @@ export const buildServer = async () => {
   await server.register(swaggerUi, { routePrefix: '/docs' })
   await server.register(dbPlugin)
   await server.register(jwtPlugin)
+  await server.register(blockPlugin)
   await server.register(multipartPlugin)
   await server.register(staticPlugin)
   await server.register(authRoutes, { prefix: '/api/auth' })
-  await server.register(usersRoutes, { prefix: '/api' })
-  await server.register(tournamentsRoutes, { prefix: '/api' })
+  await server.register(usersRoutes, { prefix: '/api/users' })
+  await server.register(tournamentsRoutes, { prefix: '/api/tournaments' })
   await server.register(gameRoutes, { prefix: '/api' })
   await server.register(chatRoutes, { prefix: '/api/chat' })
+  // keep chat WS under '/api/ws/...' for compatibility with frontend
   await server.register(chatWsRoutes, { prefix: '/api' })
+  // friend and block endpoints keep their existing paths under /api
   await server.register(friendRoutes, { prefix: '/api' })
   await server.register(notificationsRoutes, { prefix: '/api/notifications' })
 
