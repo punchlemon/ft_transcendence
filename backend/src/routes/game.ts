@@ -92,6 +92,15 @@ export default async function gameRoutes(fastify: FastifyInstance) {
     return reply.code(400).send({ error: 'Invalid invite type' } as any)
   })
 
+  // Create a private room without inviting anyone. Returns sessionId for the created private game.
+  fastify.post('/game/private', {
+    preValidation: [fastify.authenticate]
+  }, async (req, reply) => {
+    const manager = GameManager.getInstance()
+    const { sessionId } = manager.createPrivateGame()
+    return { sessionId }
+  })
+
   fastify.get('/ws/game', { websocket: true }, (connection, req) => {
     fastify.log.info('Client connected to game websocket')
     
