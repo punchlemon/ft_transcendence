@@ -67,8 +67,23 @@ const GameLobbyPage = () => {
           navigate(`/game/remote-${Date.now()}?mode=remote`)
         }, 3000)
       } else if (matchType === 'private') {
-        // ルーム作成ロジック（未実装）
-        alert('Custom room creation is not implemented yet')
+        try {
+          if (roomCode && roomCode.trim().length > 0) {
+            // Join existing private room by code
+            navigate(`/game/${encodeURIComponent(roomCode)}?mode=remote&private=true`)
+          } else {
+            // Create a new private room via API
+            setIsMatching(true)
+            const res = await (await import('../lib/api')).createPrivateRoom()
+            const sessionId = res.sessionId
+            setIsMatching(false)
+            navigate(`/game/${sessionId}?mode=remote&private=true`)
+          }
+        } catch (err) {
+          console.error('Failed to create or join private room', err)
+          setIsMatching(false)
+          alert('Failed to create or join private room')
+        }
       }
     }
   }
