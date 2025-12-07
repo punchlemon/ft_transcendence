@@ -424,13 +424,20 @@ const ensureUniqueLogin = async (prisma: PrismaClient, preferred: string) => {
   return `${base}${randomUUID().slice(0, 4)}`
 }
 
-const ensureUniqueDisplayName = async (_prisma: PrismaClient, preferred: string) => {
-  // No longer enforce uniqueness at application or DB level.
-  // Normalize and return a safe display name. If the provider value is
-  // too short, fall back to a generated player name.
+const ensureUniqueDisplayName = async (prisma: PrismaClient, preferred: string) => {
   const normalized = preferred?.trim().replace(/\s+/g, ' ').slice(0, 32) ?? ''
   const base = normalized.length >= 3 ? normalized : `Player ${Math.floor(Math.random() * 9000) + 1000}`
-  return base
+  
+  let attempt = 0
+  while (attempt < 50) {
+    const candidate = attempt === 0 ? base : `${base} ${attempt + 1}`
+    const existing = await prisma.user.findFirst({ where: { displayName: candidate } })
+    if (!existing) {
+      return candidate
+    }
+    attempt += 1
+  }
+  return `${base} ${randomUUID().slice(0, 4)}`
 }
 
 const authRoutes: FastifyPluginAsync = async (fastify) => {
@@ -497,17 +504,26 @@ const authRoutes: FastifyPluginAsync = async (fastify) => {
 
     const existing = await fastify.prisma.user.findFirst({
       where: {
-        OR: [{ email }, { login: username }]
+        OR: [{ email }, { login: username }, { displayName }]
       },
-      select: { id: true }
+      select: { id: true, email: true, login: true, displayName: true }
     })
 
     if (existing) {
       reply.code(409)
+      if (existing.email === email) {
+        return { error: { code: 'EMAIL_TAKEN', message: 'Email is already taken' } }
+      }
+      if (existing.login === username) {
+        return { error: { code: 'USERNAME_TAKEN', message: 'Username is already taken' } }
+      }
+      if (existing.displayName === displayName) {
+        return { error: { code: 'DISPLAY_NAME_TAKEN', message: 'Display name is already taken' } }
+      }
       return {
         error: {
           code: 'USER_ALREADY_EXISTS',
-          message: 'User with same email or login already exists'
+          message: 'User with same email, login or display name already exists'
         }
       }
     }
