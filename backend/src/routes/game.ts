@@ -46,6 +46,14 @@ export default async function gameRoutes(fastify: FastifyInstance) {
       const manager = GameManager.getInstance()
       const { sessionId } = manager.createPrivateGame()
 
+      // Log sessionId and invite URL for debugging
+      try {
+        const invitePath = `/game/${sessionId}?mode=remote&private=true`
+        fastify.log.info({ sessionId, invitePath }, 'Created private game for invite')
+      } catch (e) {
+        fastify.log.warn({ err: e }, 'Failed to log private game creation')
+      }
+
       if (!blocked) {
         const inviterDisplay = await getDisplayNameOrFallback(fastify, user.userId)
 
@@ -98,6 +106,14 @@ export default async function gameRoutes(fastify: FastifyInstance) {
   }, async (req, reply) => {
     const manager = GameManager.getInstance()
     const { sessionId } = manager.createPrivateGame()
+    // Log sessionId and returned URL for debugging
+    try {
+      const invitePath = `/game/${sessionId}?mode=remote&private=true`
+      fastify.log.info({ sessionId, invitePath }, 'Created private game (direct)')
+    } catch (e) {
+      fastify.log.warn({ err: e }, 'Failed to log private game creation (direct)')
+    }
+
     return { sessionId }
   })
 

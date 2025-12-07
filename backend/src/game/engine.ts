@@ -20,11 +20,18 @@ export class GameEngine {
   private inputQueue: { p1: PlayerInput[]; p2: PlayerInput[] } = { p1: [], p2: [] };
 
   private onGameEnd?: (result: { winner: 'p1' | 'p2'; score: { p1: number; p2: number }; p1Id?: number; p2Id?: number; p1Alias?: string; p2Alias?: string; startedAt?: Date }) => Promise<void> | void;
+  private onEmpty?: () => void;
 
-  constructor(sessionId: string, config: GameConfig = DEFAULT_CONFIG, onGameEnd?: (result: { winner: 'p1' | 'p2'; score: { p1: number; p2: number }; p1Id?: number; p2Id?: number; p1Alias?: string; p2Alias?: string; startedAt?: Date }) => Promise<void> | void) {
+  constructor(
+    sessionId: string,
+    config: GameConfig = DEFAULT_CONFIG,
+    onGameEnd?: (result: { winner: 'p1' | 'p2'; score: { p1: number; p2: number }; p1Id?: number; p2Id?: number; p1Alias?: string; p2Alias?: string; startedAt?: Date }) => Promise<void> | void,
+    onEmpty?: () => void
+  ) {
     this.sessionId = sessionId;
     this.config = config;
     this.onGameEnd = onGameEnd;
+    this.onEmpty = onEmpty;
     this.state = {
       tick: 0,
       ball: { 
@@ -111,7 +118,14 @@ export class GameEngine {
     }
     
     if (!this.clients.p1 && (!this.clients.p2 && !this.isAIEnabled)) {
+      // No players left: stop and notify manager so it can remove this game from its registry
       this.stop();
+      try {
+        if (this.onEmpty) this.onEmpty();
+      } catch (e) {
+        // Swallow errors from manager callback
+        // Manager will also remove games on finish via onGameEnd
+      }
     }
   }
 
