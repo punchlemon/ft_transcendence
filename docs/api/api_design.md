@@ -330,7 +330,7 @@ Common optional fields: `mapTheme` (future), `spectatorAllowed` (bool). Validati
 ## 4. Invites & Matchmaking
 | Method | Path | Auth | Description |
 | --- | --- | --- | --- |
-| POST | `/game/invite` | ✅ | Send invite `{ targetUserId }`. Returns `{ sessionId }`. |
+| POST | `/game/invite` | ✅ | Send invite `{ targetUserId }`. Returns `{ success: boolean, type: 'match'|'tournament', sessionId: string|null }`. |
 | POST | `/match-invites` | ✅ | Send invite `{ toUserId, mode, gameId? }`. |
 | PATCH | `/match-invites/:id` | ✅ | Accept/decline. |
 | GET | `/matchmaking/queue` | ✅ | Poll own queue status (matching, matched, cancelled). |
