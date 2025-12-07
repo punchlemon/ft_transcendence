@@ -362,6 +362,11 @@ export const fetchBlockedUsers = async () => {
   return response.data as FriendResponse // Reusing FriendResponse structure as it's similar
 }
 
+export const sendInviteToThread = async (threadId: number, payload: { sessionId: string; url: string; label?: string }) => {
+  const response = await apiClient.post(`/chat/threads/${threadId}/invite`, payload)
+  return response.data
+}
+
 export type Tournament = {
   id: number
   name: string

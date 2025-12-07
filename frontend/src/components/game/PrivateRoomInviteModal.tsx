@@ -1,5 +1,6 @@
-import React, { useState } from 'react'
+import React, { useState, useEffect } from 'react'
 import { useChatStore } from '../../stores/chatStore'
+import { api, sendInviteToThread } from '../../lib/api'
 
 type Props = {
   sessionId: string
@@ -8,9 +9,11 @@ type Props = {
 
 const PrivateRoomInviteModal: React.FC<Props> = ({ sessionId, onClose }) => {
   const [copied, setCopied] = useState(false)
+  const [available, setAvailable] = useState<boolean | null>(null)
   const setDrawerOpen = useChatStore((s) => s.setDrawerOpen)
   const sendMessage = useChatStore((s) => s.sendMessage)
   const activeThreadId = useChatStore((s) => s.activeThreadId)
+  
 
   const inviteUrl = `${window.location.origin}/game/${encodeURIComponent(sessionId)}?mode=remote&private=true`
 
@@ -25,16 +28,35 @@ const PrivateRoomInviteModal: React.FC<Props> = ({ sessionId, onClose }) => {
     }
   }
 
+  // Keep availability info for display, but do not block sending from the modal
+  useEffect(() => {
+    let mounted = true
+    const check = async () => {
+      try {
+        const res = await api.get(`/game/${encodeURIComponent(sessionId)}/status`)
+        if (!mounted) return
+        const data = res.data ?? res
+        setAvailable(Boolean(data.available))
+      } catch (err) {
+        if (mounted) setAvailable(false)
+      }
+    }
+    check()
+    return () => { mounted = false }
+  }, [sessionId])
+
   const handleSendToChat = async () => {
     // Open chat drawer so user can pick a thread if needed
+    // We allow sending from the modal regardless of availability; availability will be enforced in-chat
     setDrawerOpen(true)
-    const message = `Join my private room: ${inviteUrl}`
+
+    // Create structured invite payload and call dedicated API to avoid embedding JSON in content
+    const payload = { sessionId, url: inviteUrl, label: 'Join Game' }
     try {
       if (activeThreadId) {
-        await sendMessage(message)
+        await sendInviteToThread(activeThreadId, payload)
         onClose()
       } else {
-        // No active thread selected; inform user to choose one
         alert('Please open the chat, select the thread you want to send to, then press "Send to chat" again.')
       }
     } catch (err) {

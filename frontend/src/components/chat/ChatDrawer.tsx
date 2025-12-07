@@ -4,7 +4,7 @@ import useAuthStore from '../../stores/authStore'
 import { useChatStore } from '../../stores/chatStore'
 import { useNotificationStore } from '../../stores/notificationStore'
 import { connectChatWs, disconnectChatWs, onChatWsEvent } from '../../lib/chatWs'
-import { inviteToGame, fetchBlockedUsers } from '../../lib/api'
+import { inviteToGame, fetchBlockedUsers, api } from '../../lib/api'
 import NotificationItem from './NotificationItem'
 import UserAvatar from '../ui/UserAvatar'
 import { MessageInput } from './MessageInput'
@@ -164,6 +164,61 @@ const ChatDrawer = () => {
     } catch (err) {
       console.error('Failed to invite user', err)
     }
+  }
+
+  const InviteMessage: React.FC<{ parsed: any; senderId?: number; currentUserId?: number }> = ({ parsed, senderId, currentUserId }) => {
+    const [available, setAvailable] = useState<boolean | null>(null)
+    const isSender = typeof senderId === 'number' && typeof currentUserId === 'number' && senderId === currentUserId
+
+    useEffect(() => {
+      let mounted = true
+      const check = async () => {
+        try {
+          const res = await api.get(`/game/${encodeURIComponent(parsed.sessionId)}/status`)
+          if (!mounted) return
+          const data = res.data ?? res
+          setAvailable(Boolean(data.available))
+        } catch (err) {
+          if (mounted) setAvailable(false)
+        }
+      }
+      check()
+      return () => { mounted = false }
+    }, [parsed.sessionId])
+
+    const disabled = available === false || isSender
+    const title = isSender ? 'You cannot join an invite you sent' : (available === false ? 'This private room is no longer available' : undefined)
+
+    return (
+      <div className="flex items-center gap-2">
+        <div className="text-sm mr-2">{parsed.label ?? 'Join Game'}</div>
+        <button
+          onClick={() => { if (!disabled) navigate(parsed.url) }}
+          disabled={disabled}
+          title={title}
+          className={`rounded-md px-3 py-1 text-sm text-white ${disabled ? 'bg-slate-400 cursor-not-allowed opacity-70' : 'bg-amber-600 hover:bg-amber-700'}`}
+        >
+          {isSender ? 'You' : (available === false ? 'Unavailable' : 'Join')}
+        </button>
+      </div>
+    )
+  }
+
+  const renderMessageContent = (msg: any) => {
+    // Render structured invite messages (server stores them as type/metadata)
+      try {
+        const type = msg.type
+        if (type && (type === 'INVITE' || (typeof type === 'string' && type.toUpperCase() === 'INVITE'))) {
+          const parsed = msg.metadata ? JSON.parse(msg.metadata) : null
+          if (parsed && parsed.url) {
+            return <InviteMessage parsed={parsed} senderId={msg.userId} currentUserId={user?.id} />
+          }
+        }
+      } catch (e) {
+        // parsing failed — fall back to content
+      }
+
+      return msg.content
   }
 
   return (
@@ -327,7 +382,7 @@ const ChatDrawer = () => {
                                   <span>{formatTime(msg.sentAt)}</span>
                                 </div>
                                 <div className="max-w-[70%] rounded-lg px-3 py-2 text-sm bg-indigo-600 text-white rounded-br-none">
-                                  {msg.content}
+                                  {renderMessageContent(msg)}
                                 </div>
                               </>
                             ) : (
@@ -336,7 +391,7 @@ const ChatDrawer = () => {
                                   {showDisplayName && (
                                     <div className="mb-1 text-xs font-bold opacity-75">{msg.user.displayName}</div>
                                   )}
-                                  {msg.content}
+                                  {renderMessageContent(msg)}
                                 </div>
                                 <span className="text-[10px] text-slate-500 mb-1 dark:text-slate-400">{formatTime(msg.sentAt)}</span>
                               </>

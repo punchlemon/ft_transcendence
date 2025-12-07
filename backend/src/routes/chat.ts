@@ -138,4 +138,33 @@ export default async function chatRoutes(fastify: FastifyInstance) {
       return reply.status(400).send({ error: { code: 'SEND_FAILED', message: error.message } })
     }
   })
+
+  // Send an invite message (structured) to a thread
+  const sendInviteSchema = z.object({
+    sessionId: z.string(),
+    url: z.string().url(),
+    label: z.string().optional()
+  })
+
+  fastify.post('/threads/:id/invite', {
+    onRequest: [fastify.authenticate]
+  }, async (req, reply) => {
+    const { id } = req.params as { id: string }
+    const channelId = parseInt(id)
+    const userId = req.user.userId
+
+    // Validate membership
+    const isMember = await chatService.isMember(channelId, userId)
+    if (!isMember) return reply.status(403).send({ error: { code: 'FORBIDDEN', message: 'Not a member of this thread' } })
+
+    const body = sendInviteSchema.parse(req.body)
+
+    try {
+      const message = await chatService.sendInviteMessage(channelId, userId, body)
+      return { data: message }
+    } catch (error: any) {
+      req.log.error(error)
+      return reply.status(400).send({ error: { code: 'SEND_FAILED', message: error.message } })
+    }
+  })
 }
