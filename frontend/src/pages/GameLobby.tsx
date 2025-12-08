@@ -1,11 +1,12 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import useAuthStore from '../stores/authStore'
-import TournamentAliasPanel from '../components/tournament/TournamentAliasPanel'
+// Tournament alias registration UI removed
 import BracketView from '../components/tournament/BracketView'
 import { useTournamentSetup } from '../hooks/useTournamentSetup'
 import { generatePreviewMatches } from '../lib/tournament'
 import FriendSelectorModal from '../components/tournament/FriendSelectorModal'
+import { fetchUserFriends, createTournament, fetchTournament } from '../lib/api'
 
 type GameMode = 'local' | 'remote' | 'ai' | 'tournament'
 type MatchType = 'public' | 'private'
@@ -27,6 +28,10 @@ const GameLobbyPage = () => {
   // Tournament State
   const tournamentSetup = useTournamentSetup()
   const [createdTournament, setCreatedTournament] = useState<any | null>(null)
+  const [tournamentName, setTournamentName] = useState<string>(`${user?.displayName ?? 'Tournament'}'s Tournament`)
+  const [friends, setFriends] = useState<Array<any>>([])
+  const [friendsLoading, setFriendsLoading] = useState(false)
+  const [selectedFriendIds, setSelectedFriendIds] = useState<number[]>([])
   const [isCreatingTournament, setIsCreatingTournament] = useState(false)
   const [isStartDisabled, setIsStartDisabled] = useState(true)
   const [isInviteModalOpen, setIsInviteModalOpen] = useState(false)
@@ -38,6 +43,15 @@ const GameLobbyPage = () => {
     setIsMatching(false)
   }
 
+  useEffect(() => {
+    if (selectedMode !== 'tournament' || !user) return
+    setFriendsLoading(true)
+    fetchUserFriends(String(user.id))
+      .then((res) => setFriends(res.data))
+      .catch((err) => console.error('Failed to fetch friends', err))
+      .finally(() => setFriendsLoading(false))
+  }, [selectedMode, user])
+
   const handleStartMatch = async () => {
     if (selectedMode === 'local') {
       const mockGameId = `game-${selectedMode}-${Date.now()}`
@@ -48,15 +62,33 @@ const GameLobbyPage = () => {
       const mockGameId = `game-${selectedMode}-${Date.now()}`
       navigate(`/game/${mockGameId}?mode=ai&difficulty=${aiDifficulty}`)
     } else if (selectedMode === 'tournament') {
-      // Create tournament but do not immediately navigate: allow inviting friends first
+      // Create tournament using selected friends + current user
+      if (!user) return
       setIsCreatingTournament(true)
-      const tournament = await tournamentSetup.create()
-      setIsCreatingTournament(false)
-      if (tournament) {
-        setCreatedTournament(tournament)
+      try {
+        const participants: Array<any> = []
+        participants.push({ alias: user.displayName, userId: user.id })
+        const selectedFriends = friends.filter((f) => selectedFriendIds.includes(f.id))
+        selectedFriends.forEach((f) => participants.push({ alias: f.displayName, userId: f.id }))
+        if (participants.length % 2 !== 0) {
+          participants.push({ alias: 'AI' })
+        }
+
+        const res = await createTournament({
+          name: tournamentName || `${user.displayName}'s Tournament`,
+          createdById: user.id,
+          participants: participants.map((p) => ({ alias: p.alias, userId: p.userId }))
+        })
+
+        const detail = await fetchTournament(res.data.id)
+        setCreatedTournament(detail.data)
         setIsStartDisabled(false)
-        // show invite modal automatically (optional)
         setIsInviteModalOpen(true)
+      } catch (err) {
+        console.error('Failed to create tournament', err)
+        alert('Failed to create tournament')
+      } finally {
+        setIsCreatingTournament(false)
       }
     } else if (selectedMode === 'remote') {
       if (matchType === 'public') {
@@ -277,43 +309,81 @@ const GameLobbyPage = () => {
           {selectedMode === 'tournament' && (
             <div className="animate-in fade-in slide-in-from-top-4 rounded-xl border border-slate-200 bg-slate-50 p-6 duration-300 dark:border-slate-700 dark:bg-slate-800/50">
               <h3 className="mb-4 text-lg font-medium text-slate-900 dark:text-slate-100">Tournament Setup</h3>
-              <TournamentAliasPanel
-                aliasInput={tournamentSetup.aliasInput}
-                onAliasChange={tournamentSetup.setAliasInput}
-                onSubmit={tournamentSetup.handleRegisterPlayer}
-                errorMessage={tournamentSetup.errorMessage}
-                infoMessage={tournamentSetup.infoMessage}
-                isSubmitDisabled={!tournamentSetup.aliasInput.trim()}
-              />
-
-              {createdTournament && (
-                <div className="mt-4 flex items-center gap-3">
-                  <button
-                    onClick={() => setIsInviteModalOpen(true)}
-                    className="rounded-md border px-4 py-2 text-sm"
-                  >
-                    フレンドを招待
-                  </button>
-                  <button
-                    onClick={handleStartTournamentNow}
-                    className="ml-2 rounded-md bg-indigo-600 px-4 py-2 text-sm text-white"
-                  >
-                    トーナメント開始
-                  </button>
-                </div>
-              )}
-              
-              {tournamentSetup.players.length > 0 && (
-                <div className="mt-6 border-t border-slate-200 pt-6 dark:border-slate-700">
-                  <h4 className="mb-4 text-sm font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">Tournament Bracket</h4>
-                  <BracketView 
-                    matches={generatePreviewMatches(tournamentSetup.players) as any} 
-                    currentMatchIndex={-1}
-                    onRemovePlayer={tournamentSetup.handleRemovePlayer}
-                    currentUserAlias={user?.displayName}
+              <div className="mt-2">
+                <div className="mb-4 flex items-center gap-3">
+                  <label className="text-sm font-medium">Tournament Name</label>
+                  <input
+                    type="text"
+                    value={tournamentName}
+                    onChange={(e) => setTournamentName(e.target.value)}
+                    className="ml-2 w-full max-w-md rounded-md border border-slate-300 px-3 py-2 text-sm focus:border-indigo-500 focus:outline-none"
                   />
                 </div>
-              )}
+
+                <div className="mb-4">
+                  <h4 className="mb-2 text-sm font-semibold text-slate-700">Invite Friends</h4>
+                  <div className="max-h-48 overflow-auto rounded border border-slate-200 p-2">
+                    {friendsLoading ? (
+                      <div>Loading friends...</div>
+                    ) : friends.filter(f => f.status === 'ONLINE').length === 0 ? (
+                      <div className="text-sm text-slate-500">No friends online</div>
+                    ) : (
+                      friends
+                        .filter((f) => f.status === 'ONLINE')
+                        .map((f) => (
+                          <label key={f.id} className="flex items-center justify-between gap-4 border-b py-2">
+                            <div>
+                              <div className="font-medium">{f.displayName}</div>
+                              <div className="text-xs text-slate-500">{f.login}</div>
+                            </div>
+                            <div>
+                              <input
+                                type="checkbox"
+                                checked={selectedFriendIds.includes(f.id)}
+                                onChange={(e) => {
+                                  if (e.target.checked) setSelectedFriendIds((s) => [...s, f.id])
+                                  else setSelectedFriendIds((s) => s.filter((id) => id !== f.id))
+                                }}
+                              />
+                            </div>
+                          </label>
+                        ))
+                    )}
+                  </div>
+                </div>
+
+                {createdTournament && (
+                  <div className="mt-4 flex items-center gap-3">
+                    <button
+                      onClick={() => setIsInviteModalOpen(true)}
+                      className="rounded-md border px-4 py-2 text-sm"
+                    >
+                      Invite Friends
+                    </button>
+                    <button
+                      onClick={handleStartTournamentNow}
+                      className="ml-2 rounded-md bg-indigo-600 px-4 py-2 text-sm text-white"
+                    >
+                      Start Tournament
+                    </button>
+                  </div>
+                )}
+
+                {(() => {
+                  const aliases = [user?.displayName ?? 'You', ...friends.filter(f => selectedFriendIds.includes(f.id)).map(f => f.displayName)]
+                  return aliases.length > 0 ? (
+                    <div className="mt-6 border-t border-slate-200 pt-6 dark:border-slate-700">
+                      <h4 className="mb-4 text-sm font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">Tournament Bracket</h4>
+                      <BracketView 
+                        matches={generatePreviewMatches(aliases) as any} 
+                        currentMatchIndex={-1}
+                        onRemovePlayer={undefined}
+                        currentUserAlias={user?.displayName}
+                      />
+                    </div>
+                  ) : null
+                })()}
+              </div>
             </div>
           )}
 
@@ -322,16 +392,16 @@ const GameLobbyPage = () => {
             <button
               onClick={handleStartMatch}
               disabled={
-                !user ||
-                !selectedMode ||
-                (selectedMode === 'remote' && !matchType) ||
-                (selectedMode === 'tournament' && tournamentSetup.players.length < 2) ||
-                tournamentSetup.isCreating
-              }
+                  !user ||
+                  !selectedMode ||
+                  (selectedMode === 'remote' && !matchType) ||
+                  (selectedMode === 'tournament' && (1 + selectedFriendIds.length) < 2) ||
+                  isCreatingTournament
+                }
               className="min-w-[200px] rounded-full bg-slate-900 px-8 py-3 font-semibold text-white transition-transform hover:scale-105 hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:scale-100 dark:bg-indigo-600 dark:hover:bg-indigo-700 dark:hover:scale-105"
             >
               {selectedMode === 'tournament'
-                ? tournamentSetup.isCreating
+                ? isCreatingTournament
                   ? 'Creating...'
                   : 'Start Tournament'
                 : 'Start Game'}
