@@ -27,3 +27,4 @@ backend/prisma/dev.db-journal
 # Vite cache
 frontend/.vite
 backend/uploads/
+nginx/ssl/

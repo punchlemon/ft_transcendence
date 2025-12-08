@@ -7,6 +7,23 @@ Fastify + Prisma で実装するバックエンドと、Vite + React + Tailwind 
 - Node.js 18 系と npm（ローカル開発を行う場合）
 - `.env` にバックエンド/フロントエンドのポートや API ベース URL を設定しておくこと
 
+## SSL証明書の準備 (Docker起動時)
+本プロジェクトでは Nginx を使用して HTTPS 通信を行います。
+`nginx/ssl/` ディレクトリは `.gitignore` に含まれているため、初回起動前に以下の手順で自己署名証明書を作成してください。
+
+1. ディレクトリの作成
+   ```bash
+   mkdir -p nginx/ssl
+   ```
+
+2. 証明書の生成 (OpenSSL)
+   ```bash
+   openssl req -x509 -nodes -days 365 -newkey rsa:2048 \
+     -keyout nginx/ssl/nginx.key \
+     -out nginx/ssl/nginx.crt \
+     -subj "/C=JP/ST=Tokyo/L=Minato/O=42Tokyo/OU=Student/CN=localhost"
+   ```
+
 ## 推奨起動フロー（Docker Compose）
 プロジェクトルートで以下を実行すると、backend と frontend をまとめて立ち上げられます。
 
@@ -15,12 +32,17 @@ Fastify + Prisma で実装するバックエンドと、Vite + React + Tailwind 
 docker compose up --build
 ```
 
-- backend: Fastify が `BACKEND_PORT` (デフォルト 3000) で起動します。
-- frontend: Vite Dev Server が `FRONTEND_PORT` (デフォルト 5173) で起動し、`/api` 経由で backend にアクセスします。
+- backend: Fastify が `BACKEND_PORT` (デフォルト 3000) で起動します（外部非公開）。
+- frontend: Vite Dev Server が `FRONTEND_PORT` (デフォルト 5173) で起動します（外部非公開）。
+- nginx: リバースプロキシとして 443 (HTTPS) ポートで起動し、frontend と backend への通信を振り分けます。
 - 停止する際は別ターミナルで `docker compose down` を実行してください。
+
+ブラウザで https://localhost を開いてください。
+※自己署名証明書を使用しているため、警告が表示されますが続行してください。
 
 ## ローカル開発モード
 Docker を使わずに確認したい場合は、2 つのターミナルを用いて手動で起動します。
+※この場合、HTTPS ではなく HTTP での接続となります。
 
 ```bash
 # ターミナル1 (backend)
@@ -92,10 +114,10 @@ OAuth 認証（Google）を利用するには、`.env` に以下の変数を設�
 # OAuth Configuration (Backend)
 GOOGLE_OAUTH_CLIENT_ID=your-google-client-id
 GOOGLE_OAUTH_CLIENT_SECRET=your-google-client-secret
-OAUTH_REDIRECT_WHITELIST=http://localhost:5173/oauth/callback
+OAUTH_REDIRECT_WHITELIST=https://localhost/oauth/callback
 
 # OAuth Configuration (Frontend)
-VITE_OAUTH_REDIRECT_URI=http://localhost:5173/oauth/callback
+VITE_OAUTH_REDIRECT_URI=https://localhost/oauth/callback
 ```
 
 **重要:** Google の開発者コンソールで Web アプリ用 OAuth クライアントを作成し、`Authorized redirect URI` に `http://localhost:5173/oauth/callback` を必ず登録してください。上記プレースホルダー値のままでは Google 側で `invalid_client` エラーになります。
