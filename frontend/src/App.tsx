@@ -128,6 +128,14 @@ const App = () => {
               }
             />
             <Route
+              path="/game"
+              element={
+                <RequireAuth>
+                  <GameRoomPage />
+                </RequireAuth>
+              }
+            />
+            <Route
               path="/:username"
               element={
                 <RequireAuth>

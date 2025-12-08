@@ -10,7 +10,7 @@ import sharp from 'sharp'
 import { userService } from '../services/user'
 import { calculateUserStats, calculateMultipleUserStats } from '../utils/stats'
 
-const STATUS_VALUES = ['OFFLINE', 'ONLINE', 'IN_MATCH', 'AWAY', 'DO_NOT_DISTURB'] as const
+const STATUS_VALUES = ['OFFLINE', 'ONLINE', 'IN_GAME', 'AWAY', 'DO_NOT_DISTURB'] as const
 
 const searchQuerySchema = z.object({
   q: z

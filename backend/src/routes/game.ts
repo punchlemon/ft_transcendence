@@ -324,6 +324,19 @@ export default async function gameRoutes(fastify: FastifyInstance) {
                 // ignore
               }
             }
+            } else if (type === 'RESTART_MATCH') {
+              // Allow clients to request a new match in the same session
+              try {
+                const params = data.payload?.params
+                if (typeof (game as any).restartMatch === 'function') {
+                  ;(game as any).restartMatch(params)
+                } else {
+                  // If engine doesn't support restartMatch, fallback to restarting via startGame
+                  try { game.startGame() } catch (e) {}
+                }
+              } catch (e) {
+                fastify.log.warn({ err: e, sessionId }, 'Error while handling RESTART_MATCH control event')
+              }
           }
         }
       } catch (err) {

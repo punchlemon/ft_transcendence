@@ -104,7 +104,7 @@ describe('GET /api/users', () => {
   it('returns paginated users ordered by displayName', async () => {
     const carol = await createUser(prisma, { login: 'carol', email: 'carol@example.com', displayName: 'Carol', status: 'OFFLINE' })
     const alice = await createUser(prisma, { login: 'alice', email: 'alice@example.com', displayName: 'Alice', status: 'ONLINE' })
-    await createUser(prisma, { login: 'bob', email: 'bob@example.com', displayName: 'Bob', status: 'IN_MATCH' })
+    await createUser(prisma, { login: 'bob', email: 'bob@example.com', displayName: 'Bob', status: 'IN_GAME' })
     const token = await createSessionToken(server, prisma, carol.id)
 
     const response = await server.inject({

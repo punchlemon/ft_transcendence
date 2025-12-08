@@ -75,6 +75,10 @@ export const connectChatWs = () => {
         if (listeners['session_expired']) {
           listeners['session_expired'].forEach(cb => cb(payload.data));
         }
+      } else if (payload.type === 'match_history_update') {
+        if (listeners['match_history_update']) {
+          listeners['match_history_update'].forEach(cb => cb(payload.data));
+        }
       } else if (payload.type === 'user_created') {
         if (listeners['user_created']) {
           listeners['user_created'].forEach(cb => cb(payload.data));

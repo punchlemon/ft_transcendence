@@ -1,4 +1,6 @@
 import { WebSocket } from 'ws';
+import { prisma } from '../utils/prisma';
+import { userService } from '../services/user';
 import { GameState, GameConfig, DEFAULT_CONFIG, PlayerInput } from './types';
 import { AIOpponent, AIDifficulty } from './ai';
 
@@ -34,6 +36,11 @@ export class GameEngine {
   // Input buffers
   private inputQueue: { p1: PlayerInput[]; p2: PlayerInput[] } = { p1: [], p2: [] };
   private lastMoves: { p1: number; p2: number } = { p1: 0, p2: 0 };
+
+  // Flag to indicate whether the most recent finished match has been
+  // persisted to the database. This prevents double-persist when
+  // restartMatch triggers persistence of the previous match.
+  private lastResultPersisted: boolean = false;
 
   private onGameEnd?: (result: { winner: 'p1' | 'p2'; score: { p1: number; p2: number }; p1Id?: number; p2Id?: number; p1Alias?: string; p2Alias?: string; startedAt?: Date }) => Promise<void> | void;
   private onEmpty?: () => void;
@@ -89,13 +96,35 @@ export class GameEngine {
     }
     if (!this.clients.p1 && aiSlot !== 'p1') {
       this.clients.p1 = socket;
-      if (userId) this.players.p1 = userId;
+      if (userId) {
+        this.players.p1 = userId;
+
+        // Mark the user as being in a valid (non-destroyed) room.
+        prisma.user.update({ where: { id: userId }, data: { status: 'IN_GAME' } })
+          .catch((e) => console.error('[engine] Failed to set user status IN_GAME on addPlayer', e));
+        try {
+          userService.emitStatusChange(userId, 'IN_GAME');
+        } catch (e) {
+          console.error('[engine] Failed to emit status change for IN_GAME on addPlayer', e);
+        }
+      }
       if (alias) this.playersAliases.p1 = alias;
       this.checkStart();
       return 'p1';
     } else if (!this.clients.p2 && aiSlot !== 'p2') {
       this.clients.p2 = socket;
-      if (userId) this.players.p2 = userId;
+      if (userId) {
+        this.players.p2 = userId;
+
+        // Mark the user as being in a valid (non-destroyed) room.
+        prisma.user.update({ where: { id: userId }, data: { status: 'IN_GAME' } })
+          .catch((e) => console.error('[engine] Failed to set user status IN_GAME on addPlayer', e));
+        try {
+          userService.emitStatusChange(userId, 'IN_GAME');
+        } catch (e) {
+          console.error('[engine] Failed to emit status change for IN_GAME on addPlayer', e);
+        }
+      }
       if (alias) this.playersAliases.p2 = alias;
       this.checkStart();
       return 'p2';
@@ -145,6 +174,30 @@ export class GameEngine {
       this.clients.p2 = undefined;
       removedSlot = 'p2'
       this.pauseGame('Player 2 disconnected');
+    }
+
+    // Immediately mark the removed player as ONLINE in the DB and emit
+    // a status change so other clients see the update without waiting for
+    // the whole-room teardown logic. This helps when a single player
+    // leaves but the room remains for others (or when the client navigates away).
+    try {
+      if (removedSlot) {
+        const removedUserId = this.players[removedSlot]
+        if (typeof removedUserId === 'number') {
+          prisma.user.update({ where: { id: removedUserId }, data: { status: 'ONLINE' } })
+            .catch((e) => console.error('[engine] Failed to set user status ONLINE on removePlayer', e));
+          try {
+            userService.emitStatusChange(removedUserId, 'ONLINE');
+          } catch (e) {
+            console.error('[engine] Failed to emit status change for ONLINE on removePlayer', e);
+          }
+        }
+        // Clear stored player id for the removed slot
+        try { delete this.players[removedSlot] } catch (e) {}
+        try { delete this.playersAliases[removedSlot] } catch (e) {}
+      }
+    } catch (e) {
+      // swallow
     }
 
     // If the removed player's userId matches the creator of this private room,
@@ -291,6 +344,24 @@ export class GameEngine {
     // 120Hz loop
     this.loopId = setInterval(() => this.tick(), 1000 / 120);
     
+    // Mark real user players as IN_GAME so other clients see presence change.
+    try {
+      Object.values(this.players).forEach((uid) => {
+        if (typeof uid === 'number') {
+          // fire-and-forget DB update and status event so chat WS can broadcast
+          prisma.user.update({ where: { id: uid }, data: { status: 'IN_GAME' } })
+            .catch((e) => console.error('[engine] Failed to set user status IN_GAME', e));
+          try {
+            userService.emitStatusChange(uid, 'IN_GAME');
+          } catch (e) {
+            console.error('[engine] Failed to emit status change for IN_GAME', e);
+          }
+        }
+      });
+    } catch (e) {
+      console.error('[engine] Error while broadcasting IN_GAME status', e);
+    }
+
     this.broadcast({ event: 'match:event', payload: { type: 'START' } });
   }
 
@@ -452,6 +523,8 @@ export class GameEngine {
           p2Alias: this.playersAliases.p2,
           startedAt: this.startedAt
         });
+        // Mark that we've persisted this match so restartMatch won't re-persist
+        this.lastResultPersisted = true;
       } catch (e) {
         console.error('Failed to persist game result', e);
       }
@@ -467,6 +540,74 @@ export class GameEngine {
     let winner: 'p1' | 'p2' = 'p1'
     if (p2 > p1) winner = 'p2'
     this.finishGame(winner).catch(err => console.error('Error aborting game:', err));
+  }
+
+  // Restart the match in the same session. This resets scores/ball and
+  // initiates a countdown -> start cycle while keeping connected clients
+  // and player slots intact. Optional `params` can be used to update
+  // player aliases (e.g. when front-end requests new names for local matches).
+  public restartMatch(params?: { p1Name?: string; p2Name?: string; mode?: string }) {
+    try {
+      if (params?.p1Name) this.playersAliases.p1 = params.p1Name;
+      if (params?.p2Name) this.playersAliases.p2 = params.p2Name;
+      // If there is an in-progress/finished score, persist it first so
+      // match results are not lost when restarting.
+      try {
+        const { p1, p2 } = this.state.score;
+        const anyScore = (p1 || p2) && (p1 !== 0 || p2 !== 0);
+        // Only persist the previous match if it hasn't already been persisted
+        // (finishGame sets `lastResultPersisted = true`). This avoids duplicate
+        // match records when finish->restart sequencing overlaps.
+        if (anyScore && this.onGameEnd && !this.lastResultPersisted) {
+          // Determine winner by score (fallback to p1 if tie)
+          const winner: 'p1' | 'p2' = p2 > p1 ? 'p2' : 'p1';
+          try {
+            void this.onGameEnd({
+              winner,
+              score: { p1, p2 },
+              p1Id: this.players.p1,
+              p2Id: this.players.p2,
+              p1Alias: this.playersAliases.p1,
+              p2Alias: this.playersAliases.p2,
+              startedAt: this.startedAt
+            });
+            // Mark persisted so subsequent restart attempts won't persist again
+            this.lastResultPersisted = true;
+          } catch (e) {
+            console.error('[engine] Failed to persist previous match result on restart', e);
+          }
+        }
+      } catch (e) {
+        console.error('[engine] Error while attempting to persist previous match on restart', e);
+      }
+
+      // Stop any existing play loop and reset runtime state
+      try { this.stop(); } catch (e) {}
+
+      // Reset score, paddles, ball, and input buffers so paddles start centered
+      this.state.score = { p1: 0, p2: 0 };
+      this.state.paddles = {
+        p1: (this.config.height - this.config.paddleHeight) / 2,
+        p2: (this.config.height - this.config.paddleHeight) / 2
+      };
+      this.state.ball.x = this.config.width / 2;
+      this.state.ball.y = this.config.height / 2;
+      this.state.ball.dx = this.config.ballSpeed * (Math.random() > 0.5 ? 1 : -1);
+      this.state.ball.dy = this.config.ballSpeed * (Math.random() > 0.5 ? 1 : -1);
+
+      // Clear input buffers and last moves
+      this.inputQueue = { p1: [], p2: [] };
+      this.lastMoves = { p1: 0, p2: 0 };
+
+      // Start countdown then startGame
+      this.state.status = 'COUNTDOWN';
+      this.broadcast({ event: 'match:event', payload: { type: 'COUNTDOWN', duration: 3 } });
+      // Reset the persisted flag because we're starting a fresh match
+      this.lastResultPersisted = false;
+      setTimeout(() => this.startGame(), 3000);
+    } catch (e) {
+      console.error('[engine] Failed to restart match', e);
+    }
   }
 
   private resetBall(server: 'p1' | 'p2') {

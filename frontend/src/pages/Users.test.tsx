@@ -6,7 +6,7 @@ import { MemoryRouter } from 'react-router-dom'
 import UsersPage from './Users'
 import useAuthStore from '../stores/authStore'
 
-const ONLINE_ONLY_STATUSES = 'ONLINE,IN_MATCH,AWAY,DO_NOT_DISTURB'
+const ONLINE_ONLY_STATUSES = 'ONLINE,IN_GAME,AWAY,DO_NOT_DISTURB'
 const STORAGE_KEY = 'ft_users_filters_v1'
 
 const fetchUsersMock = vi.fn()

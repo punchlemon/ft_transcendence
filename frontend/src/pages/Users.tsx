@@ -32,7 +32,7 @@ const DEFAULT_FILTERS: FilterState = {
 }
 
 const STORAGE_KEY = 'ft_users_filters_v1'
-const ONLINE_ONLY_STATUSES = ['ONLINE', 'IN_MATCH', 'AWAY', 'DO_NOT_DISTURB'].join(',')
+const ONLINE_ONLY_STATUSES = ['ONLINE', 'IN_GAME', 'AWAY', 'DO_NOT_DISTURB'].join(',')
 
 const sanitizeFilters = (raw: Partial<FilterState> | null | undefined): FilterState => {
   const next = { ...DEFAULT_FILTERS }
