@@ -42,11 +42,10 @@ export async function calculateUserStats(
   for (const match of matches) {
     if (match.winnerId === userId) {
       wins++
-    } else if (match.winnerId) {
-      // winnerId exists and is not this user -> it's a loss
+    } else {
+      // If winnerId is not this user (including null for AI/Guest wins), it's a loss
       losses++
     }
-    // If winnerId is null, it's a draw (not counted as win or loss)
   }
 
   const winRate = matchesPlayed > 0 ? wins / matchesPlayed : 0
@@ -104,7 +103,7 @@ export async function calculateMultipleUserStats(
       stats.matchesPlayed++
       if (match.winnerId === match.playerAId) {
         stats.wins++
-      } else if (match.winnerId && match.winnerId !== match.playerAId) {
+      } else {
         stats.losses++
       }
     }
@@ -114,7 +113,7 @@ export async function calculateMultipleUserStats(
       stats.matchesPlayed++
       if (match.winnerId === match.playerBId) {
         stats.wins++
-      } else if (match.winnerId && match.winnerId !== match.playerBId) {
+      } else {
         stats.losses++
       }
     }
