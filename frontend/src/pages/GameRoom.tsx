@@ -31,6 +31,7 @@ const GameRoomPage = () => {
   // be shown immediately when navigating to `/game/:id?showInvite=1`.
   const [sessionId, setSessionId] = useState<string | null>(id ?? null)
   const [showInviteModal, setShowInviteModal] = useState(false)
+  const [showSessionDestroyed, setShowSessionDestroyed] = useState(false)
 
   const mode = searchParams.get('mode')
 
@@ -173,10 +174,14 @@ const GameRoomPage = () => {
             setStatus('playing')
           } else if (data.payload.type === 'UNAVAILABLE' || data.payload.type === 'CLOSED' || data.payload.type === 'CLOSED_BY_CREATOR') {
             // If the server indicates the session is no longer available or was closed,
-            // ensure any invite modal is hidden and update UI accordingly.
+            // show the "session destroyed" modal so a user who is left in the room
+            // understands the room has been removed.
             setShowInviteModal(false)
-            // Optionally navigate back to home or show a toast — keep current behavior minimal.
-            // navigate('/')
+            setShowSessionDestroyed(true)
+            // Close socket to avoid further state updates from server for this session
+            try { socketRef.current?.close() } catch (e) { /* ignore */ }
+            // Update status so UI overlays don't conflict
+            setStatus('connecting')
           } else if (data.payload.type === 'FINISHED') {
             setStatus('finished')
             const winnerSlot = data.payload.winner
@@ -249,6 +254,13 @@ const GameRoomPage = () => {
             // We might not know who won if we rely on score here without playerSlot, 
             // but match:event is better.
           }
+          } else if (data.event === 'session_expired' || data.event === 'session:expired') {
+            // Backend may broadcast a session_expired notification when a private
+            // room is destroyed. Show the same modal and close socket.
+            setShowInviteModal(false)
+            setShowSessionDestroyed(true)
+            try { socketRef.current?.close() } catch (e) { /* ignore */ }
+            setStatus('connecting')
         } else if (data.event === 'score:update') {
           setScores(data.payload)
           soundManager.playScore()
@@ -656,6 +668,31 @@ const GameRoomPage = () => {
                     className="rounded-full bg-white px-8 py-3 font-bold text-slate-900 hover:bg-indigo-50 transition-colors shadow-lg hover:shadow-xl transform hover:-translate-y-0.5"
                   >
                     {id?.startsWith('local-') ? (advanceToNextMatch(matchQueue, currentMatchIndex) === -1 ? 'View Results' : 'Next Match') : 'Play Again'}
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
+          {/* Session destroyed modal: shown when a private room is removed while
+              the user is still looking at it, or when accessing an already-
+              destroyed private room. */}
+          {showSessionDestroyed && (
+            <div className="absolute inset-0 z-50 flex items-center justify-center bg-white/90 dark:bg-slate-100/90">
+              <div className="max-w-md rounded-lg bg-white p-6 shadow-lg dark:bg-slate-800">
+                <h3 className="mb-2 text-xl font-bold text-slate-900 dark:text-slate-100">Room Removed</h3>
+                <p className="mb-4 text-sm text-slate-700 dark:text-slate-300">This private room has been destroyed by its creator or expired. You can return to the home page to create or join another room.</p>
+                <div className="flex gap-3 justify-end">
+                  <button
+                    onClick={() => {
+                      try { socketRef.current?.close() } catch (e) { /* ignore */ }
+                      setShowSessionDestroyed(false)
+                      setPlayerSlot(null)
+                      setStatus('connecting')
+                      navigate('/')
+                    }}
+                    className="rounded-md bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-700"
+                  >
+                    Go Home
                   </button>
                 </div>
               </div>
