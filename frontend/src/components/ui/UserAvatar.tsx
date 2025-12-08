@@ -9,7 +9,7 @@ export interface UserAvatarProps {
     id?: number
     displayName: string
     avatarUrl?: string | null
-    status?: string // 'ONLINE', 'OFFLINE', 'IN_MATCH'
+    status?: string // 'ONLINE', 'OFFLINE', 'IN_GAME'
     login?: string
   }
   size?: 'xs' | 'sm' | 'md' | 'lg' | 'xl' | '2xl'
@@ -19,7 +19,8 @@ export interface UserAvatarProps {
 
 const statusColors: Record<string, string> = {
   ONLINE: 'bg-green-500',
-  IN_MATCH: 'bg-yellow-500',
+  // 'IN_GAME' used to indicate user is currently in a match
+  IN_GAME: 'bg-yellow-500',
   OFFLINE: 'bg-slate-400',
 }
 

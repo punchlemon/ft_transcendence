@@ -43,36 +43,80 @@ export class GameManager {
       },
       // onEmpty: remove the game from the registry when no players remain
       () => {
-        // When a game becomes empty, remove it and mark the session as
-        // expired so that it cannot be re-joined or re-created with the
-        // same sessionId. Also emit a lightweight event so chat WS clients
-        // can update invite UI (join buttons) in real time.
+        // When a game becomes empty, remove it. For most online matches
+        // we also mark the session as expired so the same sessionId cannot
+        // be re-used. For local/demo sessions and local tournament matches
+        // we intentionally avoid marking expired to allow a quick "Play
+        // Again" reconnect using the same URL/session id.
         try {
-          // Diagnostic logging to help debug cases where sessions appear
-          // to remain joinable after a creator leaves.
           try {
-            console.info(`[game-manager] Marking session expired: ${sessionId}`);
+            console.info(`[game-manager] Handling empty game: ${sessionId}`);
           } catch (e) {
             // ignore logging failures
           }
 
-          this.expiredSessions.add(sessionId);
+          // If this is NOT a local/demo session, mark expired and broadcast
+          // a session_expired event so other clients' invite UI is invalidated.
+          if (!sessionId.startsWith('game_local_') && !sessionId.startsWith('local-match-')) {
+            try {
+              this.expiredSessions.add(sessionId);
+            } catch (e) {
+              // swallow
+            }
 
-          // Emit an event for other services (chat WS) to broadcast.
-          try {
-            notificationService.emit('session_expired', { sessionId });
-          } catch (e) {
-            // swallow
+            try {
+              notificationService.emit('session_expired', { sessionId });
+            } catch (e) {
+              // swallow
+            }
+          } else {
+            try {
+              console.info(`[game-manager] Local session ${sessionId} not marked expired to allow Play Again`);
+            } catch (e) {}
           }
         } catch (e) {
           // swallow
         }
 
-        try {
-          this.games.delete(sessionId);
-        } catch (e) {
-          // swallow delete errors
-        }
+          try {
+            // Before removing the in-memory game, mark any real user
+            // participants as ONLINE since the room is being destroyed.
+            try {
+              const g = this.games.get(sessionId);
+              if (g) {
+                const players = (g as any).players as { p1?: number; p2?: number } | undefined;
+                if (players) {
+                  Object.values(players).forEach((uid) => {
+                    if (typeof uid === 'number') {
+                      try {
+                        prisma.user.update({ where: { id: uid }, data: { status: 'ONLINE' } })
+                          .catch((e) => console.error('[game-manager] Failed to set user status ONLINE on destroy', e));
+                        try {
+                          // Use userService dynamic import to avoid circulars if any
+                          const { userService } = require('../services/user');
+                          userService.emitStatusChange(uid, 'ONLINE');
+                        } catch (e) {
+                          console.error('[game-manager] Failed to emit status change for ONLINE on destroy', e);
+                        }
+                      } catch (e) {
+                        // swallow per-user errors
+                      }
+                    }
+                  });
+                }
+              }
+            } catch (e) {
+              // swallow
+            }
+
+            try {
+              this.games.delete(sessionId);
+            } catch (e) {
+              // swallow delete errors
+            }
+          } catch (e) {
+            // swallow
+          }
       }
     );
     this.games.set(sessionId, game);
@@ -85,7 +129,9 @@ export class GameManager {
   }
 
   private async handleGameEnd(sessionId: string, result: { winner: 'p1' | 'p2'; score: { p1: number; p2: number }; p1Id?: number; p2Id?: number; p1Alias?: string; p2Alias?: string; startedAt?: Date }) {
-    this.games.delete(sessionId);
+    // Do not delete the game here. A match ending should not destroy the
+    // underlying room — players may remain connected and want to play again
+    // within the same session. Room destruction is handled by onEmpty/removeGame.
 
     // Require at least one identifier (userId or alias) for each side to consider persisting.
     const hasP1 = typeof result.p1Id === 'number' || !!result.p1Alias
@@ -111,9 +157,11 @@ export class GameManager {
       const winnerId = result.winner === 'p1' ? result.p1Id : result.p2Id;
       const loserId = result.winner === 'p1' ? result.p2Id : result.p1Id;
 
+      let createdMatchId: number | null = null;
+      let createdMatchSummary: any = null;
       await prisma.$transaction(async (tx) => {
         // Create Match with optional aliases and optional user IDs
-        await tx.match.create({
+        const created = await tx.match.create({
           data: {
             playerAId: result.p1Id ?? null,
             playerBId: result.p2Id ?? null,
@@ -132,6 +180,20 @@ export class GameManager {
             }
           }
         });
+        createdMatchId = created.id;
+        createdMatchSummary = {
+          id: created.id,
+          playerAId: created.playerAId,
+          playerBId: created.playerBId,
+          playerAAlias: created.playerAAlias,
+          playerBAlias: created.playerBAlias,
+          winnerId: created.winnerId,
+          startedAt: created.startedAt,
+          endedAt: created.endedAt,
+          scoreA: result.score.p1,
+          scoreB: result.score.p2,
+          mode: 'standard'
+        };
 
         // Update Stats only for real users (userId present)
         if (typeof winnerId === 'number') {
@@ -160,6 +222,28 @@ export class GameManager {
           });
         }
       });
+
+      // Emit match history update via notificationService so connected
+      // clients can update their match history UI in real time.
+      try {
+        const participantIds = [result.p1Id, result.p2Id].filter((v) => typeof v === 'number') as number[];
+        for (const uid of participantIds) {
+          try {
+            notificationService.emit('match_history', { userId: uid, match: createdMatchSummary });
+          } catch (e) {
+            console.error('[game-manager] Failed to emit match_history for user', uid, e);
+          }
+        }
+      } catch (e) {
+        console.error('[game-manager] Error emitting match_history updates', e);
+      }
+      // Also emit a public match history event so viewers of a profile
+      // (who are not necessarily participants) can receive updates in real time.
+      try {
+        notificationService.emit('match_history_public', { match: createdMatchSummary });
+      } catch (e) {
+        console.error('[game-manager] Failed to emit match_history_public', e);
+      }
     } catch (e) {
       console.error('Failed to save match result', e);
     }
@@ -179,8 +263,37 @@ export class GameManager {
   removeGame(sessionId: string) {
     const game = this.games.get(sessionId);
     if (game) {
-      game.stop();
-      this.games.delete(sessionId);
+      try {
+        // Stop engine but do not prematurely mark users ONLINE here;
+        // markPlayersOnline will be invoked as part of the destroy flow
+        // (or we call the same logic here to be safe).
+        game.stop();
+
+        // Mark players ONLINE because we're removing the game now.
+        try {
+          const players = (game as any).players as { p1?: number; p2?: number } | undefined;
+          if (players) {
+            Object.values(players).forEach((uid) => {
+              if (typeof uid === 'number') {
+                prisma.user.update({ where: { id: uid }, data: { status: 'ONLINE' } })
+                  .catch((e) => console.error('[game-manager] Failed to set user status ONLINE on removeGame', e));
+                try {
+                  const { userService } = require('../services/user');
+                  userService.emitStatusChange(uid, 'ONLINE');
+                } catch (e) {
+                  console.error('[game-manager] Failed to emit status change for ONLINE on removeGame', e);
+                }
+              }
+            });
+          }
+        } catch (e) {
+          // swallow
+        }
+
+        this.games.delete(sessionId);
+      } catch (e) {
+        // swallow
+      }
     }
   }
 

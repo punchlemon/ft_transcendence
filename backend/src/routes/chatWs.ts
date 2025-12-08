@@ -169,6 +169,31 @@ export default async function chatWsRoutes(fastify: FastifyInstance) {
     }
   };
 
+  // Match history updates: emitted by GameManager when a match is persisted
+  const onMatchHistory = (event: any) => {
+    const payload = JSON.stringify({ type: 'match_history_update', data: event.match });
+    // If event specifies a userId, send only to that user's connections.
+    if (typeof event.userId === 'number') {
+      const userConns = connections.get(event.userId);
+      if (userConns) {
+        for (const ws of userConns) {
+          if (ws.readyState === WebSocket.OPEN) ws.send(payload);
+        }
+      }
+      return;
+    }
+
+    // Otherwise broadcast to all connected users (public update)
+    for (const userSockets of connections.values()) {
+      for (const ws of userSockets) {
+        if (ws.readyState === WebSocket.OPEN) ws.send(payload);
+      }
+    }
+  };
+
+  notificationService.on('match_history', onMatchHistory);
+  notificationService.on('match_history_public', onMatchHistory);
+
   chatService.on('message', onChatMessage);
   chatService.on('read', onChatRead);
   chatService.on('channel_created', onChannelCreated);
@@ -209,6 +234,9 @@ export default async function chatWsRoutes(fastify: FastifyInstance) {
     notificationService.off('notification', onNotification);
     notificationService.off('notification_deleted', onNotificationDeleted);
     notificationService.off('session_expired', onSessionExpired);
+    // Remove match history listeners
+    try { notificationService.off('match_history', onMatchHistory); } catch (e) {}
+    try { notificationService.off('match_history_public', onMatchHistory); } catch (e) {}
     
     done();
   });

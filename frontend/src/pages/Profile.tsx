@@ -267,11 +267,42 @@ const ProfilePage = () => {
       setFriends(prev => prev.map(f => f.id === String(data.id) ? { ...f, ...data, id: String(data.id) } : f))
     })
 
+    const unsubscribeMatchHistory = onChatWsEvent('match_history_update', (data) => {
+      const currentProfile = profileRef.current
+      if (!currentProfile) return
+
+      // data is the match summary emitted by the server
+      try {
+        const match = data as any
+        const profileId = Number(currentProfile.id)
+        const isPlayerA = match.playerAId === profileId
+        const opponentName = isPlayerA ? (match.playerBAlias || `Player ${match.playerBId ?? ''}`) : (match.playerAAlias || `Player ${match.playerAId ?? ''}`)
+        const result = match.winnerId === profileId ? 'win' : 'loss'
+        const newEntry = {
+          id: String(match.id),
+          opponentName,
+          result: result as 'win' | 'loss',
+          score: `${match.scoreA ?? '?'}-${match.scoreB ?? '?'}`,
+          date: new Date(match.startedAt || match.endedAt || Date.now()).toLocaleDateString(),
+          mode: (match.mode || 'standard')
+        }
+
+        setHistory(prev => {
+          // Avoid duplicating the same match if we already have it
+          if (prev.some(h => h.id === String(match.id))) return prev
+          return [newEntry, ...prev]
+        })
+      } catch (e) {
+        console.error('Failed to apply match_history_update', e)
+      }
+    })
+
     return () => {
       unsubscribeFriend()
       unsubscribePublicFriend()
       unsubscribeRelationship()
       unsubscribeUserUpdate()
+      unsubscribeMatchHistory()
     }
   }, [isOwnProfile, fetchProfileData])
 

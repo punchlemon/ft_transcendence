@@ -20,6 +20,7 @@ const GameRoomPage = () => {
   const prevBallRef = useRef<{ dx: number; dy: number } | null>(null)
   const token = useAuthStore((state) => state.accessToken)
   const user = useAuthStore((state) => state.user)
+  const updateUser = useAuthStore((state) => state.updateUser)
   
   const [status, setStatus] = useState<GameStatus>('connecting')
   const [scores, setScores] = useState({ p1: 0, p2: 0 })
@@ -172,6 +173,12 @@ const GameRoomPage = () => {
             // connection handled
           } else if (data.payload.type === 'START') {
             setStatus('playing')
+            try {
+              // Mark local user's presence as in-game while playing
+              updateUser?.({ status: 'IN_GAME' })
+            } catch (e) {
+              // ignore
+            }
           } else if (data.payload.type === 'UNAVAILABLE' || data.payload.type === 'CLOSED' || data.payload.type === 'CLOSED_BY_CREATOR') {
             // If the server indicates the session is no longer available or was closed,
             // show the "session destroyed" modal so a user who is left in the room
@@ -184,6 +191,8 @@ const GameRoomPage = () => {
             setStatus('connecting')
           } else if (data.payload.type === 'FINISHED') {
             setStatus('finished')
+            // Do NOT restore presence here. Presence (IN_GAME) should remain
+            // until the player explicitly leaves or the server destroys the room.
             const winnerSlot = data.payload.winner
             
             if (mode === 'local') {
@@ -261,6 +270,9 @@ const GameRoomPage = () => {
             setShowSessionDestroyed(true)
             try { socketRef.current?.close() } catch (e) { /* ignore */ }
             setStatus('connecting')
+            try {
+              updateUser?.({ status: 'ONLINE' })
+            } catch (e) { /* ignore */ }
         } else if (data.event === 'score:update') {
           setScores(data.payload)
           soundManager.playScore()
@@ -273,6 +285,9 @@ const GameRoomPage = () => {
     ws.onclose = () => {
       console.log('Disconnected from game server')
       setStatus('connecting')
+      try {
+        updateUser?.({ status: 'ONLINE' })
+      } catch (e) { /* ignore */ }
     }
 
     return () => {
@@ -288,7 +303,7 @@ const GameRoomPage = () => {
       }
     }
     // reconnectKey is used to force a reconnect when user wants to play again
-  }, [token, searchParams, reconnectKey, id])
+  }, [token, searchParams, reconnectKey, id, updateUser])
 
   // Send LEAVE on page unload (reload/close) to ensure server removes player
   useEffect(() => {
@@ -418,18 +433,82 @@ const GameRoomPage = () => {
   // Pause/Resume functionality removed — pausing is disabled.
 
   const playAgain = useCallback(() => {
-    // Close existing socket and reset local state. reconnectKey triggers a fresh connection.
-    if (socketRef.current) {
-      try { socketRef.current.close() } catch (e) { /* ignore */ }
-      socketRef.current = null
-    }
+    // If this is a local match, create a fresh local session so scores
+    // don't carry over. Send LEAVE to the server and navigate to a new
+    // `/game?mode=local` URL preserving player/tournament params.
+    const currentMode = searchParams.get('mode')
+
+    // Reset UI state
     gameStateRef.current = null
     setScores({ p1: 0, p2: 0 })
     setWinner(null)
     setPlayerSlot(null)
+
+    if (currentMode === 'local' || id?.startsWith('local-')) {
+      // For local matches we try to keep the socket open and request the server
+      // to start a new match in the same session. This preserves SPA behavior
+      // and avoids full page reloads. If the socket is closed, fallback to
+      // client-side navigation which will create a fresh session.
+      const p1Name = searchParams.get('p1Name') ?? ''
+      const p2Name = searchParams.get('p2Name') ?? ''
+      const tournamentId = searchParams.get('tournamentId')
+      const p1Id = searchParams.get('p1Id')
+      const p2Id = searchParams.get('p2Id')
+
+      const ws = socketRef.current
+      if (ws && ws.readyState === (WebSocket as any).OPEN) {
+        try {
+          // Send a restart/new-match request to the server. The backend should
+          // respond by resetting match state and emitting the usual START event.
+          ws.send(JSON.stringify({
+            event: 'control',
+            payload: {
+              type: 'RESTART_MATCH',
+              params: {
+                mode: 'local',
+                p1Name,
+                p2Name,
+                tournamentId,
+                p1Id,
+                p2Id
+              }
+            }
+          }))
+        } catch (e) {
+          // If send fails, fallback to navigate below
+          console.warn('Failed to send RESTART_MATCH, will fallback to navigate', e)
+        }
+
+        // Reset client UI state and wait for server START event to transition
+        // into `playing`. We intentionally do not close the socket here.
+        gameStateRef.current = null
+        setScores({ p1: 0, p2: 0 })
+        setWinner(null)
+        setPlayerSlot(null)
+        setStatus('connecting')
+        return
+      }
+
+      // Socket not available: fallback to navigation which will create a fresh session
+      let url = `/game?mode=local`
+      if (p1Name) url += `&p1Name=${encodeURIComponent(p1Name)}`
+      if (p2Name) url += `&p2Name=${encodeURIComponent(p2Name)}`
+      if (tournamentId) url += `&tournamentId=${encodeURIComponent(tournamentId)}`
+      if (p1Id) url += `&p1Id=${encodeURIComponent(p1Id)}`
+      if (p2Id) url += `&p2Id=${encodeURIComponent(p2Id)}`
+      navigate(url)
+      setStatus('connecting')
+      return
+    }
+
+    // Non-local: reconnect to same session (existing behavior)
+    if (socketRef.current) {
+      try { socketRef.current.close() } catch (e) { /* ignore */ }
+      socketRef.current = null
+    }
     setStatus('connecting')
-    setReconnectKey((k) => k + 1)
-  }, [])
+    setReconnectKey((k: number) => k + 1)
+  }, [searchParams, navigate, id])
 
   const handleNextMatch = useCallback(() => {
     if (!activeTournament) return
