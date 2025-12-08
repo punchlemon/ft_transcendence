@@ -155,7 +155,7 @@ describe('GameRoomPage', () => {
     expect(screen.getByText('playing')).toBeInTheDocument()
   })
 
-  it('toggles pause state', async () => {
+  it('does not show pause controls (pausing disabled)', async () => {
     let wsInstance: MockWebSocket | undefined
     vi.spyOn(global, 'WebSocket').mockImplementation((url) => {
       wsInstance = new MockWebSocket(url as string)
@@ -183,13 +183,9 @@ describe('GameRoomPage', () => {
       expect(screen.getByText('playing')).toBeInTheDocument()
     })
 
-    // Click Pause
-    fireEvent.click(screen.getByText('Pause'))
-    expect(screen.getByText('PAUSED')).toBeInTheDocument()
-    
-    const resumeButtons = screen.getAllByText('Resume')
-    fireEvent.click(resumeButtons[0])
-    expect(screen.queryByText('PAUSED')).not.toBeInTheDocument()
+    // Pause controls were removed
+    expect(screen.queryByText('Pause')).not.toBeInTheDocument()
+    expect(screen.queryByText('Resume')).not.toBeInTheDocument()
   })
 
   it('does not render Back to Home button (removed by UX)', () => {
