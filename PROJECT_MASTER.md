@@ -1,7 +1,8 @@
 # PROJECT_MASTER
 
 ## 進捗サマリ
-- **ステータス**: Phase 1 (Foundation) 完了 → Phase 2 (Design & Core Logic) へ移行中
+ - **ステータス**: Phase 1 (Foundation) 完了 → Phase 2 (Design & Core Logic) 完了 → Phase 3 (Implementation) へ移行中
+- **最新変更**: WebSocket ベースの `RESTART_MATCH` を導入し、SPA での "Play Again" を実現。マッチ結果の永続化と `match_history` のリアルタイム配信、プレゼンス (IN_GAME / ONLINE) 修正をサーバ・クライアント両方で適用済み。関連 PR: #66
 - Docker / Fastify / React / Prisma の最小構成は動作確認済み。
 - Prisma のバイナリ問題を解消し、バックエンド/フロントエンドともに `docker-compose up --build` で起動可能な状態を維持。
 - ソースファイル末尾に日本語の解説ブロックを追加し始めた。残りの主要ファイルにも順次適用する必要がある。
@@ -67,7 +68,9 @@
 | ✅ | **ゲームロジック設計** | `docs/game/pong_logic.md` 作成済み。ステート管理、WebSocket 通信、AI 1Hz 視界制約を設計。 |
 
 ### Epic C: アプリ機能実装 (Implementation Phase) 🚀 Current Focus
-*Epic B の設計承認後に着手*
+*Epic B の設計承認後に着手*  
+
+**Current Focus**: アプリ機能実装
 
 | 状態 | タスク | メモ |
 | :---: | --- | --- |
@@ -76,14 +79,61 @@
 | 🔄 | **ユーザー検索 API** | `/api/users` 実装済み。mutualFriends 算出は JWT ビューア ID で動作。残課題: 認可ロール/ソート機能の拡張。 |
 | ✅ | **トーナメント API** | `/api/tournaments` (POST/GET) 実装済み。バックエンドでのマッチ生成ロジックを追加し、フロントエンドと統合完了。 |
 
-## Next Actions
-- [x] **Profile Edit API**: Implement `PATCH /api/users/:id` for updating displayName, bio, avatarUrl.
-- [x] **Profile Edit UI**: Implement `EditProfileModal` in frontend and integrate with API.
-- [x] **Session Management UI**: Implement `/settings/account` active sessions list.
-- [x] **User Search Improvements**: Add sorting/filtering to `/api/users` and create `/users` page.
-- [x] **Game Logic Implementation**: Implement full Pong logic in `GameEngine` and integrate with WebSocket.
-- [x] **AI Opponent Implementation**: Implement 1Hz vision constraint AI in `GameEngine`.
-- [x] **Game UI Polish**: Improve `GameRoom` UI, handle game over state, and add sound effects/animations.
+## Next Actions (Implementation roadmap — start here)
+
+これからのフェーズは設計書に基づいた実装（Phase 3）です。最優先で DB マイグレーションを行い、その後バックエンド → フロントエンド順に機能を実装します。まずは最初の具体的な一手を実行してください。
+
+ - [x] **DB: Prisma スキーマ反映 & マイグレーション (最優先)**
+        - `docs/schema/prisma_draft.md` を `backend/prisma/schema.prisma` に反映済み (草案ベースの主要モデルを導入)。ローカルでの `prisma generate` / `prisma migrate` 実行を推奨。
+        - 開発手順 (ローカル zsh / Docker):
+                - `cd backend && npx prisma generate`
+                - `cd backend && npx prisma migrate dev --name sync_draft`  # マイグレーション名は状況に合わせて調整
+                - `cd backend && npm run db:reset`  # 必要に応じてシード
+
+ - [ ] **サーバー側: IN_GAME ロック & 再接続ルール導入**
+        - 要件:
+            - `IN_GAME` ステータスのユーザーは REST の `GET` 以外を基本拒否して `409 Conflict` を返す。
+            - ただし WebSocket で当該ゲームのチャンネルに接続しようとする再接続は許可する（既存接続はサーバ側で切断して後勝ちにする）。
+        - 実装案 (優先):
+            - `backend/src/plugins/authGuard.ts` を追加して Fastify に登録。REST ではミドルウェアでステータス検査を行う。
+            - `/ws/game` の接続ハンドラで `accessToken` + `channelCode` を検証し、既存接続を `terminate()` して新接続を登録。
+            - 並行性は簡易ロック（メモリの connection map + per-channel mutex）で保護し、DB を使う場合はトランザクションで置換。
+
+- [ ] **Prisma Client 再生成 & 型安全化**
+    - `npx prisma generate` を実行し、バックエンドサービス内の型を再生成。
+    - TypeScript のビルド/型チェック (`cd backend && npm run build` / `tsc`) を実行して回帰を検出。
+
+- [ ] **サーバー権限ルール導入: IN_GAME ロック & 安全な再接続（AuthGuard / GameGateway）**
+    - ルール要件:
+        - `IN_GAME` ステータスのユーザーは `GET` 以外の REST 操作を受け付けず `409 Conflict` を返す。
+        - ただし WebSocket 接続が来ており、接続先が「当該ユーザーが現在参加しているゲームルーム」であれば再接続を許可する（例外）。
+        - 再接続時は後勝ちで既存の古い WS 接続をサーバ側で強制切断し、新しい接続のみを有効化する。切断時は適切な通知/ログを残す。
+    - 実装ポイント:
+        - Fastify の前段に認証/ステータス確認を行う `authGuard` プラグインを追加。REST 用ミドルウェアでは `req.method !== 'GET' && user.status === 'IN_GAME'` の場合 `409` を返す。
+        - WebSocket (GameGateway) 側では接続プロトコルで `accessToken` と `channelCode` を受け取り、認証＋参加検証を行う。既存接続があれば古い接続を `terminate()` して新接続を登録。
+        - 並行性対策として接続テーブルに `connectionId`/`connectedAt` を持たせ、再接続時にトランザクションで入れ替える（簡易実装: Mutex/lock 周りはメモリ o r DB トランザクションで保証）。
+
+- [ ] **GameEngine / GameManager: 再接続とロックの整合性**
+    - 再接続時の状態復元 (player slot / score / countdown) をサポートする `restartMatch` / `resumeFromSnapshot` API を設計・実装。
+    - finish→restart の競合防止（マッチ結果の二重永続化回避）をエンジン側でフラグ/トランザクションで保証。
+
+- [ ] **バックエンド機能実装（優先順）**
+    1. 認証ミドルウェア強化 (`AuthGuard`) と `IN_GAME` ロック適用
+    2. WebSocket `GameGateway` の接続ハンドリング（後勝ち切替）
+    3. マッチ永続化 (`Match` / `MatchResult` の保存ロジック)
+    4. マッチ履歴通知（`match_history_update` イベント）と Chat WS 連携
+    5. テスト：IN_GAME 操作ブロック、再接続シナリオ、finish→restart の二重保存防止
+
+- [ ] **フロントエンド実装（バックエンドが安定後）**
+    - `GameRoom` の再接続 UI（自動再接続、手動再接続ボタン）
+    - `Profile` のリアルタイム試合履歴更新受信
+    - エラーハンドリング：`409 Conflict` 受信時のユーザー向けメッセージ
+
+- [ ] **リリース準備**
+    - CI ワークフローで `prisma migrate deploy` を追加（production 用）。
+    - マイグレーションのバックアップ/ロールバック手順をドキュメント化。
+
+注: まずは `DB: Prisma スキーマ反映 & マイグレーション` を実行して下さい。マイグレーションが完了したら次のバックエンド実装タスクへ移ります。
 
 ## Current Focus: Release Review
 

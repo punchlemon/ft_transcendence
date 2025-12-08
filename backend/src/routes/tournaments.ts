@@ -268,7 +268,11 @@ const tournamentsRoutes: FastifyPluginAsync = async (fastify) => {
   // Invite endpoints: POST /tournaments/:id/invite and PATCH participant action
   const inviteBodySchema = z.object({ userId: z.coerce.number().int().positive() })
 
-  fastify.post('/:id/invite', { preHandler: fastify.authenticate }, async (request, reply) => {
+  fastify.post('/:id/invite', { preHandler: [
+    fastify.authenticate,
+    // wrapper to call rejectIfInGame decorator if present
+    async (req, reply) => { const fn = (fastify as any).rejectIfInGame; if (typeof fn === 'function') return await fn(req, reply) }
+  ] }, async (request, reply) => {
     const params = detailParamSchema.safeParse(request.params)
     const body = inviteBodySchema.safeParse(request.body)
 
@@ -360,7 +364,10 @@ const tournamentsRoutes: FastifyPluginAsync = async (fastify) => {
 
   const participantActionSchema = z.object({ action: z.enum(['ACCEPT', 'DECLINE']) })
 
-  fastify.patch('/:id/participants/:participantId', { preHandler: fastify.authenticate }, async (request, reply) => {
+  fastify.patch('/:id/participants/:participantId', { preHandler: [
+    fastify.authenticate,
+    async (req, reply) => { const fn = (fastify as any).rejectIfInGame; if (typeof fn === 'function') return await fn(req, reply) }
+  ] }, async (request, reply) => {
     const params = z.object({ id: z.coerce.number().int().positive(), participantId: z.coerce.number().int().positive() }).safeParse(request.params)
     const body = participantActionSchema.safeParse(request.body)
 
