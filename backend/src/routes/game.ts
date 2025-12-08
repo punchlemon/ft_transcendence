@@ -2,6 +2,7 @@ import { FastifyInstance } from 'fastify'
 import { GameManager } from '../game/GameManager'
 import { notificationService } from '../services/notification'
 import { getDisplayNameOrFallback } from '../services/user'
+import { registerConnection, unregisterConnection } from '../utils/connectionManager'
 
 // Request/Response types for invite endpoint
 interface InviteBody {
@@ -32,7 +33,17 @@ const inviteSchema = {
 
 export default async function gameRoutes(fastify: FastifyInstance) {
   fastify.post<{ Body: InviteBody; Reply: InviteResponse }>('/game/invite', {
-    preValidation: [fastify.authenticate],
+    preValidation: [
+      fastify.authenticate,
+      // wrap decorator call to avoid evaluating possibly-undefined decorator at route registration time
+      async (req, reply) => {
+        const fn = (fastify as any).rejectIfInGame
+        if (typeof fn === 'function') {
+          // call and return whatever it returns (it may send reply)
+          return await fn(req, reply)
+        }
+      }
+    ],
     schema: inviteSchema
   }, async (req, reply) => {
     // Support both 1v1 match invites and tournament invites
@@ -102,7 +113,13 @@ export default async function gameRoutes(fastify: FastifyInstance) {
 
   // Create a private room without inviting anyone. Returns sessionId for the created private game.
   fastify.post('/game/private', {
-    preValidation: [fastify.authenticate]
+    preValidation: [
+      fastify.authenticate,
+      async (req, reply) => {
+        const fn = (fastify as any).rejectIfInGame
+        if (typeof fn === 'function') return await fn(req, reply)
+      }
+    ]
   }, async (req, reply) => {
     const manager = GameManager.getInstance()
     const { sessionId } = manager.createPrivateGame((req.user as any)?.userId)
@@ -243,6 +260,33 @@ export default async function gameRoutes(fastify: FastifyInstance) {
              } catch (e) {
                fastify.log.warn('Invalid token provided in ready event');
              }
+            if (userId) {
+              ;(socket as any).__userId = userId
+            }
+            // If the user is already in a different game (IN_GAME) and is not
+            // reconnecting to the same session, refuse to join/start another game.
+            try {
+              if (userId) {
+                const dbUser = await fastify.prisma.user.findUnique({ where: { id: userId }, select: { status: true } })
+                if (dbUser && dbUser.status === 'IN_GAME') {
+                  // If there's an existing connection for the same user/session, allow (reconnect)
+                  const existing = (await import('../utils/connectionManager')).getConnection(userId, sessionId)
+                  if (!existing) {
+                    try {
+                      const resp = JSON.stringify({ event: 'match:event', payload: { type: 'UNAVAILABLE', message: 'User already in a different game', sessionId } });
+                      if (typeof (socket as any).send === 'function') (socket as any).send(resp);
+                    } catch (e) {}
+                    try { if (typeof (socket as any).close === 'function') (socket as any).close(); } catch (e) {}
+                    return;
+                  }
+                }
+              }
+
+              // Register this connection and terminate any existing connection for the same user/session
+              if (userId && sessionId) registerConnection(userId, sessionId, socket, authSessionId ?? null)
+            } catch (e) {
+              fastify.log.warn({ err: e }, 'Failed to register connection in connectionManager')
+            }
           }
 
           if (query.mode === 'local') {
@@ -346,6 +390,11 @@ export default async function gameRoutes(fastify: FastifyInstance) {
 
     const handleClose = () => {
       fastify.log.info('Client disconnected from game websocket')
+      try {
+        // attempt to unregister connection if present (userId/sessionId may be attached)
+        const maybeUserId = (socket as any).__userId as number | undefined
+        if (maybeUserId && sessionId) unregisterConnection(maybeUserId, sessionId, socket)
+      } catch (e) {}
       game.removePlayer(socket as any)
     }
 
