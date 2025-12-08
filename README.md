@@ -7,6 +7,23 @@ Fastify + Prisma で実装するバックエンドと、Vite + React + Tailwind 
 - Node.js 18 系と npm（ローカル開発を行う場合）
 - `.env` にバックエンド/フロントエンドのポートや API ベース URL を設定しておくこと
 
+## SSL証明書の準備 (Docker起動時)
+本プロジェクトでは Nginx を使用して HTTPS 通信を行います。
+`nginx/ssl/` ディレクトリは `.gitignore` に含まれているため、初回起動前に以下の手順で自己署名証明書を作成してください。
+
+1. ディレクトリの作成
+   ```bash
+   mkdir -p nginx/ssl
+   ```
+
+2. 証明書の生成 (OpenSSL)
+   ```bash
+   openssl req -x509 -nodes -days 365 -newkey rsa:2048 \
+     -keyout nginx/ssl/nginx.key \
+     -out nginx/ssl/nginx.crt \
+     -subj "/C=JP/ST=Tokyo/L=Minato/O=42Tokyo/OU=Student/CN=localhost"
+   ```
+
 ## 推奨起動フロー（Docker Compose）
 プロジェクトルートで以下を実行すると、backend と frontend をまとめて立ち上げられます。
 
