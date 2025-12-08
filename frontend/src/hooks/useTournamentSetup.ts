@@ -22,17 +22,17 @@ export const useTournamentSetup = () => {
     const normalizedAlias = normalizeAlias(aliasInput)
 
     if (!normalizedAlias) {
-      setErrorMessage('エイリアスを入力してください')
+      setErrorMessage('Please enter an alias')
       return
     }
 
     if (aliasExists(players, normalizedAlias)) {
-      setErrorMessage('同じエイリアスは登録できません')
+      setErrorMessage('Duplicate alias not allowed')
       return
     }
 
     if (players.length >= 4) {
-      setErrorMessage('参加者は最大4名までです')
+      setErrorMessage('Maximum 4 participants allowed')
       return
     }
 
@@ -44,7 +44,7 @@ export const useTournamentSetup = () => {
 
   const handleRemovePlayer = (alias: string) => {
     setPlayers((previous) => previous.filter((entry) => entry !== alias))
-    setInfoMessage('参加者を削除しました。')
+    setInfoMessage('Participant removed.')
   }
 
   const handleReset = () => {
@@ -56,15 +56,15 @@ export const useTournamentSetup = () => {
 
   const create = async (): Promise<TournamentDetail | null> => {
     if (!user) {
-      setErrorMessage('トーナメントを作成するにはログインが必要です')
+      setErrorMessage('You must be logged in to create a tournament')
       return null
     }
     if (players.length < 2) {
-        setErrorMessage('最低2名の参加者が必要です')
+      setErrorMessage('At least 2 participants required')
         return null
     }
     if (players.length > 4) {
-        setErrorMessage('参加者は最大4名までです')
+      setErrorMessage('Maximum 4 participants allowed')
         return null
     }
 
@@ -83,11 +83,11 @@ export const useTournamentSetup = () => {
       
       const detail = await fetchTournament(res.data.id)
       localStorage.setItem('activeTournamentId', detail.data.id.toString())
-      setInfoMessage('トーナメントを作成しました。')
+      setInfoMessage('Tournament created.')
       return detail.data
     } catch (err) {
       console.error(err)
-      setErrorMessage('トーナメントの作成に失敗しました')
+      setErrorMessage('Failed to create tournament')
       return null
     } finally {
       setIsCreating(false)
