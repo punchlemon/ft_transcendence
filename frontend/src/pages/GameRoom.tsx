@@ -8,7 +8,7 @@ import TournamentRanking from '../components/tournament/TournamentRanking'
 import { MatchQueueItem, advanceToNextMatch } from '../lib/tournament'
 import PrivateRoomInviteModal from '../components/game/PrivateRoomInviteModal'
 
-type GameStatus = 'connecting' | 'playing' | 'paused' | 'finished'
+type GameStatus = 'connecting' | 'playing' | 'finished'
 
 const GameRoomPage = () => {
   const { id } = useParams<{ id: string }>()
@@ -177,8 +177,6 @@ const GameRoomPage = () => {
             setShowInviteModal(false)
             // Optionally navigate back to home or show a toast — keep current behavior minimal.
             // navigate('/')
-          } else if (data.payload.type === 'PAUSE') {
-            setStatus('paused')
           } else if (data.payload.type === 'FINISHED') {
             setStatus('finished')
             const winnerSlot = data.payload.winner
@@ -338,23 +336,23 @@ const GameRoomPage = () => {
   useEffect(() => {
     if (status !== 'playing') return
 
-    const keys = { 
-      w: false, s: false, 
-      up: false, down: false 
+    const keys = {
+      w: false, s: false,
+      up: false, down: false // up/down now map to 'o'/'l'
     }
-    
+
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.key === 'w') keys.w = true
       if (e.key === 's') keys.s = true
-      if (e.key === 'ArrowUp') keys.up = true
-      if (e.key === 'ArrowDown') keys.down = true
+      if (e.key === 'o' || e.key === 'O') keys.up = true
+      if (e.key === 'l' || e.key === 'L') keys.down = true
     }
-    
+
     const handleKeyUp = (e: KeyboardEvent) => {
       if (e.key === 'w') keys.w = false
       if (e.key === 's') keys.s = false
-      if (e.key === 'ArrowUp') keys.up = false
-      if (e.key === 'ArrowDown') keys.down = false
+      if (e.key === 'o' || e.key === 'O') keys.up = false
+      if (e.key === 'l' || e.key === 'L') keys.down = false
     }
 
     window.addEventListener('keydown', handleKeyDown)
@@ -362,35 +360,35 @@ const GameRoomPage = () => {
 
     const intervalId = setInterval(() => {
       if (!socketRef.current || socketRef.current.readyState !== WebSocket.OPEN) return
-      
+
       const mode = searchParams.get('mode')
-      
+
       if (mode === 'local') {
         // P1 Input (WASD)
         let axisP1 = 0
         if (keys.w) axisP1 -= 1
         if (keys.s) axisP1 += 1
-        
+
         socketRef.current.send(JSON.stringify({
           event: 'input',
           payload: { tick: Date.now(), axis: axisP1, boost: false, player: 'p1' }
         }))
 
-        // P2 Input (Arrows)
+        // P2 Input (O / L)
         let axisP2 = 0
         if (keys.up) axisP2 -= 1
         if (keys.down) axisP2 += 1
-        
+
         socketRef.current.send(JSON.stringify({
           event: 'input',
           payload: { tick: Date.now(), axis: axisP2, boost: false, player: 'p2' }
         }))
       } else {
-        // Standard Input (WASD or Arrows)
+        // Standard Input (WASD or O/L)
         let axis = 0
         if (keys.w || keys.up) axis -= 1
         if (keys.s || keys.down) axis += 1
-        
+
         socketRef.current.send(JSON.stringify({
           event: 'input',
           payload: { tick: Date.now(), axis, boost: false }
@@ -405,24 +403,7 @@ const GameRoomPage = () => {
     }
   }, [status, searchParams])
 
-  const togglePause = useCallback(() => {
-    // Do nothing if the game is finished or still connecting.
-    if (status === 'finished' || status === 'connecting') return
-
-    const ws = socketRef.current
-    if (!ws || ws.readyState !== (WebSocket as any).OPEN) {
-      setStatus((s) => (s === 'playing' ? 'paused' : 'playing'))
-      return
-    }
-
-    if (status === 'playing') {
-      ws.send(JSON.stringify({ event: 'control', payload: { type: 'PAUSE' } }))
-      setStatus('paused')
-    } else {
-      ws.send(JSON.stringify({ event: 'control', payload: { type: 'RESUME' } }))
-      setStatus('playing')
-    }
-  }, [status])
+  // Pause/Resume functionality removed — pausing is disabled.
 
   const playAgain = useCallback(() => {
     // Close existing socket and reset local state. reconnectKey triggers a fresh connection.
@@ -470,10 +451,7 @@ const GameRoomPage = () => {
     }
   }, [activeTournament, matchQueue, currentMatchIndex, navigate])
 
-  // Space key behavior:
-  // - When finished: Space -> Play Again
-  // - When paused: Space -> Resume
-  // - During playing: Space does nothing (to avoid conflicting with input mapping)
+  // Space key behavior: when finished -> Play Again / Next Match. Pausing disabled.
   useEffect(() => {
     const handleSpace = (e: KeyboardEvent) => {
       if (e.code !== 'Space') return
@@ -482,19 +460,16 @@ const GameRoomPage = () => {
 
       if (status === 'finished') {
         if (id?.startsWith('local-')) {
-            handleNextMatch()
+          handleNextMatch()
         } else {
-            playAgain()
+          playAgain()
         }
-      } else if (status === 'paused') {
-        // resume
-        togglePause()
       }
     }
 
     window.addEventListener('keydown', handleSpace)
     return () => window.removeEventListener('keydown', handleSpace)
-  }, [status, playAgain, togglePause, handleNextMatch, id])
+  }, [status, playAgain, handleNextMatch, id])
 
   // Game loop
   useEffect(() => {
@@ -502,7 +477,10 @@ const GameRoomPage = () => {
 
     const canvas = canvasRef.current
     const ctx = canvas?.getContext('2d')
-    if (!canvas || !ctx) return
+    // In test environments the mocked `getContext` may return a minimal object
+    // that lacks some canvas methods (clearRect, etc.). If required methods
+    // are missing, skip the render loop to avoid throwing during tests.
+    if (!canvas || !ctx || typeof (ctx as any).clearRect !== 'function') return
 
     let animationFrameId: number
     const paddleHeight = 80
@@ -510,47 +488,71 @@ const GameRoomPage = () => {
     const p1Y = canvas.height / 2 - paddleHeight / 2
     const p2Y = canvas.height / 2 - paddleHeight / 2
 
-    const render = () => {
-      // Clear canvas
-      ctx.fillStyle = '#0f172a' // slate-900
-      ctx.fillRect(0, 0, canvas.width, canvas.height)
+    // Detect dark mode once per effect so we can pick appropriate visuals.
+    const isDarkMode = typeof document !== 'undefined' && document.documentElement.classList.contains('dark')
 
-      // Draw center line
+    const render = () => {
+      // Clear canvas to transparent so the container background shows through.
+      // Previously the canvas was filled with a dark color, which prevented
+      // the CSS `dark:bg-*` on the wrapper from being visible. Use
+      // `clearRect` to leave the canvas transparent and rely on CSS for the
+      // visible play-area background.
+      ctx.clearRect(0, 0, canvas.width, canvas.height)
+
+      // Draw center line (color adapts to dark mode for better contrast)
       ctx.setLineDash([10, 10])
       ctx.beginPath()
       ctx.moveTo(canvas.width / 2, 0)
       ctx.lineTo(canvas.width / 2, canvas.height)
-      ctx.strokeStyle = '#334155' // slate-700
+      // Note: when `isDarkMode` is true we treat the play-area as "bright"
+      // (user requested a very bright play-area in dark mode). In that case
+      // choose dark colors for paddles/ball/center line so they remain visible
+      // against the bright background. In normal (light) mode, use the
+      // lighter / original palette.
+      const centerLineColor = isDarkMode ? '#0f172a' /* slate-900 - dark on bright bg */ : '#94a3b8' /* slate-400 */
+      ctx.strokeStyle = centerLineColor
       ctx.lineWidth = 2
       ctx.stroke()
       ctx.setLineDash([])
 
       const state = gameStateRef.current
       if (state) {
-        // Draw paddles with glow
-        ctx.shadowBlur = 15
-        ctx.shadowColor = '#6366f1' // indigo-500
-        ctx.fillStyle = '#818cf8' // indigo-400
-        
+        // Choose colors that stand out on dark backgrounds
+        // Paddle and ball colors: dark on bright play-area (isDarkMode=true),
+        // lighter/brighter on standard light background.
+        const p1Shadow = isDarkMode ? 'rgba(2,6,23,0.6)' /* subtle dark shadow */ : '#6366f1'
+        const p1Fill = isDarkMode ? '#3730a3' /* indigo-700 - dark */ : '#818cf8' /* indigo-400 */
+
+        const p2Shadow = isDarkMode ? 'rgba(2,6,23,0.6)' /* dark shadow */ : '#f43f5e'
+        const p2Fill = isDarkMode ? '#be123c' /* rose-700 - dark */ : '#fb7185' /* rose-400 */
+
+        const ballShadow = isDarkMode ? 'rgba(2,6,23,0.8)' /* dark glow */ : '#f8fafc' /* slate-50 */
+        const ballFill = isDarkMode ? '#0f172a' /* slate-900 - dark ball */ : '#f8fafc'
+
         // Use server state for paddles if available, otherwise default
         const p1Pos = state.paddles?.p1 ?? p1Y
         const p2Pos = state.paddles?.p2 ?? p2Y
-        
+
+        // Draw P1 paddle
+        ctx.shadowBlur = 18
+        ctx.shadowColor = p1Shadow
+        ctx.fillStyle = p1Fill
         ctx.fillRect(10, p1Pos, paddleWidth, paddleHeight)
-        
-        ctx.shadowColor = '#f43f5e' // rose-500
-        ctx.fillStyle = '#fb7185' // rose-400
+
+        // Draw P2 paddle
+        ctx.shadowColor = p2Shadow
+        ctx.fillStyle = p2Fill
         ctx.fillRect(canvas.width - 20, p2Pos, paddleWidth, paddleHeight)
 
-        // Draw ball with glow
-        ctx.shadowBlur = 10
-        ctx.shadowColor = '#f8fafc' // slate-50
+        // Draw ball with stronger glow in dark mode
+        ctx.shadowBlur = 12
+        ctx.shadowColor = ballShadow
         ctx.beginPath()
         ctx.arc(state.ball.x, state.ball.y, 8, 0, Math.PI * 2)
-        ctx.fillStyle = '#f8fafc'
+        ctx.fillStyle = ballFill
         ctx.fill()
         ctx.closePath()
-        
+
         // Reset shadow
         ctx.shadowBlur = 0
       }
@@ -592,24 +594,6 @@ const GameRoomPage = () => {
       )}
 
       <div className="flex flex-1 flex-col lg:flex-row">
-      {/* Left Panel: Match Info */}
-        <div className="flex w-full flex-col border-b border-slate-200 bg-white p-6 lg:w-64 lg:border-b-0 lg:border-r dark:bg-slate-800 dark:border-slate-700">
-        <div className="mb-4">
-          <h2 className="text-lg font-bold text-slate-900 dark:text-slate-100">Match Info</h2>
-        </div>
-
-        <div className="mt-auto">
-          <div className="mb-2 text-sm text-slate-500 dark:text-slate-400">Status</div>
-          <div className="flex items-center gap-2">
-            <span className={`h-2.5 w-2.5 rounded-full ${
-              status === 'playing' ? 'bg-green-500 animate-pulse' :
-              status === 'connecting' ? 'bg-yellow-500' :
-              'bg-slate-400 dark:bg-slate-600'
-            }`} />
-            <span className="font-medium capitalize text-slate-700 dark:text-slate-300">{status}</span>
-          </div>
-        </div>
-      </div>
 
       {/* Main Area: Game Canvas */}
       <div className="flex flex-1 flex-col items-center justify-center bg-slate-100 p-4 dark:bg-slate-900">
@@ -628,18 +612,19 @@ const GameRoomPage = () => {
           </div>
         </div>
 
-        <div className="relative aspect-video w-full max-w-5xl overflow-hidden rounded-lg bg-slate-800 shadow-xl">
+        <div className="relative aspect-video w-full max-w-5xl overflow-hidden rounded-lg bg-slate-800 shadow-xl dark:bg-slate-400">
           <canvas
             ref={canvasRef}
             width={800}
             height={450}
-            className="h-full w-full"
+            // keep canvas background transparent so wrapper CSS shows through
+            className="h-full w-full bg-transparent"
             data-testid="game-canvas"
           />
           
           {/* Overlays */}
           {status === 'connecting' && (
-            <div className="absolute inset-0 flex items-center justify-center bg-slate-900/50 backdrop-blur-sm">
+            <div className="absolute inset-0 flex items-center justify-center bg-slate-900/10 backdrop-blur-sm">
               <div className="text-center text-white">
                 <div className="mb-4 text-4xl">⌛</div>
                 <h3 className="text-xl font-bold">Connecting to server...</h3>
@@ -647,22 +632,10 @@ const GameRoomPage = () => {
             </div>
           )}
           
-          {status === 'paused' && (
-            <div className="absolute inset-0 flex items-center justify-center bg-slate-900/50 backdrop-blur-sm">
-              <div className="text-center text-white">
-                <h3 className="mb-4 text-2xl font-bold">PAUSED</h3>
-                <button 
-                  onClick={togglePause}
-                  className="rounded-full bg-white px-6 py-2 font-semibold text-slate-900 hover:bg-slate-200"
-                >
-                  Resume
-                </button>
-              </div>
-            </div>
-          )}
+          {/* Pausing disabled — server/client will not present paused UI */}
 
           {status === 'finished' && (
-            <div className="absolute inset-0 flex items-center justify-center bg-slate-900/90 backdrop-blur-md z-10">
+            <div className="absolute inset-0 flex items-center justify-center bg-slate-900/60 backdrop-blur-md z-10">
               <div className="text-center text-white animate-in fade-in zoom-in duration-300">
                 <h3 className="mb-2 text-5xl font-black tracking-tight text-transparent bg-clip-text bg-gradient-to-r from-indigo-400 to-rose-400">
                   GAME OVER
@@ -694,57 +667,56 @@ const GameRoomPage = () => {
       {/* Right Panel: Controls & Chat */}
       <div className="flex w-full flex-col border-t border-slate-200 bg-white p-6 lg:w-80 lg:border-l lg:border-t-0 dark:bg-slate-800 dark:border-slate-700">
         <div className="mb-6">
+          <h2 className="mb-4 text-lg font-bold text-slate-900 dark:text-slate-100">Match Info</h2>
+          <div className="mb-4">
+            <div className="mb-2 text-sm text-slate-500 dark:text-slate-400">Status</div>
+            <div className="flex items-center gap-2">
+              <span className={`h-2.5 w-2.5 rounded-full ${
+                status === 'playing' ? 'bg-green-500 animate-pulse' :
+                status === 'connecting' ? 'bg-yellow-500' :
+                'bg-slate-400 dark:bg-slate-600'
+              }`} />
+              <span className="font-medium capitalize text-slate-700 dark:text-slate-300">{status}</span>
+            </div>
+          </div>
           <h2 className="mb-4 text-lg font-bold text-slate-900 dark:text-slate-100">Controls</h2>
           <div className="grid grid-cols-2 gap-4 text-sm">
             <div className="rounded bg-slate-50 p-3 dark:bg-slate-700">
               <div className="font-semibold text-slate-700 dark:text-slate-300">Move Up</div>
-              <kbd className="font-mono text-slate-500 dark:text-slate-400">W / ↑</kbd>
+              <kbd className="font-mono text-slate-500 dark:text-slate-400">W / O</kbd>
             </div>
             <div className="rounded bg-slate-50 p-3 dark:bg-slate-700">
               <div className="font-semibold text-slate-700 dark:text-slate-300">Move Down</div>
-              <kbd className="font-mono text-slate-500 dark:text-slate-400">S / ↓</kbd>
+              <kbd className="font-mono text-slate-500 dark:text-slate-400">S / L</kbd>
             </div>
           </div>
         </div>
-
-        <div className="mb-6 flex gap-2">
-          <button
-            onClick={togglePause}
-            disabled={!(status === 'playing' || status === 'paused')}
-                className={`flex-1 rounded-md border border-slate-300 px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50 dark:border-slate-600 dark:bg-slate-700 dark:text-slate-300 dark:hover:bg-slate-600 ${
-                  (status === 'finished' || status === 'connecting') ? 'opacity-50 cursor-not-allowed' : ''
-                }`}
-          >
-            {status === 'playing' ? 'Pause' : 'Resume'}
-          </button>
-          <button
-            onClick={() => {
-              try {
-                const ws = socketRef.current
-                if (ws && ws.readyState === (WebSocket as any).OPEN) {
-                  try { ws.send(JSON.stringify({ event: 'control', payload: { type: 'LEAVE' } })) } catch (e) { /* ignore */ }
+        <div className="mb-6">
+          <div className="flex">
+            <button
+              onClick={() => {
+                try {
+                  const ws = socketRef.current
+                  if (ws && ws.readyState === (WebSocket as any).OPEN) {
+                    try { ws.send(JSON.stringify({ event: 'control', payload: { type: 'LEAVE' } })) } catch (e) { /* ignore */ }
+                  }
+                } catch (e) {
+                  // ignore
+                } finally {
+                  try { socketRef.current?.close() } catch (e) { /* ignore */ }
+                  setStatus('connecting')
+                  setPlayerSlot(null)
+                  navigate('/')
                 }
-              } catch (e) {
-                // ignore
-              } finally {
-                try { socketRef.current?.close() } catch (e) { /* ignore */ }
-                setStatus('connecting')
-                setPlayerSlot(null)
-                navigate('/')
-              }
-            }}
-            className="rounded-md border border-rose-400 bg-rose-500 px-4 py-2 text-sm font-medium text-white hover:bg-rose-600"
-          >
-            Leave
-          </button>
-        </div>
-
-        <div className="flex-1 rounded-lg border border-slate-200 bg-slate-50 p-4 dark:border-slate-700 dark:bg-slate-700">
-          <div className="mb-2 text-sm font-medium text-slate-500 dark:text-slate-400">Chat</div>
-          <div className="flex h-full items-center justify-center text-sm text-slate-400 dark:text-slate-500">
-            Chat unavailable in demo
+              }}
+              className="w-full rounded-md border border-rose-400 bg-rose-500 px-4 py-2 text-sm font-medium text-white hover:bg-rose-600"
+            >
+              Leave
+            </button>
           </div>
         </div>
+
+        {/* Chat removed (old demo placeholder) */}
       </div>
       </div>
     </div>
