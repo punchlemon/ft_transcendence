@@ -55,6 +55,101 @@ const tournamentsRoutes: FastifyPluginAsync = async (fastify) => {
   // In-memory timers for INVITED participants (participantId -> Timeout)
   const inviteTimers = new Map<number, NodeJS.Timeout>()
 
+  const generateBracket = async (tournamentId: number) => {
+    const participants = await fastify.prisma.tournamentParticipant.findMany({
+      where: { tournamentId },
+      orderBy: { id: 'asc' }
+    })
+
+    if (participants.length < 2) return
+
+    const seededParticipants = tournamentService.padWithBye([...participants])
+
+    let placeholderId: number | null = null
+    if (seededParticipants.length > 2) {
+      const placeholder = await fastify.prisma.tournamentParticipant.create({
+        data: {
+          tournamentId,
+          alias: 'TBD',
+          inviteState: 'PLACEHOLDER',
+          userId: null
+        }
+      })
+      placeholderId = placeholder.id
+    }
+
+    const matchesToCreate: Array<any> = []
+    let currentRoundMatchesCount = 0
+
+    // Round 1
+    for (let i = 0; i < seededParticipants.length; i += 2) {
+      const playerA = seededParticipants[i]
+      const playerB = seededParticipants[i + 1]
+
+      if (playerA && playerB) {
+        matchesToCreate.push({
+          tournamentId,
+          round: 1,
+          playerAId: playerA.id,
+          playerBId: playerB.id,
+          status: 'PENDING'
+        })
+        currentRoundMatchesCount++
+      } else if (playerA && !playerB) {
+        const aiParticipant = await fastify.prisma.tournamentParticipant.create({
+          data: {
+            tournamentId,
+            alias: 'AI',
+            inviteState: 'AI',
+            userId: null
+          }
+        })
+
+        matchesToCreate.push({
+          tournamentId,
+          round: 1,
+          playerAId: playerA.id,
+          playerBId: aiParticipant.id,
+          status: 'PENDING'
+        })
+        currentRoundMatchesCount++
+      }
+    }
+
+    let round = 2
+    let matchesInRound = seededParticipants.length / 2
+
+    while (matchesInRound > 1) {
+      if (!placeholderId) {
+        const placeholder = await fastify.prisma.tournamentParticipant.create({
+          data: {
+            tournamentId,
+            alias: 'TBD',
+            inviteState: 'PLACEHOLDER',
+            userId: null
+          }
+        })
+        placeholderId = placeholder.id
+      }
+
+      matchesInRound /= 2
+      for (let i = 0; i < matchesInRound; i++) {
+        matchesToCreate.push({
+          tournamentId,
+          round,
+          playerAId: placeholderId,
+          playerBId: placeholderId,
+          status: 'PENDING'
+        })
+      }
+      round++
+    }
+
+    if (matchesToCreate.length > 0) {
+      await fastify.prisma.tournamentMatch.createMany({ data: matchesToCreate })
+    }
+  }
+
   const scheduleInviteExpiry = (participantId: number) => {
     // clear existing
     if (inviteTimers.has(participantId)) {
@@ -123,8 +218,15 @@ const tournamentsRoutes: FastifyPluginAsync = async (fastify) => {
     const participantsPayload = data.participants?.map((participant) => ({
       alias: participant.alias,
       userId: participant.userId,
-      inviteState: participant.inviteState ?? (participant.userId ? 'INVITED' : 'LOCAL'),
-      seed: participant.seed
+      inviteState:
+        participant.inviteState ??
+        (participant.userId
+          ? participant.userId === data.createdById
+            ? 'ACCEPTED'
+            : 'INVITED'
+          : 'LOCAL'),
+      seed: participant.seed,
+      joinedAt: participant.userId === data.createdById ? new Date() : undefined
     }))
 
     const tournament = await fastify.prisma.tournament.create({
@@ -142,111 +244,22 @@ const tournamentsRoutes: FastifyPluginAsync = async (fastify) => {
       }
     })
 
-    // Generate Full Bracket
-    if (tournament.participants.length >= 2) {
-      // Sort participants by ID to ensure they are in the order of creation (which matches input order)
-      // This is our "Seed Order" (Seed 1, Seed 2, ...)
-      const sortedParticipants = [...tournament.participants].sort((a, b) => a.id - b.id)
-      
-      // Reorder participants based on seeding logic, padding with Byes (nulls)
-      const seededParticipants = tournamentService.padWithBye(sortedParticipants)
-      
-      // Create a Placeholder Participant for empty slots if needed (only for tournaments with > 1 round)
-      let placeholderId: number | null = null
-      if (seededParticipants.length > 2) {
-        const placeholder = await fastify.prisma.tournamentParticipant.create({
-          data: {
-            tournamentId: tournament.id,
-            alias: 'TBD',
-            inviteState: 'PLACEHOLDER',
-            userId: null
-          }
-        })
-        placeholderId = placeholder.id
-      }
+    // Auto-send invites for participants provided at creation time (skip owner)
+    const initialInvites = tournament.participants.filter(
+      (p) => p.userId && p.inviteState === 'INVITED' && p.userId !== data.createdById
+    )
 
-      const matchesToCreate = []
-      let currentRoundMatchesCount = 0
+    for (const participant of initialInvites) {
+      scheduleInviteExpiry(participant.id)
 
-      // Round 1
-      for (let i = 0; i < seededParticipants.length; i += 2) {
-        const playerA = seededParticipants[i];
-        const playerB = seededParticipants[i+1]; // Can be null (Bye)
-
-        if (playerA && playerB) {
-          matchesToCreate.push({
-            tournamentId: tournament.id,
-            round: 1,
-            playerAId: playerA.id,
-            playerBId: playerB.id,
-            status: 'PENDING'
-          })
-          currentRoundMatchesCount++
-        } else if (playerA && !playerB) {
-          // Player A gets a Bye -> Replace with AI
-          const aiParticipant = await fastify.prisma.tournamentParticipant.create({
-            data: {
-              tournamentId: tournament.id,
-              alias: 'AI',
-              inviteState: 'AI',
-              userId: null
-            }
-          })
-
-          matchesToCreate.push({
-            tournamentId: tournament.id,
-            round: 1,
-            playerAId: playerA.id,
-            playerBId: aiParticipant.id,
-            status: 'PENDING'
-          })
-          currentRoundMatchesCount++
-        }
-      }
-
-      // Generate subsequent rounds (empty placeholders)
-      let round = 2
-      let matchesInRound = currentRoundMatchesCount
-      
-      // If we have N matches in Round 1, we need N/2 matches in Round 2, etc.
-      
-      matchesInRound = seededParticipants.length / 2
-      
-      while (matchesInRound > 1) {
-        if (!placeholderId) {
-            // This should theoretically not happen if logic is correct, but for safety
-             const placeholder = await fastify.prisma.tournamentParticipant.create({
-                data: {
-                    tournamentId: tournament.id,
-                    alias: 'TBD',
-                    inviteState: 'PLACEHOLDER',
-                    userId: null
-                }
-             })
-             placeholderId = placeholder.id
-        }
-
-        matchesInRound /= 2
-        for (let i = 0; i < matchesInRound; i++) {
-            matchesToCreate.push({
-                tournamentId: tournament.id,
-                round: round,
-                playerAId: placeholderId,
-                playerBId: placeholderId,
-                status: 'PENDING'
-            })
-        }
-        round++
-      }
-
-      if (matchesToCreate.length > 0) {
-        await fastify.prisma.tournamentMatch.createMany({
-          data: matchesToCreate
-        })
-      }
+      await notificationService.createNotification(
+        participant.userId!,
+        'TOURNAMENT_INVITE',
+        'Tournament Invite',
+        `${tournament.createdBy.displayName} invited you to ${tournament.name}`,
+        { tournamentId: tournament.id, participantId: participant.id, inviterId: tournament.createdBy.id }
+      )
     }
-
-
 
     reply.code(201)
     return {
@@ -400,17 +413,6 @@ const tournamentsRoutes: FastifyPluginAsync = async (fastify) => {
         inviteTimers.delete(participant.id)
       }
       const updated = await fastify.prisma.tournamentParticipant.update({ where: { id: participant.id }, data: { inviteState: 'ACCEPTED', joinedAt: new Date() } })
-      // notify owner
-      const tournament = await fastify.prisma.tournament.findUnique({ where: { id: participant.tournamentId }, select: { createdById: true, name: true } })
-      if (tournament) {
-        await notificationService.createNotification(
-          tournament.createdById,
-          'TOURNAMENT_INVITE',
-          'Invite accepted',
-          `${(request.user as any).displayName || 'A user'} accepted invite for ${tournament.name}`,
-          { tournamentId: participant.tournamentId, participantId: updated.id }
-        )
-      }
       return { data: updated }
     } else {
       // DECLINE: mark declined and notify owner; allow owner to re-invite
@@ -430,6 +432,179 @@ const tournamentsRoutes: FastifyPluginAsync = async (fastify) => {
         )
       }
       return { data: updated }
+    }
+  })
+
+  fastify.post('/:id/start', { preHandler: [
+    fastify.authenticate,
+    async (req, reply) => { const fn = (fastify as any).rejectIfInGame; if (typeof fn === 'function') return await fn(req, reply) }
+  ] }, async (request, reply) => {
+    const params = detailParamSchema.safeParse(request.params)
+    if (!params.success) {
+      reply.code(400)
+      return { error: { code: 'INVALID_PARAMS', message: 'Invalid tournament id' } }
+    }
+
+    const callerId = request.user?.userId
+    if (!callerId) {
+      reply.code(401)
+      return { error: { code: 'UNAUTHORIZED', message: 'Authentication required' } }
+    }
+
+    const tournament = await fastify.prisma.tournament.findUnique({
+      where: { id: params.data.id },
+      include: {
+        createdBy: { select: { id: true, displayName: true } },
+        participants: true,
+        matches: true
+      }
+    })
+
+    if (!tournament) {
+      reply.code(404)
+      return { error: { code: 'TOURNAMENT_NOT_FOUND', message: 'Tournament not found' } }
+    }
+
+    if (tournament.createdById !== callerId) {
+      reply.code(403)
+      return { error: { code: 'FORBIDDEN', message: 'Only tournament owner can start' } }
+    }
+
+    if (tournament.status !== 'DRAFT') {
+      reply.code(409)
+      return { error: { code: 'ALREADY_STARTED', message: 'Tournament already started' } }
+    }
+
+    const pending = tournament.participants.filter((p) => p.userId && p.inviteState !== 'ACCEPTED')
+    if (pending.length > 0) {
+      reply.code(409)
+      return {
+        error: {
+          code: 'INVITES_PENDING',
+          message: 'All invited friends must accept before starting'
+        }
+      }
+    }
+
+    if (tournament.participants.length < 2) {
+      reply.code(400)
+      return { error: { code: 'NOT_ENOUGH_PARTICIPANTS', message: 'At least 2 participants required' } }
+    }
+
+    if (tournament.matches.length === 0) {
+      await generateBracket(tournament.id)
+    }
+
+    const updated = await fastify.prisma.tournament.update({
+      where: { id: tournament.id },
+      data: { status: 'RUNNING', startsAt: tournament.startsAt ?? new Date() },
+      include: {
+        createdBy: { select: { id: true, displayName: true } },
+        participants: {
+          orderBy: [{ seed: 'asc' }, { id: 'asc' }],
+          select: {
+            id: true,
+            alias: true,
+            userId: true,
+            inviteState: true,
+            seed: true,
+            joinedAt: true
+          }
+        },
+        matches: {
+          orderBy: [{ round: 'asc' }, { id: 'asc' }],
+          include: {
+            playerA: { select: { id: true, alias: true, inviteState: true } },
+            playerB: { select: { id: true, alias: true, inviteState: true } }
+          }
+        }
+      }
+    })
+
+    // Notify participants about their round 1 matches so they can join
+    const participantLookup = new Map(updated.participants.map((p) => [p.id, p]))
+    const roundOneMatches = updated.matches.filter((match) => match.round === 1)
+    const notifyPromises: Promise<any>[] = []
+
+    for (const match of roundOneMatches) {
+      const sessionId = `local-match-${match.id}`
+      const playerA = match.playerA ? participantLookup.get(match.playerA.participantId) : null
+      const playerB = match.playerB ? participantLookup.get(match.playerB.participantId) : null
+
+      const payload = {
+        tournamentId: updated.id,
+        matchId: match.id,
+        sessionId,
+        p1Id: playerA?.id ?? null,
+        p2Id: playerB?.id ?? null,
+        p1Name: match.playerA?.alias ?? 'Player 1',
+        p2Name: match.playerB?.alias ?? 'Player 2',
+        mode: 'remote'
+      }
+
+      const title = 'Tournament match ready'
+      const body = `${payload.p1Name} vs ${payload.p2Name}`
+
+      if (playerA?.userId) {
+        notifyPromises.push(
+          notificationService.createNotification(playerA.userId, 'TOURNAMENT_MATCH_READY', title, body, payload)
+        )
+      }
+      if (playerB?.userId) {
+        notifyPromises.push(
+          notificationService.createNotification(playerB.userId, 'TOURNAMENT_MATCH_READY', title, body, payload)
+        )
+      }
+    }
+
+    if (notifyPromises.length > 0) {
+      // Fire and wait to ensure WS emission before responding
+      await Promise.allSettled(notifyPromises)
+    }
+
+    return {
+      data: {
+        id: updated.id,
+        name: updated.name,
+        status: updated.status,
+        bracketType: updated.bracketType,
+        startsAt: updated.startsAt ? updated.startsAt.toISOString() : null,
+        owner: {
+          id: updated.createdBy.id,
+          displayName: updated.createdBy.displayName
+        },
+        participants: updated.participants.map((participant) => ({
+          id: participant.id,
+          alias: participant.alias,
+          userId: participant.userId,
+          inviteState: participant.inviteState,
+          seed: participant.seed,
+          joinedAt: participant.joinedAt.toISOString()
+        })),
+        matches: updated.matches.map((match) => ({
+          id: match.id,
+          round: match.round,
+          status: match.status,
+          scheduledAt: match.scheduledAt ? match.scheduledAt.toISOString() : null,
+          playerA: match.playerA
+            ? {
+                participantId: match.playerA.id,
+                alias: match.playerA.alias,
+                inviteState: match.playerA.inviteState
+              }
+            : null,
+          playerB: match.playerB
+            ? {
+                participantId: match.playerB.id,
+                alias: match.playerB.alias,
+                inviteState: match.playerB.inviteState
+              }
+            : null,
+          winnerId: match.winnerId,
+          scoreA: match.scoreA,
+          scoreB: match.scoreB
+        }))
+      }
     }
   })
 

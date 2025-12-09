@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { useNotificationStore, Notification } from '../../stores/notificationStore'
 import { respondTournamentParticipant } from '../../lib/api'
 
@@ -13,17 +14,20 @@ export default function NotificationToast() {
   const markAsRead = useNotificationStore((s) => s.markAsRead)
   const [toast, setToast] = useState<ToastState>(null)
   const [loading, setLoading] = useState(false)
+  const navigate = useNavigate()
 
   useEffect(() => {
     if (!notifications || notifications.length === 0) return
 
-    const invite = notifications.find((n) => !n.read && n.type === 'TOURNAMENT_INVITE')
-    if (invite) setToast({ notification: invite })
+    const priorityTypes: Notification['type'][] = ['TOURNAMENT_INVITE', 'TOURNAMENT_MATCH_READY']
+    const next = notifications.find((n) => !n.read && priorityTypes.includes(n.type))
+    if (next) setToast({ notification: next })
   }, [notifications])
 
   // Auto-dismiss after TTL to avoid lingering stale invites in UI
   useEffect(() => {
     if (!toast) return
+    if (toast.notification.type === 'TOURNAMENT_MATCH_READY') return
     const timer = setTimeout(() => {
       // mark as read locally; server-side TTL will handle state
       markAsRead(toast.notification.id).catch(() => undefined)
@@ -36,6 +40,30 @@ export default function NotificationToast() {
 
   const n = toast.notification
   const data = n.data || {}
+  const isInvite = n.type === 'TOURNAMENT_INVITE'
+  const isMatchReady = n.type === 'TOURNAMENT_MATCH_READY'
+
+  const handleJoinMatch = async () => {
+    if (!data.sessionId) return
+    setLoading(true)
+    try {
+      const params = new URLSearchParams()
+      if (data.tournamentId) params.set('tournamentId', String(data.tournamentId))
+      if (data.p1Id) params.set('p1Id', String(data.p1Id))
+      if (data.p2Id) params.set('p2Id', String(data.p2Id))
+      if (data.p1Name) params.set('p1Name', String(data.p1Name))
+      if (data.p2Name) params.set('p2Name', String(data.p2Name))
+      const desiredMode = data.mode || ((data.p1Name === 'AI' || data.p2Name === 'AI') ? 'ai' : 'remote')
+      if (desiredMode) params.set('mode', String(desiredMode))
+      navigate(`/game/${data.sessionId}?${params.toString()}`)
+      await markAsRead(n.id)
+      setToast(null)
+    } catch (e) {
+      console.error('Failed to navigate to match', e)
+    } finally {
+      setLoading(false)
+    }
+  }
 
   const handleAction = async (action: 'ACCEPT' | 'DECLINE') => {
     if (!data.tournamentId || !data.participantId) return
@@ -60,22 +88,38 @@ export default function NotificationToast() {
             {data.tournamentId ? (
               <p className="text-sm text-slate-600 dark:text-slate-300">Tournament: #{data.tournamentId}</p>
             ) : null}
+            {isMatchReady ? (
+              <p className="text-sm text-slate-600 dark:text-slate-300">{`${data.p1Name || 'Player 1'} vs ${data.p2Name || 'Player 2'}`}</p>
+            ) : null}
           </div>
           <div className="flex items-center gap-2">
-            <button
-              onClick={() => handleAction('ACCEPT')}
-              disabled={loading}
-              className="rounded-md bg-green-600 px-3 py-1 text-sm font-medium text-white hover:bg-green-700 disabled:opacity-60"
-            >
-              Accept
-            </button>
-            <button
-              onClick={() => handleAction('DECLINE')}
-              disabled={loading}
-              className="rounded-md border border-slate-300 bg-white px-3 py-1 text-sm font-medium text-slate-700 hover:bg-slate-50 disabled:opacity-60 dark:border-slate-600 dark:bg-slate-700 dark:text-slate-100"
-            >
-              Decline
-            </button>
+            {isInvite ? (
+              <>
+                <button
+                  onClick={() => handleAction('ACCEPT')}
+                  disabled={loading}
+                  className="rounded-md bg-green-600 px-3 py-1 text-sm font-medium text-white hover:bg-green-700 disabled:opacity-60"
+                >
+                  Accept
+                </button>
+                <button
+                  onClick={() => handleAction('DECLINE')}
+                  disabled={loading}
+                  className="rounded-md border border-slate-300 bg-white px-3 py-1 text-sm font-medium text-slate-700 hover:bg-slate-50 disabled:opacity-60 dark:border-slate-600 dark:bg-slate-700 dark:text-slate-100"
+                >
+                  Decline
+                </button>
+              </>
+            ) : null}
+            {isMatchReady ? (
+              <button
+                onClick={handleJoinMatch}
+                disabled={loading}
+                className="rounded-md bg-blue-600 px-3 py-1 text-sm font-medium text-white hover:bg-blue-700 disabled:opacity-60"
+              >
+                Join match
+              </button>
+            ) : null}
           </div>
         </div>
       </div>

@@ -452,6 +452,11 @@ export const respondTournamentParticipant = async (tournamentId: number, partici
   return response.data as { data: any }
 }
 
+export const startTournament = async (tournamentId: number) => {
+  const response = await apiClient.post(`/tournaments/${tournamentId}/start`)
+  return response.data as { data: TournamentDetail }
+}
+
 export type UpdateProfilePayload = {
   displayName?: string
   bio?: string
