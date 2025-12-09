@@ -6,15 +6,23 @@ import { userService } from '../services/user';
 import { presenceService } from '../services/presence';
 import { WebSocket } from 'ws';
 import { sendToSockets } from './socketUtils';
-
-interface SocketWithSessionId extends WebSocket {
-  __sessionId?: number;
-}
+import connectionIndex, { SocketWithSessionId } from './connectionIndex';
 
 export default class ChatSocketHandler {
   fastify: FastifyInstance;
-  connections: Map<number, Set<SocketWithSessionId>> = new Map();
-  sessionSockets: Map<number, Set<SocketWithSessionId>> = new Map();
+  // compatibility accessors: provide minimal Map-like shape for existing consumers/tests
+  get connections() {
+    return {
+      get: (userId: number) => connectionIndex.getSocketsByUser(userId),
+      values: () => connectionIndex.getAllUserSockets()
+    } as any
+  }
+
+  get sessionSockets() {
+    return {
+      get: (sessionId: number) => connectionIndex.getSocketsBySession(sessionId)
+    } as any
+  }
 
   // bound handlers so we can remove them on close
   private onStatusChange = (event: any) => this.broadcastStatusChange(event.userId, event.status);
@@ -63,25 +71,11 @@ export default class ChatSocketHandler {
     // and query connection counts. These mirror the previous behavior
     // that existed in the inline `chatWs.ts` implementation.
     presenceService.setCloseSocketsBySession(async (sessionId: number) => {
-      let count = 0;
-      const sockets = this.sessionSockets.get(sessionId);
-      if (sockets) {
-        for (const ws of sockets) {
-          try {
-            ws.close(4000, 'session_revoked');
-            count++;
-          } catch (e) {
-            // ignore errors closing individual sockets
-          }
-        }
-        this.sessionSockets.delete(sessionId);
-      }
-      return count;
+      return connectionIndex.closeSocketsBySession(sessionId)
     });
 
     presenceService.setGetConnectionCount(async (userId: number) => {
-      const set = this.connections.get(userId);
-      return set ? set.size : 0;
+      return connectionIndex.getConnectionCount(userId)
     });
 
     fastify.addHook('onClose', (instance, done) => {
@@ -117,21 +111,21 @@ export default class ChatSocketHandler {
 
   private broadcastStatusChange(userId: number, status: string) {
     const payload = JSON.stringify({ type: 'user_update', data: { id: userId, status } });
-    for (const userSockets of this.connections.values()) {
+    for (const userSockets of connectionIndex.getAllUserSockets()) {
       sendToSockets(userSockets, payload)
     }
   }
 
   private broadcastUserCreated(user: any) {
     const payload = JSON.stringify({ type: 'user_created', data: user });
-    for (const userSockets of this.connections.values()) {
+    for (const userSockets of connectionIndex.getAllUserSockets()) {
       sendToSockets(userSockets, payload)
     }
   }
 
   private broadcastUserUpdated(user: any) {
     const payload = JSON.stringify({ type: 'user_update', data: user });
-    for (const userSockets of this.connections.values()) {
+    for (const userSockets of connectionIndex.getAllUserSockets()) {
       sendToSockets(userSockets, payload)
     }
   }
@@ -143,7 +137,7 @@ export default class ChatSocketHandler {
     });
     const payload = JSON.stringify({ type: 'message', data: message });
     for (const member of members) {
-      const userConns = this.connections.get(member.userId);
+      const userConns = connectionIndex.getSocketsByUser(member.userId);
       if (userConns) for (const ws of userConns) if (ws.readyState === WebSocket.OPEN) ws.send(payload);
     }
   }
@@ -155,7 +149,7 @@ export default class ChatSocketHandler {
     });
     const payload = JSON.stringify({ type: 'read', data: event });
     for (const member of members) {
-      const userConns = this.connections.get(member.userId);
+      const userConns = connectionIndex.getSocketsByUser(member.userId);
       if (userConns) for (const ws of userConns) if (ws.readyState === WebSocket.OPEN) ws.send(payload);
     }
   }
@@ -164,14 +158,14 @@ export default class ChatSocketHandler {
     const payload = JSON.stringify({ type: 'channel_created', data: { id: channel.id } });
     if (channel.members) {
       for (const member of channel.members) {
-        const userConns = this.connections.get(member.userId);
+        const userConns = connectionIndex.getSocketsByUser(member.userId);
         if (userConns) for (const ws of userConns) if (ws.readyState === WebSocket.OPEN) ws.send(payload);
       }
     }
   }
 
   private handleNotification(notification: any) {
-    const userConns = this.connections.get(notification.userId);
+    const userConns = connectionIndex.getSocketsByUser(notification.userId);
     if (userConns) {
       const payload = JSON.stringify({ type: 'notification', data: notification });
       sendToSockets(userConns, payload)
@@ -179,7 +173,7 @@ export default class ChatSocketHandler {
   }
 
   private handleNotificationDeleted(event: any) {
-    const userConns = this.connections.get(event.userId);
+    const userConns = connectionIndex.getSocketsByUser(event.userId);
     if (userConns) {
       const payload = JSON.stringify({ type: 'notification_deleted', data: { id: event.id } });
       sendToSockets(userConns, payload)
@@ -189,21 +183,21 @@ export default class ChatSocketHandler {
   private handleMatchHistory(event: any) {
     const payload = JSON.stringify({ type: 'match_history_update', data: event.match });
     if (typeof event.userId === 'number') {
-      const userConns = this.connections.get(event.userId);
+      const userConns = connectionIndex.getSocketsByUser(event.userId);
       if (userConns) sendToSockets(userConns, payload)
       return;
     }
-    for (const userSockets of this.connections.values()) sendToSockets(userSockets, payload)
+    for (const userSockets of connectionIndex.getAllUserSockets()) sendToSockets(userSockets, payload)
   }
 
   private async handleFriendAccepted(event: any) {
     const { requesterId, addresseeId } = event;
-    const requesterConns = this.connections.get(requesterId);
+    const requesterConns = connectionIndex.getSocketsByUser(requesterId);
     if (requesterConns) {
       const payload = JSON.stringify({ type: 'friend_update', data: { friendId: addresseeId, status: 'FRIEND' } });
       for (const ws of requesterConns) if (ws.readyState === WebSocket.OPEN) ws.send(payload);
     }
-    const addresseeConns = this.connections.get(addresseeId);
+    const addresseeConns = connectionIndex.getSocketsByUser(addresseeId);
     if (addresseeConns) {
       const payload = JSON.stringify({ type: 'friend_update', data: { friendId: requesterId, status: 'FRIEND' } });
       for (const ws of addresseeConns) if (ws.readyState === WebSocket.OPEN) ws.send(payload);
@@ -219,12 +213,12 @@ export default class ChatSocketHandler {
 
   private handleFriendRemoved(event: any) {
     const { requesterId, addresseeId } = event;
-    const requesterConns = this.connections.get(requesterId);
+    const requesterConns = connectionIndex.getSocketsByUser(requesterId);
     if (requesterConns) {
       const payload = JSON.stringify({ type: 'friend_update', data: { friendId: addresseeId, status: 'NONE' } });
       for (const ws of requesterConns) if (ws.readyState === WebSocket.OPEN) ws.send(payload);
     }
-    const addresseeConns = this.connections.get(addresseeId);
+    const addresseeConns = connectionIndex.getSocketsByUser(addresseeId);
     if (addresseeConns) {
       const payload = JSON.stringify({ type: 'friend_update', data: { friendId: requesterId, status: 'NONE' } });
       for (const ws of addresseeConns) if (ws.readyState === WebSocket.OPEN) ws.send(payload);
@@ -235,7 +229,7 @@ export default class ChatSocketHandler {
 
   private handleUserBlocked(event: any) {
     const { blockerId, blockedId } = event;
-    const blockerConns = this.connections.get(blockerId);
+    const blockerConns = connectionIndex.getSocketsByUser(blockerId);
     if (blockerConns) {
       const payload = JSON.stringify({ type: 'relationship_update', data: { userId: blockedId, status: 'BLOCKING' } });
       for (const ws of blockerConns) if (ws.readyState === WebSocket.OPEN) ws.send(payload);
@@ -244,7 +238,7 @@ export default class ChatSocketHandler {
 
   private handleUserUnblocked(event: any) {
     const { blockerId, blockedId } = event;
-    const blockerConns = this.connections.get(blockerId);
+    const blockerConns = connectionIndex.getSocketsByUser(blockerId);
     if (blockerConns) {
       const payload = JSON.stringify({ type: 'relationship_update', data: { userId: blockedId, status: 'NONE' } });
       for (const ws of blockerConns) if (ws.readyState === WebSocket.OPEN) ws.send(payload);
@@ -253,12 +247,12 @@ export default class ChatSocketHandler {
 
   private handleFriendRequestSent(event: any) {
     const { senderId, receiverId, requestId } = event;
-    const senderConns = this.connections.get(senderId);
+    const senderConns = connectionIndex.getSocketsByUser(senderId);
     if (senderConns) {
       const payload = JSON.stringify({ type: 'friend_update', data: { friendId: receiverId, status: 'PENDING_SENT', requestId } });
       for (const ws of senderConns) if (ws.readyState === WebSocket.OPEN) ws.send(payload);
     }
-    const receiverConns = this.connections.get(receiverId);
+    const receiverConns = connectionIndex.getSocketsByUser(receiverId);
     if (receiverConns) {
       const payload = JSON.stringify({ type: 'friend_update', data: { friendId: senderId, status: 'PENDING_RECEIVED', requestId } });
       for (const ws of receiverConns) if (ws.readyState === WebSocket.OPEN) ws.send(payload);
@@ -267,12 +261,12 @@ export default class ChatSocketHandler {
 
   private handleFriendRequestCancelled(event: any) {
     const { senderId, receiverId } = event;
-    const senderConns = this.connections.get(senderId);
+    const senderConns = connectionIndex.getSocketsByUser(senderId);
     if (senderConns) {
       const payload = JSON.stringify({ type: 'friend_update', data: { friendId: receiverId, status: 'NONE' } });
       for (const ws of senderConns) if (ws.readyState === WebSocket.OPEN) ws.send(payload);
     }
-    const receiverConns = this.connections.get(receiverId);
+    const receiverConns = connectionIndex.getSocketsByUser(receiverId);
     if (receiverConns) {
       const payload = JSON.stringify({ type: 'friend_update', data: { friendId: senderId, status: 'NONE' } });
       for (const ws of receiverConns) if (ws.readyState === WebSocket.OPEN) ws.send(payload);
@@ -281,12 +275,12 @@ export default class ChatSocketHandler {
 
   private handleFriendRequestDeclined(event: any) {
     const { senderId, receiverId } = event;
-    const senderConns = this.connections.get(senderId);
+    const senderConns = connectionIndex.getSocketsByUser(senderId);
     if (senderConns) {
       const payload = JSON.stringify({ type: 'friend_update', data: { friendId: receiverId, status: 'NONE' } });
       for (const ws of senderConns) if (ws.readyState === WebSocket.OPEN) ws.send(payload);
     }
-    const receiverConns = this.connections.get(receiverId);
+    const receiverConns = connectionIndex.getSocketsByUser(receiverId);
     if (receiverConns) {
       const payload = JSON.stringify({ type: 'friend_update', data: { friendId: senderId, status: 'NONE' } });
       for (const ws of receiverConns) if (ws.readyState === WebSocket.OPEN) ws.send(payload);
@@ -295,7 +289,7 @@ export default class ChatSocketHandler {
 
   private broadcastPublicFriendUpdate(data: any) {
     const payload = JSON.stringify({ type: 'public_friend_update', data });
-    for (const userSockets of this.connections.values()) sendToSockets(userSockets, payload)
+    for (const userSockets of connectionIndex.getAllUserSockets()) sendToSockets(userSockets, payload)
   }
 
   async handle(connection: any, req: any) {
@@ -333,31 +327,17 @@ export default class ChatSocketHandler {
     }
 
     (socket as SocketWithSessionId).__sessionId = sessionId;
-    if (!this.sessionSockets.has(sessionId)) this.sessionSockets.set(sessionId, new Set());
-    this.sessionSockets.get(sessionId)!.add(socket as SocketWithSessionId);
-
-    if (!this.connections.has(userId)) {
-      this.connections.set(userId, new Set());
+    connectionIndex.addSocket(userId, sessionId, socket as SocketWithSessionId);
+    if (connectionIndex.getConnectionCount(userId) === 1) {
       await this.fastify.prisma.user.update({ where: { id: userId }, data: { status: 'ONLINE' } }).catch(console.error);
       this.broadcastStatusChange(userId, 'ONLINE');
     }
-    this.connections.get(userId)!.add(socket as SocketWithSessionId);
 
     socket.on('close', async () => {
-      const sessionSocketSet = this.sessionSockets.get(sessionId);
-      if (sessionSocketSet) {
-        sessionSocketSet.delete(socket as SocketWithSessionId);
-        if (sessionSocketSet.size === 0) this.sessionSockets.delete(sessionId);
-      }
-
-      const userConns = this.connections.get(userId);
-      if (userConns) {
-        userConns.delete(socket as SocketWithSessionId);
-        if (userConns.size === 0) {
-          this.connections.delete(userId);
-          await this.fastify.prisma.user.update({ where: { id: userId }, data: { status: 'OFFLINE' } }).catch(console.error);
-          this.broadcastStatusChange(userId, 'OFFLINE');
-        }
+      connectionIndex.removeSocket(userId, sessionId, socket as SocketWithSessionId);
+      if (connectionIndex.getConnectionCount(userId) === 0) {
+        await this.fastify.prisma.user.update({ where: { id: userId }, data: { status: 'OFFLINE' } }).catch(console.error);
+        this.broadcastStatusChange(userId, 'OFFLINE');
       }
     });
   }
