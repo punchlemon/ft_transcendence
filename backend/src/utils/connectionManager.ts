@@ -1,4 +1,8 @@
-type ConnRecord = {
+import { EventEmitter } from 'events'
+
+export type ConnectionType = 'game' | 'chat' | string
+
+export type ConnRecord = {
   socket: any
   connectedAt: number
   authSessionId?: number | null
@@ -6,10 +10,10 @@ type ConnRecord = {
   type?: ConnectionType
 }
 
-type ConnectionType = 'game' | 'chat' | string
-
 // Map userId -> { game?: ConnRecord, chat?: ConnRecord }
 const userConnections = new Map<number, Partial<Record<ConnectionType, ConnRecord>>>()
+
+export const connectionEvents = new EventEmitter()
 
 export function registerConnection(userId: number, sessionId: string, socket: any, type: ConnectionType = 'game', authSessionId?: number | null) {
   if (!userId || !sessionId) return
@@ -53,8 +57,10 @@ export function registerConnection(userId: number, sessionId: string, socket: an
     }
   }
 
-  slots[type] = { socket, connectedAt: Date.now(), authSessionId, sessionId, type }
+  const record: ConnRecord = { socket, connectedAt: Date.now(), authSessionId, sessionId, type }
+  slots[type] = record
   try { console.info(`[connectionManager] Registered ${type} connection for user ${userId} session=${sessionId}`) } catch (e) {}
+  try { connectionEvents.emit('registered', userId, record) } catch (e) {}
 }
 
 export function unregisterConnection(userId: number, sessionId: string, socket: any, type?: ConnectionType) {
@@ -66,6 +72,7 @@ export function unregisterConnection(userId: number, sessionId: string, socket: 
     const rec = slots[type]
     if (rec && rec.socket === socket && rec.sessionId === sessionId) {
       delete slots[type]
+      try { connectionEvents.emit('unregistered', userId, rec) } catch (e) {}
     }
   } else {
     // remove any slot that matches both socket and sessionId
@@ -73,6 +80,7 @@ export function unregisterConnection(userId: number, sessionId: string, socket: 
       const rec = slots[k]
       if (rec && rec.socket === socket && rec.sessionId === sessionId) {
         delete slots[k]
+        try { connectionEvents.emit('unregistered', userId, rec) } catch (e) {}
       }
     }
   }
@@ -110,6 +118,7 @@ export function terminateAllForSession(sessionId: string) {
           if (typeof rec.socket.close === 'function') rec.socket.close()
           else if (typeof rec.socket.terminate === 'function') rec.socket.terminate()
         } catch (e) {}
+        try { connectionEvents.emit('terminated', userId, rec) } catch (e) {}
         delete (slots as any)[k]
       }
     }
@@ -117,4 +126,4 @@ export function terminateAllForSession(sessionId: string) {
   }
 }
 
-export default { registerConnection, unregisterConnection, getConnection, terminateAllForSession }
+export default { registerConnection, unregisterConnection, getConnection, terminateAllForSession, connectionEvents }
