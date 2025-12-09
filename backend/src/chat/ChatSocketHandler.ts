@@ -5,6 +5,7 @@ import { friendService } from '../services/friend';
 import { userService } from '../services/user';
 import { presenceService } from '../services/presence';
 import { WebSocket } from 'ws';
+import { sendToSockets } from './socketUtils';
 
 interface SocketWithSessionId extends WebSocket {
   __sessionId?: number;
@@ -117,23 +118,21 @@ export default class ChatSocketHandler {
   private broadcastStatusChange(userId: number, status: string) {
     const payload = JSON.stringify({ type: 'user_update', data: { id: userId, status } });
     for (const userSockets of this.connections.values()) {
-      for (const ws of userSockets) {
-        if (ws.readyState === WebSocket.OPEN) ws.send(payload);
-      }
+      sendToSockets(userSockets, payload)
     }
   }
 
   private broadcastUserCreated(user: any) {
     const payload = JSON.stringify({ type: 'user_created', data: user });
     for (const userSockets of this.connections.values()) {
-      for (const ws of userSockets) if (ws.readyState === WebSocket.OPEN) ws.send(payload);
+      sendToSockets(userSockets, payload)
     }
   }
 
   private broadcastUserUpdated(user: any) {
     const payload = JSON.stringify({ type: 'user_update', data: user });
     for (const userSockets of this.connections.values()) {
-      for (const ws of userSockets) if (ws.readyState === WebSocket.OPEN) ws.send(payload);
+      sendToSockets(userSockets, payload)
     }
   }
 
@@ -175,7 +174,7 @@ export default class ChatSocketHandler {
     const userConns = this.connections.get(notification.userId);
     if (userConns) {
       const payload = JSON.stringify({ type: 'notification', data: notification });
-      for (const ws of userConns) if (ws.readyState === WebSocket.OPEN) ws.send(payload);
+      sendToSockets(userConns, payload)
     }
   }
 
@@ -183,7 +182,7 @@ export default class ChatSocketHandler {
     const userConns = this.connections.get(event.userId);
     if (userConns) {
       const payload = JSON.stringify({ type: 'notification_deleted', data: { id: event.id } });
-      for (const ws of userConns) if (ws.readyState === WebSocket.OPEN) ws.send(payload);
+      sendToSockets(userConns, payload)
     }
   }
 
@@ -191,10 +190,10 @@ export default class ChatSocketHandler {
     const payload = JSON.stringify({ type: 'match_history_update', data: event.match });
     if (typeof event.userId === 'number') {
       const userConns = this.connections.get(event.userId);
-      if (userConns) for (const ws of userConns) if (ws.readyState === WebSocket.OPEN) ws.send(payload);
+      if (userConns) sendToSockets(userConns, payload)
       return;
     }
-    for (const userSockets of this.connections.values()) for (const ws of userSockets) if (ws.readyState === WebSocket.OPEN) ws.send(payload);
+    for (const userSockets of this.connections.values()) sendToSockets(userSockets, payload)
   }
 
   private async handleFriendAccepted(event: any) {
@@ -296,7 +295,7 @@ export default class ChatSocketHandler {
 
   private broadcastPublicFriendUpdate(data: any) {
     const payload = JSON.stringify({ type: 'public_friend_update', data });
-    for (const userSockets of this.connections.values()) for (const ws of userSockets) if (ws.readyState === WebSocket.OPEN) ws.send(payload);
+    for (const userSockets of this.connections.values()) sendToSockets(userSockets, payload)
   }
 
   async handle(connection: any, req: any) {
