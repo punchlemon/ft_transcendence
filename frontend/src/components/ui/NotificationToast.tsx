@@ -19,7 +19,7 @@ export default function NotificationToast() {
   useEffect(() => {
     if (!notifications || notifications.length === 0) return
 
-    const priorityTypes: Notification['type'][] = ['TOURNAMENT_INVITE', 'TOURNAMENT_MATCH_READY']
+    const priorityTypes: Notification['type'][] = ['TOURNAMENT_INVITE', 'TOURNAMENT_MATCH_READY', 'SYSTEM']
     const next = notifications.find((n) => !n.read && priorityTypes.includes(n.type))
     if (next) setToast({ notification: next })
   }, [notifications])
@@ -27,7 +27,7 @@ export default function NotificationToast() {
   // Auto-dismiss after TTL to avoid lingering stale invites in UI
   useEffect(() => {
     if (!toast) return
-    if (toast.notification.type === 'TOURNAMENT_MATCH_READY') return
+    if (toast.notification.type === 'TOURNAMENT_MATCH_READY' || (toast.notification.data as any)?.sessionId) return
     const timer = setTimeout(() => {
       // mark as read locally; server-side TTL will handle state
       markAsRead(toast.notification.id).catch(() => undefined)
@@ -42,6 +42,7 @@ export default function NotificationToast() {
   const data = n.data || {}
   const isInvite = n.type === 'TOURNAMENT_INVITE'
   const isMatchReady = n.type === 'TOURNAMENT_MATCH_READY'
+  const hasSessionLink = !!data.sessionId
 
   const handleJoinMatch = async () => {
     if (!data.sessionId) return
@@ -112,7 +113,7 @@ export default function NotificationToast() {
             {data.tournamentId ? (
               <p className="text-sm text-slate-600 dark:text-slate-300">Tournament: #{data.tournamentId}</p>
             ) : null}
-            {isMatchReady ? (
+            {(isMatchReady || hasSessionLink) ? (
               <p className="text-sm text-slate-600 dark:text-slate-300">{`${data.p1Name || 'Player 1'} vs ${data.p2Name || 'Player 2'}`}</p>
             ) : null}
           </div>
@@ -135,7 +136,7 @@ export default function NotificationToast() {
                 </button>
               </>
             ) : null}
-            {isMatchReady ? (
+            {(isMatchReady || hasSessionLink) ? (
               <button
                 onClick={handleJoinMatch}
                 disabled={loading}

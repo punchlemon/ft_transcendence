@@ -41,9 +41,19 @@ const NotificationItem = ({ notification }: { notification: Notification }) => {
 
   const handleGameInvite = () => {
     const gameId = notification.data?.gameId || notification.data?.sessionId
-    if (gameId) {
-      navigate(`/game/${gameId}`)
-    }
+    if (!gameId) return
+
+    const params = new URLSearchParams()
+    if (notification.data?.tournamentId) params.set('tournamentId', String(notification.data.tournamentId))
+    if (notification.data?.p1Id) params.set('p1Id', String(notification.data.p1Id))
+    if (notification.data?.p2Id) params.set('p2Id', String(notification.data.p2Id))
+    if (notification.data?.p1Name) params.set('p1Name', String(notification.data.p1Name))
+    if (notification.data?.p2Name) params.set('p2Name', String(notification.data.p2Name))
+
+    const desiredMode = notification.data?.mode || ((notification.data?.p1Name === 'AI' || notification.data?.p2Name === 'AI') ? 'ai' : 'remote')
+    if (desiredMode) params.set('mode', String(desiredMode))
+
+    navigate(`/game/${gameId}${params.toString() ? `?${params.toString()}` : ''}`)
   }
 
   return (
@@ -97,7 +107,7 @@ const NotificationItem = ({ notification }: { notification: Notification }) => {
         </div>
       )}
 
-      {notification.type === 'MATCH_INVITE' ? (
+      {notification.type === 'MATCH_INVITE' || notification.data?.sessionId ? (
         <div className="mt-2 flex gap-2">
           <button
             onClick={(e) => {

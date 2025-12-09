@@ -528,15 +528,15 @@ const tournamentsRoutes: FastifyPluginAsync = async (fastify) => {
 
     for (const match of roundOneMatches) {
       const sessionId = `local-match-${match.id}`
-      const playerA = match.playerA ? participantLookup.get(match.playerA.participantId) : null
-      const playerB = match.playerB ? participantLookup.get(match.playerB.participantId) : null
+      const playerARecord = match.playerA ? participantLookup.get(match.playerA.id) : null
+      const playerBRecord = match.playerB ? participantLookup.get(match.playerB.id) : null
 
       const payload = {
         tournamentId: updated.id,
         matchId: match.id,
         sessionId,
-        p1Id: playerA?.id ?? null,
-        p2Id: playerB?.id ?? null,
+        p1Id: match.playerA?.id ?? null,
+        p2Id: match.playerB?.id ?? null,
         p1Name: match.playerA?.alias ?? 'Player 1',
         p2Name: match.playerB?.alias ?? 'Player 2',
         mode: 'remote'
@@ -545,14 +545,21 @@ const tournamentsRoutes: FastifyPluginAsync = async (fastify) => {
       const title = 'Tournament match ready'
       const body = `${payload.p1Name} vs ${payload.p2Name}`
 
-      if (playerA?.userId) {
+      if (playerARecord?.userId) {
         notifyPromises.push(
-          notificationService.createNotification(playerA.userId, 'TOURNAMENT_MATCH_READY', title, body, payload)
+          notificationService.createNotification(playerARecord.userId, 'TOURNAMENT_MATCH_READY', title, body, payload)
+        )
+        // Also send a SYSTEM notification so it appears in the system inbox even if custom types are filtered.
+        notifyPromises.push(
+          notificationService.createNotification(playerARecord.userId, 'SYSTEM', title, body, payload)
         )
       }
-      if (playerB?.userId) {
+      if (playerBRecord?.userId) {
         notifyPromises.push(
-          notificationService.createNotification(playerB.userId, 'TOURNAMENT_MATCH_READY', title, body, payload)
+          notificationService.createNotification(playerBRecord.userId, 'TOURNAMENT_MATCH_READY', title, body, payload)
+        )
+        notifyPromises.push(
+          notificationService.createNotification(playerBRecord.userId, 'SYSTEM', title, body, payload)
         )
       }
     }
