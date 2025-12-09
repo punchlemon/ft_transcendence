@@ -70,6 +70,16 @@ class ConnectionIndex {
       }
       this.sessionSockets.delete(sessionId)
     }
+    // Also remove any socket instances from the per-user connection map
+    for (const [userId, set] of Array.from(this.connections.entries())) {
+      for (const ws of Array.from(set)) {
+        if ((ws as any).__sessionId === sessionId) {
+          set.delete(ws)
+        }
+      }
+      if (set.size === 0) this.connections.delete(userId)
+    }
+
     return count
   }
 

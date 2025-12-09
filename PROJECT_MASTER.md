@@ -1,10 +1,10 @@
 # PROJECT_MASTER
 
 ## 進捗サマリ
- - **ステータス**: Phase 1 (Foundation) 完了 → Phase 2 (Design & Core Logic) 完了 → Phase 3 (Implementation) へ移行中
-- **最新変更**: WebSocket ベースの `RESTART_MATCH` を導入し、SPA での "Play Again" を実現。マッチ結果の永続化と `match_history` のリアルタイム配信、プレゼンス (IN_GAME / ONLINE) 修正をサーバ・クライアント両方で適用済み。関連 PR: #66
- - **最新変更**: WebSocket ベースの `RESTART_MATCH` を導入し、SPA での "Play Again" を実現。マッチ結果の永続化と `match_history` のリアルタイム配信、プレゼンス (IN_GAME / ONLINE) 修正をサーバ・クライアント両方で適用済み。関連 PR: #66
- - **セキュリティ・ガード**: `IN_GAME` 時の操作制限（REST 非 GET をブロック、WS 再接続ルール）を実装する作業を進め、関連コードを `feature/in-game-guard` ブランチでコミットしました。PR: https://github.com/punchlemon/ft_transcendence/pull/68
+
+- **ステータス**: Phase 1 (Foundation) → Phase 2 (Design & Core Logic) 完了、Phase 3 (Implementation) に移行中
+- **最近の変更**: WebSocket を用いた再接続・マッチ再開関連の整備（`RESTART_MATCH` フロー、`match_history` のリアルタイム配信、プレゼンス改善）を適用済み。関連 PR: #66
+- **セキュリティ**: `IN_GAME` 時の挙動制限（REST の非 GET 制御、WS の再接続ポリシー）を仕様化中（実装案は `plugins/authGuard.ts` を想定）。
 - Docker / Fastify / React / Prisma の最小構成は動作確認済み。
 - Prisma のバイナリ問題を解消し、バックエンド/フロントエンドともに `docker-compose up --build` で起動可能な状態を維持。
 - ソースファイル末尾に日本語の解説ブロックを追加し始めた。残りの主要ファイルにも順次適用する必要がある。

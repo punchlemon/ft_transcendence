@@ -334,14 +334,27 @@ export default class ChatSocketHandler {
     }
 
     (socket as SocketWithSessionId).__sessionId = sessionId;
-    connectionIndex.addSocket(userId, sessionId, socket as SocketWithSessionId);
+    // Use the facade to register sockets so SocketManager and connectionIndex stay in sync
+    try {
+      // lazy import to avoid cycles
+      const { registerSocket } = await import('../lib/socketFacade');
+      registerSocket(socket as SocketWithSessionId, { userId, sessionId });
+    } catch (_) {
+      // fallback to direct registration if dynamic import fails
+      connectionIndex.addSocket(userId, sessionId, socket as SocketWithSessionId);
+    }
     if (connectionIndex.getConnectionCount(userId) === 1) {
       await this.fastify.prisma.user.update({ where: { id: userId }, data: { status: 'ONLINE' } }).catch((e: unknown) => this.fastify.log.error(e as Error));
       this.broadcastStatusChange(userId, 'ONLINE');
     }
 
     socket.on('close', async () => {
-      connectionIndex.removeSocket(userId, sessionId, socket as SocketWithSessionId);
+      try {
+        const { unregisterSocket } = await import('../lib/socketFacade');
+        unregisterSocket(socket as SocketWithSessionId, { userId, sessionId });
+      } catch (_) {
+        connectionIndex.removeSocket(userId, sessionId, socket as SocketWithSessionId);
+      }
       if (connectionIndex.getConnectionCount(userId) === 0) {
         await this.fastify.prisma.user.update({ where: { id: userId }, data: { status: 'OFFLINE' } }).catch((e: unknown) => this.fastify.log.error(e as Error));
         this.broadcastStatusChange(userId, 'OFFLINE');
