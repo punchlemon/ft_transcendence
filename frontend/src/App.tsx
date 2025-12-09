@@ -1,4 +1,5 @@
 import { useEffect } from 'react'
+import logger from './lib/logger'
 import { BrowserRouter, Routes, Route, Link, useNavigate, useLocation } from 'react-router-dom'
 import HomePage from './pages/Home'
 // HealthCheckPage removed from routes — health endpoint not needed on Home
@@ -31,11 +32,11 @@ const App = () => {
 
   const handleLogout = async () => {
     const refreshToken = useAuthStore.getState().refreshToken
-    if (refreshToken) {
+      if (refreshToken) {
       try {
         await api.post('/auth/logout', { refreshToken })
       } catch (error) {
-        console.error('Logout API call failed', error)
+        logger.error('Logout API call failed', error)
       }
     }
     disconnectChatWs()

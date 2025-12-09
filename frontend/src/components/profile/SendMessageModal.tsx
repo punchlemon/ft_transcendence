@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import logger from '../../lib/logger'
 import UserAvatar from '../ui/UserAvatar'
 
 interface SendMessageModalProps {
@@ -29,7 +30,7 @@ export const SendMessageModal = ({ user, existingDMThread, onClose, onSend, onOp
       await onSend(message)
       onClose()
     } catch (err) {
-      console.error(err)
+      logger.error('Failed to send message from modal', err)
     } finally {
       setIsSending(false)
     }

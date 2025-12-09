@@ -1,4 +1,5 @@
 import { useState, useRef, KeyboardEvent, FormEvent } from 'react'
+import logger from '../../lib/logger'
 
 interface MessageInputProps {
   onSend: (message: string) => void | Promise<void>
@@ -42,7 +43,7 @@ export const MessageInput = ({
         textareaRef.current.style.height = 'auto'
       }
     } catch (err) {
-      console.error(err)
+      logger.error('Failed to send chat message', err)
     } finally {
       setIsSending(false)
     }

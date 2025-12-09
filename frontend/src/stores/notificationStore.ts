@@ -1,5 +1,6 @@
 import { create } from 'zustand';
 import { api } from '../lib/api';
+import logger from '../lib/logger';
 
 export interface Notification {
   id: number;
@@ -53,7 +54,7 @@ export const useNotificationStore = create<NotificationState>((set, get) => ({
       const unreadCount = list.filter((n: Notification) => !n.read).length;
       set({ notifications: list, unreadCount });
     } catch (error) {
-      console.error('Failed to fetch notifications', error);
+      logger.error('Failed to fetch notifications', error);
     } finally {
       set({ isLoading: false });
     }
@@ -70,7 +71,7 @@ export const useNotificationStore = create<NotificationState>((set, get) => ({
         return { notifications, unreadCount };
       });
     } catch (error) {
-      console.error('Failed to mark notification as read', error);
+      logger.error('Failed to mark notification as read', error);
     }
   },
 
@@ -82,7 +83,7 @@ export const useNotificationStore = create<NotificationState>((set, get) => ({
         unreadCount: 0,
       }));
     } catch (error) {
-      console.error('Failed to mark all notifications as read', error);
+      logger.error('Failed to mark all notifications as read', error);
     }
   },
 
@@ -131,7 +132,7 @@ export const useNotificationStore = create<NotificationState>((set, get) => ({
     try {
       await api.delete(`/notifications/${id}`);
     } catch (error) {
-      console.error('Failed to delete notification', error);
+      logger.error('Failed to delete notification', error);
     }
   },
 }));

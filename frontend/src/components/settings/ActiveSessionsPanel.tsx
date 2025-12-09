@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import { fetchSessions, revokeSession, type Session } from '../../lib/api'
+import logger from '../../lib/logger'
 
 export const ActiveSessionsPanel = () => {
   const [sessions, setSessions] = useState<Session[]>([])
@@ -14,7 +15,7 @@ export const ActiveSessionsPanel = () => {
       const { sessions } = await fetchSessions()
       setSessions(sessions)
     } catch (err) {
-      console.error(err)
+      logger.error('Failed to load active sessions', err)
       setError('Failed to load active sessions')
     } finally {
       setIsLoading(false)
@@ -33,7 +34,7 @@ export const ActiveSessionsPanel = () => {
       await revokeSession(sessionId)
       setSessions((prev) => prev.filter((s) => s.id !== sessionId))
     } catch (err) {
-      console.error(err)
+      logger.error('Failed to revoke session', err)
       alert('Failed to revoke session')
     } finally {
       setRevokingId(null)

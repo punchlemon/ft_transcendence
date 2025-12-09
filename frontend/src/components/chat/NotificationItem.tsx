@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import logger from '../../lib/logger'
 import { useNavigate } from 'react-router-dom'
 import { useNotificationStore, type Notification } from '../../stores/notificationStore'
 import { acceptFriendRequest, declineFriendRequest } from '../../lib/api'
@@ -23,7 +24,7 @@ const NotificationItem = ({ notification }: { notification: Notification }) => {
       setActionStatus('success')
       deleteNotification(notification.id)
     } catch (error) {
-      console.error(error)
+      logger.error('Failed to accept friend request', error)
       setActionStatus('error')
     }
   }
@@ -33,7 +34,7 @@ const NotificationItem = ({ notification }: { notification: Notification }) => {
       try {
         await declineFriendRequest(notification.data.requestId)
       } catch (error) {
-        console.error('Failed to decline friend request', error)
+        logger.error('Failed to decline friend request', error)
       }
     }
     deleteNotification(notification.id)

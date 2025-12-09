@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState, useCallback } from 'react'
+import logger from '../lib/logger'
 import { useParams, useNavigate, useSearchParams, useLocation } from 'react-router-dom'
 import useAuthStore from '../stores/authStore'
 import { soundManager } from '../lib/sound'
@@ -109,7 +110,7 @@ const GameRoomPage = () => {
               setCurrentMatchIndex(index)
             }
           })
-          .catch(err => console.error('Failed to fetch tournament', err))
+          .catch(err => logger.error('Failed to fetch tournament', err))
       }
     }
   }, [id, searchParams, status]) // Re-fetch on status change (e.g. finished) to update bracket
@@ -151,7 +152,7 @@ const GameRoomPage = () => {
     socketRef.current = ws
 
     ws.onopen = () => {
-      console.log('Connected to game server')
+      logger.info('Connected to game server')
       ws.send(JSON.stringify({ event: 'ready', payload: { token } }))
     }
 
@@ -234,8 +235,8 @@ const GameRoomPage = () => {
                             setMatchQueue(queue)
                         })
                     }
-                  })
-                  .catch(err => console.error('Failed to submit match result', err))
+                    })
+                  .catch(err => logger.error('Failed to submit match result', err))
               }
             }
           }
@@ -278,12 +279,12 @@ const GameRoomPage = () => {
           soundManager.playScore()
         }
       } catch (err) {
-        console.error('Failed to parse message', err)
+          logger.error('Failed to parse message', err)
       }
     }
 
     ws.onclose = () => {
-      console.log('Disconnected from game server')
+      logger.info('Disconnected from game server')
       setStatus('connecting')
       try {
         updateUser?.({ status: 'ONLINE' })
@@ -476,7 +477,7 @@ const GameRoomPage = () => {
           }))
         } catch (e) {
           // If send fails, fallback to navigate below
-          console.warn('Failed to send RESTART_MATCH, will fallback to navigate', e)
+          logger.warn('Failed to send RESTART_MATCH, will fallback to navigate', e)
         }
 
         // Reset client UI state and wait for server START event to transition

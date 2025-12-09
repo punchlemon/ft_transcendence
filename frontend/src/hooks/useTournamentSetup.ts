@@ -1,4 +1,5 @@
 import { useState, FormEvent, useEffect } from 'react'
+import logger from '../lib/logger'
 import { normalizeAlias, aliasExists } from '../lib/tournament'
 import { createTournament, fetchTournament, TournamentDetail } from '../lib/api'
 import useAuthStore from '../stores/authStore'
@@ -86,7 +87,7 @@ export const useTournamentSetup = () => {
       setInfoMessage('Tournament created.')
       return detail.data
     } catch (err) {
-      console.error(err)
+      logger.error('Failed to create tournament', err)
       setErrorMessage('Failed to create tournament')
       return null
     } finally {

@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import logger from '../lib/logger'
 import { useNavigate } from 'react-router-dom'
 import Button from '../components/ui/Button'
 import { fetchHealth } from '../lib/api'
@@ -23,7 +24,7 @@ const HealthCheckPage = () => {
         setHealth(data)
       } catch (err) {
         setError('API へのアクセスに失敗しました')
-        console.error(err)
+        logger.error(err)
       } finally {
         setLoading(false)
       }

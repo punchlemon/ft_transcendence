@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef } from 'react'
+import logger from '../lib/logger'
 import { useNavigate } from 'react-router-dom'
 import useAuthStore from '../stores/authStore'
 // Tournament alias registration UI removed
@@ -50,7 +51,7 @@ const GameLobbyPage = () => {
     setFriendsLoading(true)
     fetchUserFriends(String(user.id))
       .then((res) => setFriends(res.data))
-      .catch((err) => console.error('Failed to fetch friends', err))
+      .catch((err) => logger.error('Failed to fetch friends', err))
       .finally(() => setFriendsLoading(false))
   }, [selectedMode, user])
 
@@ -86,8 +87,8 @@ const GameLobbyPage = () => {
         setCreatedTournament(detail.data)
         setIsStartDisabled(false)
         setIsInviteModalOpen(true)
-      } catch (err) {
-        console.error('Failed to create tournament', err)
+        } catch (err) {
+        logger.error('Failed to create tournament', err)
         alert('Failed to create tournament')
       } finally {
         setIsCreatingTournament(false)
@@ -130,7 +131,7 @@ const GameLobbyPage = () => {
                 }
               }
             } catch (err) {
-              console.error('Failed to parse matching ws message', err)
+              logger.error('Failed to parse matching ws message', err)
             }
           }
 
@@ -139,7 +140,7 @@ const GameLobbyPage = () => {
             setIsMatching(false)
           }
         } catch (err) {
-          console.error('Failed to start matching socket', err)
+          logger.error('Failed to start matching socket', err)
           setIsMatching(false)
         }
       } else if (matchType === 'private') {
@@ -152,7 +153,7 @@ const GameLobbyPage = () => {
           // Navigate into the room and request GameRoom to show invite modal
           navigate(`/game/${sessionId}?mode=remote&private=true&showInvite=1`)
         } catch (err) {
-          console.error('Failed to create private room', err)
+          logger.error('Failed to create private room', err)
           setIsMatching(false)
           alert('Failed to create private room')
         }

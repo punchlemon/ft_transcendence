@@ -1,4 +1,5 @@
 import { create } from 'zustand'
+import logger from '../lib/logger'
 
 export type AuthUserSnapshot = {
   id: number
@@ -52,7 +53,7 @@ const readUserSnapshot = (): AuthUserSnapshot | null => {
   try {
     return JSON.parse(raw) as AuthUserSnapshot
   } catch (error) {
-    console.warn('ユーザースナップショットの解析に失敗したため、破棄しました。', error)
+    logger.warn('ユーザースナップショットの解析に失敗したため、破棄しました。', error)
     sessionStorage.removeItem(USER_SNAPSHOT_KEY)
     return null
   }
@@ -77,7 +78,7 @@ const readMfaChallenge = (): MfaChallenge | null => {
   try {
     return JSON.parse(raw) as MfaChallenge
   } catch (error) {
-    console.warn('MFAチャレンジの復元に失敗したため、破棄しました。', error)
+    logger.warn('MFAチャレンジの復元に失敗したため、破棄しました。', error)
     sessionStorage.removeItem(MFA_CHALLENGE_KEY)
     return null
   }

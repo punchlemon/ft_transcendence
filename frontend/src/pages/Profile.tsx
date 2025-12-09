@@ -1,4 +1,5 @@
 import { useEffect, useState, useCallback, useRef } from 'react'
+import logger from '../lib/logger'
 import { useParams, useNavigate } from 'react-router-dom'
 import useAuthStore from '../stores/authStore'
 import { useChatStore } from '../stores/chatStore'
@@ -113,7 +114,7 @@ const ProfilePage = () => {
       
       setEditingField(null)
     } catch (err) {
-      console.error(err)
+      logger.error('Failed to save profile edit', err)
     }
   }
 
@@ -179,7 +180,7 @@ const ProfilePage = () => {
         }))
       )
     } catch (err) {
-      console.error(err)
+      logger.error('Failed to load profile', err)
       setError('Failed to load profile')
     } finally {
       setIsLoading(false)
@@ -293,7 +294,7 @@ const ProfilePage = () => {
           return [newEntry, ...prev]
         })
       } catch (e) {
-        console.error('Failed to apply match_history_update', e)
+        logger.error('Failed to apply match_history_update', e)
       }
     })
 
@@ -320,7 +321,7 @@ const ProfilePage = () => {
       
       await fetchProfileData()
     } catch (err) {
-      console.error(err)
+      logger.error('Failed to perform friend action', err)
       // Ideally show a toast here
     } finally {
       setIsActionLoading(false)
@@ -334,7 +335,7 @@ const ProfilePage = () => {
       const { sessionId } = await inviteToGame(Number(profile.id))
       navigate(`/game/${sessionId}`)
     } catch (err) {
-      console.error(err)
+      logger.error('Failed to invite user', err)
       setError('Failed to invite user')
     } finally {
       setIsActionLoading(false)
@@ -366,7 +367,7 @@ const ProfilePage = () => {
       // Send via store helper to avoid duplicated /api path issues
       await sendMessage(message)
     } catch (err) {
-      console.error(err)
+      logger.error('Failed to send DM message', err)
       setError('Failed to send message')
       throw err
     }

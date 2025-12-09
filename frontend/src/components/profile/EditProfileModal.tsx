@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react'
+import logger from '../../lib/logger'
 import { updateUserProfile, uploadAvatar } from '../../lib/api'
 import useAuthStore from '../../stores/authStore'
 import { DEFAULT_AVATARS } from '../../lib/avatars'
@@ -85,7 +86,7 @@ export const EditProfileModal = ({ userId, initialData, isOpen, editMode = 'all'
       onSuccess(updated)
       onClose()
     } catch (err: any) {
-      console.error(err)
+      logger.error('Failed to update profile', err)
       setError(err.response?.data?.error?.message || 'Failed to update profile')
     } finally {
       setIsSubmitting(false)

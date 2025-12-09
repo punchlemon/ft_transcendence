@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import logger from '../lib/logger'
 import { Link } from 'react-router-dom'
 import { fetchUsers, fetchUserFriends, fetchSentFriendRequests, fetchReceivedFriendRequests, fetchBlockedUsers, type UserSearchResponse, type UserSearchParams } from '../lib/api'
 import { onChatWsEvent } from '../lib/chatWs'
@@ -104,7 +105,7 @@ const UsersPage = () => {
       const parsed = JSON.parse(raw) as Partial<FilterState>
       return sanitizeFilters(parsed)
     } catch (error) {
-      console.error('Failed to parse users filters from storage', error)
+      logger.error('Failed to parse users filters from storage', error)
       return DEFAULT_FILTERS
     }
   })
@@ -242,19 +243,19 @@ const UsersPage = () => {
     if (currentUser) {
       fetchUserFriends(currentUser.id.toString()).then(res => {
         setMyFriends(res.data?.map(f => f.id) || [])
-      }).catch(console.error)
+      }).catch((err) => logger.error('Failed to fetch user friends', err))
 
       fetchSentFriendRequests().then(res => {
         setSentRequests(res.data?.map(r => r.receiver?.id).filter((id): id is number => !!id) || [])
-      }).catch(console.error)
+      }).catch((err) => logger.error('Failed to fetch sent friend requests', err))
 
       fetchReceivedFriendRequests().then(res => {
         setReceivedRequests(res.data?.map(r => r.sender?.id).filter((id): id is number => !!id) || [])
-      }).catch(console.error)
+      }).catch((err) => logger.error('Failed to fetch received friend requests', err))
 
       fetchBlockedUsers().then(res => {
         setBlockedUsers(res.data?.map(u => u.id) || [])
-      }).catch(console.error)
+      }).catch((err) => logger.error('Failed to fetch blocked users', err))
     }
   }, [currentUser])
 
@@ -267,7 +268,7 @@ const UsersPage = () => {
         setUsers(response.data || [])
         setMeta(response.meta || { page: filters.page, limit: filters.limit, total: 0 })
       } catch (error) {
-        console.error('Failed to fetch users:', error)
+        logger.error('Failed to fetch users:', error)
       } finally {
         setLoading(false)
       }
@@ -279,7 +280,7 @@ const UsersPage = () => {
     try {
       localStorage.setItem(STORAGE_KEY, JSON.stringify(filters))
     } catch (error) {
-      console.error('Failed to persist users filters', error)
+      logger.error('Failed to persist users filters', error)
     }
   }, [filters])
 

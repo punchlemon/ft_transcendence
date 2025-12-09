@@ -1,5 +1,6 @@
 import { create } from 'zustand';
 import { api } from '../lib/api';
+import logger from '../lib/logger';
 import useAuthStore from './authStore';
 
 export interface ChatUser {
@@ -158,7 +159,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
         },
         }));
     } catch (error) {
-        console.error("Failed to fetch messages", error);
+      logger.error("Failed to fetch messages", error);
     }
   },
 
@@ -195,7 +196,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
     try {
       await api.post(`/chat/threads/${threadId}/read`);
     } catch (error) {
-      console.error("Failed to mark as read", error);
+      logger.error("Failed to mark as read", error);
     }
   },
 
@@ -229,7 +230,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
     // If we are in the thread, mark as read on server so it doesn't show as unread on refresh
     const { activeThreadId } = get();
     if (activeThreadId === message.channelId) {
-        api.post(`/chat/threads/${message.channelId}/read`).catch(console.error);
+      api.post(`/chat/threads/${message.channelId}/read`).catch((err) => logger.error('Failed to mark thread as read', err));
     }
   },
 

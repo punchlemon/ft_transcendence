@@ -1,4 +1,5 @@
 import { useMemo } from 'react'
+import logger from '../../lib/logger'
 
 export type MfaBackupCodesModalProps = {
   codes: string[]
@@ -19,12 +20,12 @@ const MfaBackupCodesModal = ({ codes, onClose }: MfaBackupCodesModalProps) => {
   const codesText = useMemo(() => codes.join('\n'), [codes])
 
   const copyAll = async () => {
-    try {
-      await navigator.clipboard.writeText(codesText)
-    } catch (error) {
-      console.error('Failed to copy backup codes', error)
+      try {
+        await navigator.clipboard.writeText(codesText)
+      } catch (error) {
+        logger.error('Failed to copy backup codes', error)
+      }
     }
-  }
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 px-4">

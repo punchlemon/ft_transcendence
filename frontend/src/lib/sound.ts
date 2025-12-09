@@ -1,3 +1,5 @@
+import logger from './logger'
+
 // Simple sound synthesizer using Web Audio API
 class SoundManager {
   private context: AudioContext | null = null;
@@ -12,7 +14,7 @@ class SoundManager {
       this.masterGain.gain.value = 0.3; // Default volume
       this.masterGain.connect(this.context.destination);
     } catch (e) {
-      console.error('Web Audio API not supported', e);
+      logger.error('Web Audio API not supported', e);
     }
   }
 

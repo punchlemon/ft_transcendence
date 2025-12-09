@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef, useMemo } from 'react'
+import logger from '../../lib/logger'
 import { useNavigate } from 'react-router-dom'
 import useAuthStore from '../../stores/authStore'
 import { useChatStore } from '../../stores/chatStore'
@@ -53,7 +54,7 @@ const ChatDrawer = () => {
       fetchNotifications()
       fetchBlockedUsers().then(res => {
         setBlockedUsers(res.data?.map(u => u.id) || [])
-      }).catch(console.error)
+      }).catch((err) => logger.error('Failed to fetch blocked users for chat drawer', err))
     }
     return () => {
       disconnectChatWs()
@@ -119,7 +120,7 @@ const ChatDrawer = () => {
     try {
       await sendMessage(message)
     } catch (err: any) {
-      console.error('Failed to send message', err)
+      logger.error('Failed to send message', err)
       if (err.message?.includes('blocked')) {
         alert('Failed to send message: You are blocked or have blocked this user.')
       }
@@ -175,7 +176,7 @@ const ChatDrawer = () => {
       navigate(`/game/${sessionId}`)
       setDrawerOpen(false)
     } catch (err) {
-      console.error('Failed to invite user', err)
+      logger.error('Failed to invite user', err)
     }
   }
 

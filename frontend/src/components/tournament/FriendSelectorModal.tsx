@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from 'react'
+import logger from '../../lib/logger'
 import Button from '../ui/Button'
 import { fetchUserFriends } from '../../lib/api'
 import { inviteTournamentParticipant } from '../../lib/api'
@@ -22,7 +23,7 @@ const FriendSelectorModal = ({ open, onClose, tournamentId }: Props) => {
     setLoading(true)
     fetchUserFriends(String(user.id))
       .then((res) => setFriends(res.data))
-      .catch(console.error)
+      .catch((err) => logger.error('Failed to fetch user friends for selector', err))
       .finally(() => setLoading(false))
   }, [open, user])
 
@@ -38,7 +39,7 @@ const FriendSelectorModal = ({ open, onClose, tournamentId }: Props) => {
       // optimistic - close modal
       onClose()
     } catch (e) {
-      console.error(e)
+      logger.error('Failed to invite tournament participant', e)
       alert('招待に失敗しました')
     } finally {
       setInviting(null)

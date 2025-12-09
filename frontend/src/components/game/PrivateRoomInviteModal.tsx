@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react'
+import logger from '../../lib/logger'
 import { useChatStore } from '../../stores/chatStore'
 import { api, sendInviteToThread } from '../../lib/api'
 
@@ -23,7 +24,7 @@ const PrivateRoomInviteModal: React.FC<Props> = ({ sessionId, onClose }) => {
       setCopied(true)
       setTimeout(() => setCopied(false), 2000)
     } catch (err) {
-      console.error('Failed to copy invite link', err)
+      logger.error('Failed to copy invite link', err)
       alert('Failed to copy link to clipboard')
     }
   }
@@ -60,7 +61,7 @@ const PrivateRoomInviteModal: React.FC<Props> = ({ sessionId, onClose }) => {
         alert('Please open the chat, select the thread you want to send to, then press "Send to chat" again.')
       }
     } catch (err) {
-      console.error('Failed to send invite to chat', err)
+      logger.error('Failed to send invite to chat', err)
       alert('Failed to send invite to chat')
     }
   }

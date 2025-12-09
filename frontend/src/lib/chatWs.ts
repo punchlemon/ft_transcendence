@@ -2,6 +2,7 @@ import useAuthStore from '../stores/authStore';
 import { useChatStore } from '../stores/chatStore';
 import { useNotificationStore } from '../stores/notificationStore';
 import { baseURL } from './api';
+import logger from './logger';
 
 let socket: WebSocket | null = null;
 let reconnectTimer: NodeJS.Timeout | null = null;
@@ -38,12 +39,12 @@ export const connectChatWs = () => {
   }
 
   const finalUrl = `${protocol}://${host}/api/ws/chat?token=${token}`;
-  console.log('Connecting to Chat WS:', finalUrl);
+  logger.debug('Connecting to Chat WS:', finalUrl);
 
   socket = new WebSocket(finalUrl);
 
   socket.onopen = () => {
-    console.log('Chat WS connected');
+    logger.info('Chat WS connected');
   };
 
   socket.onmessage = (event) => {
@@ -89,17 +90,17 @@ export const connectChatWs = () => {
         }
       }
     } catch (e) {
-      console.error('Failed to parse WS message', e);
+      logger.error('Failed to parse WS message', e);
     }
   };
 
   socket.onclose = (event) => {
-    console.log('Chat WS disconnected', event.code, event.reason);
+    logger.info('Chat WS disconnected', event.code, event.reason);
     socket = null;
     
     // Check if server revoked the session
     if (event.code === 4000 || event.reason === 'session_revoked') {
-      console.log('Session revoked by server, clearing session and logging out');
+      logger.info('Session revoked by server, clearing session and logging out');
       isExplicitDisconnect = true;
       useAuthStore.getState().clearSession();
       // Optionally navigate to login
@@ -109,7 +110,7 @@ export const connectChatWs = () => {
     
     // Attempt reconnect unless explicitly disconnected or auth failed (1008)
     if (!isExplicitDisconnect && event.code !== 1008) {
-      console.log('Attempting to reconnect in 3s...');
+      logger.info('Attempting to reconnect in 3s...');
       reconnectTimer = setTimeout(() => {
         connectChatWs();
       }, 3000);

@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import logger from '../../lib/logger'
 import { useNotificationStore, Notification } from '../../stores/notificationStore'
 import { respondTournamentParticipant } from '../../lib/api'
 
@@ -45,7 +46,7 @@ export default function NotificationToast() {
       await markAsRead(n.id)
       setToast(null)
     } catch (e) {
-      console.error('Failed to respond to invite', e)
+      logger.error('Failed to respond to invite', e)
     } finally {
       setLoading(false)
     }
