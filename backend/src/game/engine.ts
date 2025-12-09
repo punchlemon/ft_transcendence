@@ -227,9 +227,11 @@ export class GameEngine {
             console.error('[engine] Failed to emit status change for ONLINE on removePlayer', e);
           }
         }
-        // Clear stored player id for the removed slot
-        try { delete this.players[removedSlot] } catch (e) {}
-        try { delete this.playersAliases[removedSlot] } catch (e) {}
+        // We do NOT clear the stored player ID here. This ensures that if the
+        // user reconnects (e.g. after page reload or navigation), isPlayer(userId)
+        // returns true, allowing them to rejoin the session.
+        // try { delete this.players[removedSlot] } catch (e) {}
+        // try { delete this.playersAliases[removedSlot] } catch (e) {}
       }
     } catch (e) {
       // swallow

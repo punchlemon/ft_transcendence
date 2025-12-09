@@ -88,24 +88,27 @@ export class GameManager {
               const g = this.games.get(sessionId);
               if (g) {
                 const players = (g as any).players as { p1?: number; p2?: number } | undefined;
-                if (players) {
-                  Object.values(players).forEach((uid) => {
-                    if (typeof uid === 'number') {
-                      try {
+                const clients = (g as any).clients as { p1?: any; p2?: any } | undefined;
+                
+                const setOnline = (uid: number) => {
+                    try {
                         prisma.user.update({ where: { id: uid }, data: { status: 'ONLINE' } })
                           .catch((e) => console.error('[game-manager] Failed to set user status ONLINE on destroy', e));
                         try {
-                          // Use userService dynamic import to avoid circulars if any
                           const { userService } = require('../services/user');
                           userService.emitStatusChange(uid, 'ONLINE');
                         } catch (e) {
                           console.error('[game-manager] Failed to emit status change for ONLINE on destroy', e);
                         }
-                      } catch (e) {
-                        // swallow per-user errors
-                      }
-                    }
-                  });
+                    } catch (e) {}
+                };
+
+                if (players) {
+                    // Only set ONLINE if the client is still connected (meaning removePlayer wasn't called yet).
+                    // If removePlayer WAS called, the user status was already set to ONLINE (or they are in a new game),
+                    // so we shouldn't touch it.
+                    if (players.p1 && clients?.p1) setOnline(players.p1);
+                    if (players.p2 && clients?.p2) setOnline(players.p2);
                 }
               }
             } catch (e) {
