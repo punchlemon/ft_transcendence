@@ -60,13 +60,26 @@ export const buildServer = async () => {
 }
 const start = async () => {
   try {
-    const server = await buildServer()
+    let server = await buildServer()
     const port = Number(process.env.BACKEND_PORT || 3000)
     const host = '0.0.0.0'
     await server.listen({ port, host })
     server.log.info(`Server listening on ${host}:${port}`)
   } catch (err) {
-    console.error('Failed to start server', err)
+    // Prefer Fastify logger if available, otherwise fallback to console
+    try {
+      // If buildServer partially succeeded and returned a server, use its logger
+      // (this is defensive; server may be undefined if buildServer failed early)
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const maybeServer: any = (err && err.server) || undefined
+      if (maybeServer && maybeServer.log && maybeServer.log.error) {
+        maybeServer.log.error('Failed to start server', err)
+      } else {
+        console.error('Failed to start server', err)
+      }
+    } catch (e) {
+      console.error('Failed to start server', err)
+    }
     process.exit(1)
   }
 }

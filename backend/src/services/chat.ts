@@ -1,10 +1,11 @@
 import { prisma } from '../utils/prisma';
 import { Channel, Message, ChannelMember, Prisma } from '@prisma/client';
 import { EventEmitter } from 'events';
+import logger from '../utils/logger';
 
 export class ChatService extends EventEmitter {
   async getOrCreateDmChannel(userId1: number, userId2: number) {
-    console.log(`getOrCreateDmChannel: ${userId1}, ${userId2}`);
+    logger.debug(`getOrCreateDmChannel: ${userId1}, ${userId2}`);
     const [minId, maxId] = [userId1, userId2].sort((a, b) => a - b);
     const slug = `dm-${minId}-${maxId}`;
 
@@ -14,7 +15,7 @@ export class ChatService extends EventEmitter {
     });
 
     if (!channel) {
-      console.log(`Creating new DM channel: ${slug}`);
+      logger.info(`Creating new DM channel: ${slug}`);
       try {
         channel = await prisma.channel.create({
           data: {
@@ -34,11 +35,11 @@ export class ChatService extends EventEmitter {
         });
         this.emit('channel_created', channel);
       } catch (e) {
-        console.error('Failed to create DM channel:', e);
+        logger.error('Failed to create DM channel:', e);
         throw e;
       }
     } else {
-      console.log(`Found existing DM channel: ${channel.id}`);
+      logger.debug(`Found existing DM channel: ${channel.id}`);
     }
 
     return channel;

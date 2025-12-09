@@ -4,6 +4,7 @@ import { WebSocket } from 'ws';
 import { AIDifficulty } from './ai';
 import { prisma } from '../utils/prisma';
 import persistMatchResult from './matchPersistence';
+import logger from '../utils/logger';
 
 export class GameManager {
   private static instance: GameManager;
@@ -27,9 +28,9 @@ export class GameManager {
 
   createGame(sessionId: string): GameEngine {
     try {
-      try { console.info(`[game-manager] createGame called for ${sessionId}`) } catch (e) {}
+      try { logger.debug(`[game-manager] createGame called for ${sessionId}`) } catch (e) {}
       if (this.expiredSessions.has(sessionId)) {
-        try { console.info(`[game-manager] createGame refused: session expired ${sessionId}`) } catch (e) {}
+        try { logger.info(`[game-manager] createGame refused: session expired ${sessionId}`) } catch (e) {}
         throw new Error('SessionExpired');
       }
     } catch (e) {
@@ -52,12 +53,12 @@ export class GameManager {
         // be re-used. For local/demo sessions and local tournament matches
         // we intentionally avoid marking expired to allow a quick "Play
         // Again" reconnect using the same URL/session id.
-        try {
           try {
-            console.info(`[game-manager] Handling empty game: ${sessionId}`);
-          } catch (e) {
-            // ignore logging failures
-          }
+            try {
+              logger.info(`[game-manager] Handling empty game: ${sessionId}`);
+            } catch (e) {
+              // ignore logging failures
+            }
 
           // If this is NOT a local/demo session, mark expired and broadcast
           // a session_expired event so other clients' invite UI is invalidated.
@@ -75,15 +76,15 @@ export class GameManager {
             }
           } else {
             try {
-              console.info(`[game-manager] Local session ${sessionId} not marked expired to allow Play Again`);
+              logger.debug(`[game-manager] Local session ${sessionId} not marked expired to allow Play Again`);
             } catch (e) {}
           }
         } catch (e) {
           // swallow
         }
 
-          try {
-            // Before removing the in-memory game, mark any real user
+            try {
+              // Before removing the in-memory game, mark any real user
             // participants as ONLINE since the room is being destroyed.
             try {
               const g = this.games.get(sessionId);
@@ -94,13 +95,13 @@ export class GameManager {
                 const setOnline = (uid: number) => {
                     try {
                         prisma.user.update({ where: { id: uid }, data: { status: 'ONLINE' } })
-                          .catch((e) => console.error('[game-manager] Failed to set user status ONLINE on destroy', e));
-                        try {
-                          const { userService } = require('../services/user');
-                          userService.emitStatusChange(uid, 'ONLINE');
-                        } catch (e) {
-                          console.error('[game-manager] Failed to emit status change for ONLINE on destroy', e);
-                        }
+                          .catch((e) => logger.error('[game-manager] Failed to set user status ONLINE on destroy', e));
+                          try {
+                            const { userService } = require('../services/user');
+                            userService.emitStatusChange(uid, 'ONLINE');
+                          } catch (e) {
+                            logger.error('[game-manager] Failed to emit status change for ONLINE on destroy', e);
+                          }
                     } catch (e) {}
                 };
 
@@ -127,12 +128,12 @@ export class GameManager {
       }
     );
     this.games.set(sessionId, game);
-    try { console.info(`[game-manager] Game registered: ${sessionId} (games=${this.games.size})`) } catch (e) {}
+    try { logger.info(`[game-manager] Game registered: ${sessionId} (games=${this.games.size})`) } catch (e) {}
     return game;
   }
 
   isExpired(sessionId: string) {
-    try { console.info(`[game-manager] isExpired? ${sessionId} => ${this.expiredSessions.has(sessionId)}`) } catch (e) {}
+    try { logger.debug(`[game-manager] isExpired? ${sessionId} => ${this.expiredSessions.has(sessionId)}`) } catch (e) {}
     return this.expiredSessions.has(sessionId);
   }
 
@@ -165,7 +166,7 @@ export class GameManager {
     try {
       await persistMatchResult(result as any)
     } catch (e) {
-      console.error('[game-manager] persistMatchResult failed', e)
+      logger.error('[game-manager] persistMatchResult failed', e)
     }
   }
 
@@ -180,8 +181,8 @@ export class GameManager {
   createWaitingSlot(sessionId?: string, socket?: any, userId?: number, displayName?: string) {
     const id = sessionId ?? `game_wait_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`
     this.waitingSlots.set(id, { socket, userId, displayName, createdAt: Date.now() })
-    try { console.info(`[game-manager] createWaitingSlot -> ${id} (user=${userId ?? 'anon'})`) } catch (e) {}
-    try { console.info(`[game-manager] waitingSlots count=${this.waitingSlots.size}`) } catch (e) {}
+    try { logger.debug(`[game-manager] createWaitingSlot -> ${id} (user=${userId ?? 'anon'})`) } catch (e) {}
+    try { logger.debug(`[game-manager] waitingSlots count=${this.waitingSlots.size}`) } catch (e) {}
     return id
   }
 
@@ -195,15 +196,15 @@ export class GameManager {
       const v = this.waitingSlots.get(sessionId)
       if (!v) return null
       this.waitingSlots.delete(sessionId)
-      try { console.info(`[game-manager] takeWaitingSlot explicit -> ${sessionId}`) } catch (e) {}
-      try { console.info(`[game-manager] waitingSlots count=${this.waitingSlots.size}`) } catch (e) {}
+      try { logger.debug(`[game-manager] takeWaitingSlot explicit -> ${sessionId}`) } catch (e) {}
+      try { logger.debug(`[game-manager] waitingSlots count=${this.waitingSlots.size}`) } catch (e) {}
       return { sessionId, ...v }
     }
     // take the first available
     for (const [key, value] of this.waitingSlots.entries()) {
       this.waitingSlots.delete(key)
-      try { console.info(`[game-manager] takeWaitingSlot -> ${key}`) } catch (e) {}
-      try { console.info(`[game-manager] waitingSlots count=${this.waitingSlots.size}`) } catch (e) {}
+      try { logger.debug(`[game-manager] takeWaitingSlot -> ${key}`) } catch (e) {}
+      try { logger.debug(`[game-manager] waitingSlots count=${this.waitingSlots.size}`) } catch (e) {}
       return { sessionId: key, ...value }
     }
     return null
@@ -211,8 +212,8 @@ export class GameManager {
 
   removeWaitingSlot(sessionId: string) {
     const existed = this.waitingSlots.delete(sessionId)
-    try { console.info(`[game-manager] removeWaitingSlot ${sessionId} -> removed=${existed}`) } catch (e) {}
-    try { console.info(`[game-manager] waitingSlots count=${this.waitingSlots.size}`) } catch (e) {}
+    try { logger.debug(`[game-manager] removeWaitingSlot ${sessionId} -> removed=${existed}`) } catch (e) {}
+    try { logger.debug(`[game-manager] waitingSlots count=${this.waitingSlots.size}`) } catch (e) {}
   }
 
   getGame(sessionId: string): GameEngine | undefined {
@@ -235,12 +236,12 @@ export class GameManager {
             Object.values(players).forEach((uid) => {
               if (typeof uid === 'number') {
                 prisma.user.update({ where: { id: uid }, data: { status: 'ONLINE' } })
-                  .catch((e) => console.error('[game-manager] Failed to set user status ONLINE on removeGame', e));
+                  .catch((e) => logger.error('[game-manager] Failed to set user status ONLINE on removeGame', e));
                 try {
                   const { userService } = require('../services/user');
                   userService.emitStatusChange(uid, 'ONLINE');
                 } catch (e) {
-                  console.error('[game-manager] Failed to emit status change for ONLINE on removeGame', e);
+                  logger.error('[game-manager] Failed to emit status change for ONLINE on removeGame', e);
                 }
               }
             });
@@ -307,7 +308,7 @@ export class GameManager {
         }
       });
     } catch (e) {
-      console.error('Failed to update tournament match', e);
+      logger.error('Failed to update tournament match', e);
     }
   }
 }

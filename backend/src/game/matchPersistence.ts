@@ -1,5 +1,6 @@
 import { prisma } from '../utils/prisma'
 import { notificationService } from '../services/notification'
+import logger from '../utils/logger'
 
 type MatchResult = {
   winner: 'p1' | 'p2'
@@ -87,20 +88,20 @@ export async function persistMatchResult(result: MatchResult) {
         try {
           notificationService.emit('match_history', { userId: uid, match: createdMatchSummary })
         } catch (e) {
-          console.error('[matchPersistence] Failed to emit match_history for user', uid, e)
+          logger.error('[matchPersistence] Failed to emit match_history for user', uid, e)
         }
       }
     } catch (e) {
-      console.error('[matchPersistence] Error emitting match_history updates', e)
+      logger.error('[matchPersistence] Error emitting match_history updates', e)
     }
 
     try {
       notificationService.emit('match_history_public', { match: createdMatchSummary })
     } catch (e) {
-      console.error('[matchPersistence] Failed to emit match_history_public', e)
+      logger.error('[matchPersistence] Failed to emit match_history_public', e)
     }
   } catch (e) {
-    console.error('[matchPersistence] Failed to save match result', e)
+    logger.error('[matchPersistence] Failed to save match result', e)
   }
 }
 

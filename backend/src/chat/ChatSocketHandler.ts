@@ -319,14 +319,14 @@ export default class ChatSocketHandler {
     (socket as SocketWithSessionId).__sessionId = sessionId;
     connectionIndex.addSocket(userId, sessionId, socket as SocketWithSessionId);
     if (connectionIndex.getConnectionCount(userId) === 1) {
-      await this.fastify.prisma.user.update({ where: { id: userId }, data: { status: 'ONLINE' } }).catch(console.error);
+      await this.fastify.prisma.user.update({ where: { id: userId }, data: { status: 'ONLINE' } }).catch((e) => this.fastify.log.error(e));
       this.broadcastStatusChange(userId, 'ONLINE');
     }
 
     socket.on('close', async () => {
       connectionIndex.removeSocket(userId, sessionId, socket as SocketWithSessionId);
       if (connectionIndex.getConnectionCount(userId) === 0) {
-        await this.fastify.prisma.user.update({ where: { id: userId }, data: { status: 'OFFLINE' } }).catch(console.error);
+        await this.fastify.prisma.user.update({ where: { id: userId }, data: { status: 'OFFLINE' } }).catch((e) => this.fastify.log.error(e));
         this.broadcastStatusChange(userId, 'OFFLINE');
       }
     });

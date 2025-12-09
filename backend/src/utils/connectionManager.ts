@@ -1,4 +1,5 @@
 import { EventEmitter } from 'events'
+import logger from './logger'
 
 export type ConnectionType = 'game' | 'chat' | string
 
@@ -33,22 +34,22 @@ export function registerConnection(userId: number, sessionId: string, socket: an
       prev.connectedAt = Date.now()
       prev.authSessionId = authSessionId
       prev.sessionId = sessionId
-      try { console.info(`[connectionManager] Refreshed ${type} connection for user ${userId} session=${sessionId}`) } catch (e) {}
+      try { logger.debug(`[connectionManager] Refreshed ${type} connection for user ${userId} session=${sessionId}`) } catch (e) {}
       return
     }
 
     // If prev exists but its recorded type is different (shouldn't happen),
     // avoid evicting to prevent cross-type tear-downs. Log for diagnostics.
-    if ((prev as any).type && (prev as any).type !== type) {
+      if ((prev as any).type && (prev as any).type !== type) {
       try {
-        console.warn(`[connectionManager] WARNING: previous connection type mismatch for user ${userId}: prevType=${(prev as any).type} newType=${type} (prevSession=${prev.sessionId} newSession=${sessionId}). Skipping eviction to avoid cross-type disruption.`)
+        logger.warn(`[connectionManager] WARNING: previous connection type mismatch for user ${userId}: prevType=${(prev as any).type} newType=${type} (prevSession=${prev.sessionId} newSession=${sessionId}). Skipping eviction to avoid cross-type disruption.`)
       } catch (e) {}
       // still store the new slot under this type without evicting other slots
     } else {
       try {
-        try { console.info(`[connectionManager] Evicting previous ${type} connection for user ${userId} (prevSession=${prev.sessionId}, newSession=${sessionId})`) } catch (e) {}
+        try { logger.info(`[connectionManager] Evicting previous ${type} connection for user ${userId} (prevSession=${prev.sessionId}, newSession=${sessionId})`) } catch (e) {}
         // include a stack trace to identify the caller
-        try { console.info(new Error('registerConnection called from:').stack) } catch (e) {}
+        try { logger.debug(new Error('registerConnection called from:').stack) } catch (e) {}
         if (typeof prev.socket.close === 'function') prev.socket.close()
         else if (typeof prev.socket.terminate === 'function') prev.socket.terminate()
       } catch (e) {
@@ -59,7 +60,7 @@ export function registerConnection(userId: number, sessionId: string, socket: an
 
   const record: ConnRecord = { socket, connectedAt: Date.now(), authSessionId, sessionId, type }
   slots[type] = record
-  try { console.info(`[connectionManager] Registered ${type} connection for user ${userId} session=${sessionId}`) } catch (e) {}
+  try { logger.info(`[connectionManager] Registered ${type} connection for user ${userId} session=${sessionId}`) } catch (e) {}
   try { connectionEvents.emit('registered', userId, record) } catch (e) {}
 }
 
@@ -95,7 +96,7 @@ export function debugUserSlots(userId: number) {
   for (const [k, v] of Object.entries(slots)) {
     out[k] = v ? { sessionId: v.sessionId, connectedAt: v.connectedAt, authSessionId: v.authSessionId } : null
   }
-  try { console.info(`[connectionManager] debug slots for user ${userId}: ${JSON.stringify(out)}`) } catch (e) {}
+  try { logger.debug(`[connectionManager] debug slots for user ${userId}: ${JSON.stringify(out)}`) } catch (e) {}
   return out
 }
 

@@ -3,6 +3,7 @@ import { prisma } from '../utils/prisma';
 import { userService } from '../services/user';
 import { GameState, GameConfig, DEFAULT_CONFIG, PlayerInput } from './types';
 import { AIOpponent, AIDifficulty } from './ai';
+import logger from '../utils/logger';
 
 export class GameEngine {
   public readonly sessionId: string;
@@ -136,11 +137,11 @@ export class GameEngine {
 
         // Mark the user as being in a valid (non-destroyed) room.
         prisma.user.update({ where: { id: userId }, data: { status: 'IN_GAME' } })
-          .catch((e) => console.error('[engine] Failed to set user status IN_GAME on addPlayer', e));
+          .catch((e) => logger.error('[engine] Failed to set user status IN_GAME on addPlayer', e));
         try {
           userService.emitStatusChange(userId, 'IN_GAME');
         } catch (e) {
-          console.error('[engine] Failed to emit status change for IN_GAME on addPlayer', e);
+          logger.error('[engine] Failed to emit status change for IN_GAME on addPlayer', e);
         }
       }
       if (alias) this.playersAliases.p1 = alias;
@@ -153,11 +154,11 @@ export class GameEngine {
 
         // Mark the user as being in a valid (non-destroyed) room.
         prisma.user.update({ where: { id: userId }, data: { status: 'IN_GAME' } })
-          .catch((e) => console.error('[engine] Failed to set user status IN_GAME on addPlayer', e));
+          .catch((e) => logger.error('[engine] Failed to set user status IN_GAME on addPlayer', e));
         try {
           userService.emitStatusChange(userId, 'IN_GAME');
         } catch (e) {
-          console.error('[engine] Failed to emit status change for IN_GAME on addPlayer', e);
+          logger.error('[engine] Failed to emit status change for IN_GAME on addPlayer', e);
         }
       }
       if (alias) this.playersAliases.p2 = alias;
@@ -220,11 +221,11 @@ export class GameEngine {
         const removedUserId = this.players[removedSlot]
         if (typeof removedUserId === 'number') {
           prisma.user.update({ where: { id: removedUserId }, data: { status: 'ONLINE' } })
-            .catch((e) => console.error('[engine] Failed to set user status ONLINE on removePlayer', e));
+            .catch((e) => logger.error('[engine] Failed to set user status ONLINE on removePlayer', e));
           try {
             userService.emitStatusChange(removedUserId, 'ONLINE');
           } catch (e) {
-            console.error('[engine] Failed to emit status change for ONLINE on removePlayer', e);
+            logger.error('[engine] Failed to emit status change for ONLINE on removePlayer', e);
           }
         }
         // We do NOT clear the stored player ID here. This ensures that if the
@@ -243,9 +244,9 @@ export class GameEngine {
       if (removedSlot) {
         const removedUserId = this.players[removedSlot]
         if (typeof this.creatorUserId === 'number' && removedUserId === this.creatorUserId) {
-          // Use console.info to ensure the message appears in logs; the Fastify
+          // Use logger.info to ensure the message appears in logs; the Fastify
           // request instance isn't available here.
-          console.info(`[game:${this.sessionId}] Creator user ${removedUserId} has left the room (slot=${removedSlot})`)
+          logger.info(`[game:${this.sessionId}] Creator user ${removedUserId} has left the room (slot=${removedSlot})`)
         }
       }
     } catch (e) {
@@ -291,7 +292,7 @@ export class GameEngine {
             // swallow
           }
           try {
-            try { console.info(`[game:${this.sessionId}] calling onEmpty (creator left)`); } catch (e) {}
+            try { logger.debug(`[game:${this.sessionId}] calling onEmpty (creator left)`); } catch (e) {}
             if (this.onEmpty) this.onEmpty();
           } catch (e) {
             // swallow
@@ -301,9 +302,9 @@ export class GameEngine {
           return;
         }
       }
-    } catch (e) {
-      // swallow
-    }
+          } catch (e) {
+            // swallow
+          }
 
     // Public online PvP behavior: if this is a non-private, non-local, non-AI
     // online match and one player leaves, immediately tear down the room and
@@ -389,16 +390,16 @@ export class GameEngine {
         if (typeof uid === 'number') {
           // fire-and-forget DB update and status event so chat WS can broadcast
           prisma.user.update({ where: { id: uid }, data: { status: 'IN_GAME' } })
-            .catch((e) => console.error('[engine] Failed to set user status IN_GAME', e));
+            .catch((e) => logger.error('[engine] Failed to set user status IN_GAME', e));
           try {
             userService.emitStatusChange(uid, 'IN_GAME');
           } catch (e) {
-            console.error('[engine] Failed to emit status change for IN_GAME', e);
+            logger.error('[engine] Failed to emit status change for IN_GAME', e);
           }
         }
       });
     } catch (e) {
-      console.error('[engine] Error while broadcasting IN_GAME status', e);
+      logger.error('[engine] Error while broadcasting IN_GAME status', e);
     }
 
     this.broadcast({ event: 'match:event', payload: { type: 'START' } });
@@ -540,7 +541,7 @@ export class GameEngine {
 
     if (this.state.score[scorer] >= (this.config.winningScore || 5)) {
       // Fire and forget finishGame, but catch errors
-      this.finishGame(scorer).catch(err => console.error('Error finishing game:', err));
+      this.finishGame(scorer).catch(err => logger.error('Error finishing game:', err));
     } else {
       this.resetBall(scorer === 'p1' ? 'p2' : 'p1'); // Serve to loser
     }
@@ -565,7 +566,7 @@ export class GameEngine {
         // Mark that we've persisted this match so restartMatch won't re-persist
         this.lastResultPersisted = true;
       } catch (e) {
-        console.error('Failed to persist game result', e);
+        logger.error('Failed to persist game result', e);
       }
     }
 
@@ -578,7 +579,7 @@ export class GameEngine {
     const { p1, p2 } = this.state.score
     let winner: 'p1' | 'p2' = 'p1'
     if (p2 > p1) winner = 'p2'
-    this.finishGame(winner).catch(err => console.error('Error aborting game:', err));
+    this.finishGame(winner).catch(err => logger.error('Error aborting game:', err));
   }
 
   // Restart the match in the same session. This resets scores/ball and
@@ -613,11 +614,11 @@ export class GameEngine {
             // Mark persisted so subsequent restart attempts won't persist again
             this.lastResultPersisted = true;
           } catch (e) {
-            console.error('[engine] Failed to persist previous match result on restart', e);
+            logger.error('[engine] Failed to persist previous match result on restart', e);
           }
         }
       } catch (e) {
-        console.error('[engine] Error while attempting to persist previous match on restart', e);
+        logger.error('[engine] Error while attempting to persist previous match on restart', e);
       }
 
       // Stop any existing play loop and reset runtime state
@@ -645,7 +646,7 @@ export class GameEngine {
       this.lastResultPersisted = false;
       setTimeout(() => this.startGame(), 3000);
     } catch (e) {
-      console.error('[engine] Failed to restart match', e);
+      logger.error('[engine] Failed to restart match', e);
     }
   }
 
