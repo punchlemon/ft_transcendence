@@ -199,8 +199,7 @@ const GameLobbyPage = () => {
   const handleStartTournamentNow = async (tournamentOverride?: any) => {
     const tournament = tournamentOverride ?? createdTournament
     if (!tournament) return
-    // Starting the tournament no longer auto-navigates. Owner joins via notification like other participants.
-    navigate(`/tournaments/${tournament.id}`)
+    // Starting the tournament no longer auto-navigates; stay in place so notifications can be consumed.
   }
 
   const handleCancelMatching = () => {
