@@ -290,7 +290,21 @@ export default async function gameRoutes(fastify: FastifyInstance) {
                   // If there's an existing connection for the same user/session, allow (reconnect)
                   const existingRec = sessionId ? gameSockets.get(userId) : null
                   const existing = existingRec && existingRec.sessionId === sessionId ? existingRec : null
-                  if (!existing) {
+                  
+                  // If no active socket record, check if the user is actually part of the requested game.
+                  // This handles cases where the previous socket closed (clearing gameSockets) but the
+                  // user is still logically in the game (IN_GAME status).
+                  let isRejoiningCurrentGame = false;
+                  if (!existing && sessionId) {
+                     const targetGame = manager.getGame(sessionId);
+                     if (targetGame && typeof (targetGame as any).isPlayer === 'function') {
+                        if ((targetGame as any).isPlayer(userId)) {
+                           isRejoiningCurrentGame = true;
+                        }
+                     }
+                  }
+
+                  if (!existing && !isRejoiningCurrentGame) {
                     try {
                       const resp = JSON.stringify({ event: 'match:event', payload: { type: 'UNAVAILABLE', message: 'User already in a different game', sessionId } });
                       if (typeof (socket as any).send === 'function') (socket as any).send(resp);

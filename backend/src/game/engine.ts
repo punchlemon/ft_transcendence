@@ -82,6 +82,10 @@ export class GameEngine {
     return this.state.status === 'WAITING' && (!this.clients.p1 || !this.clients.p2);
   }
 
+  isPlayer(userId: number): boolean {
+    return this.players.p1 === userId || this.players.p2 === userId;
+  }
+
   addPlayer(socket: WebSocket, userId?: number, alias?: string): 'p1' | 'p2' | null {
     const aiSlot = (this as any).aiSlot;
     // If a player joins while a previous empty-game teardown was scheduled,
@@ -94,6 +98,37 @@ export class GameEngine {
     } catch (e) {
       // swallow
     }
+
+    // Reconnection logic: if the user is already a player in this game,
+    // update their socket connection.
+    if (userId) {
+      if (this.players.p1 === userId) {
+        // Close old socket if it's different
+        if (this.clients.p1 && this.clients.p1 !== socket) {
+          try { this.clients.p1.close(); } catch (e) {}
+        }
+        this.clients.p1 = socket;
+        // Ensure status is IN_GAME (in case it was set to ONLINE on disconnect)
+        prisma.user.update({ where: { id: userId }, data: { status: 'IN_GAME' } }).catch(() => {});
+        try { userService.emitStatusChange(userId, 'IN_GAME'); } catch (e) {}
+        
+        this.checkStart();
+        return 'p1';
+      } else if (this.players.p2 === userId) {
+        // Close old socket if it's different
+        if (this.clients.p2 && this.clients.p2 !== socket) {
+          try { this.clients.p2.close(); } catch (e) {}
+        }
+        this.clients.p2 = socket;
+        // Ensure status is IN_GAME
+        prisma.user.update({ where: { id: userId }, data: { status: 'IN_GAME' } }).catch(() => {});
+        try { userService.emitStatusChange(userId, 'IN_GAME'); } catch (e) {}
+
+        this.checkStart();
+        return 'p2';
+      }
+    }
+
     if (!this.clients.p1 && aiSlot !== 'p1') {
       this.clients.p1 = socket;
       if (userId) {
@@ -272,6 +307,7 @@ export class GameEngine {
     // online match and one player leaves, immediately tear down the room and
     // force remaining players out. This avoids leaving a half-empty public
     // match that other players could incorrectly join.
+    /*
     try {
       if (removedSlot) {
         const removedUserId = this.players[removedSlot]
@@ -298,6 +334,7 @@ export class GameEngine {
     } catch (e) {
       // swallow
     }
+    */
     
     if (!this.clients.p1 && (!this.clients.p2 && !this.isAIEnabled)) {
       // No players left: schedule a delayed teardown rather than immediately
