@@ -3,6 +3,7 @@ import { GameManager } from './GameManager'
 import { notificationService } from '../services/notification'
 import { getDisplayNameOrFallback } from '../services/user'
 import connectionManager, { registerConnection, unregisterConnection, getConnection } from '../utils/connectionManager'
+import { handleControlEvent } from './ws/controlHandlers'
 
 export default class GameSocketHandler {
   private fastify: FastifyInstance
@@ -243,47 +244,7 @@ export default class GameSocketHandler {
             game.processInput(playerSlot, data.payload)
           }
         } else if (data.event === 'control') {
-          const type = data.payload?.type
-          if (type === 'PAUSE') {
-            game.pauseGame('Paused by player')
-          } else if (type === 'RESUME') {
-            game.startGame()
-          } else if (type === 'ABORT') {
-            try {
-              if (typeof (game as any).abortGame === 'function') {
-                ;(game as any).abortGame()
-              } else if (typeof (game as any).finishGame === 'function') {
-                const s = (game as any).state?.score
-                const winner = s && s.p2 > s.p1 ? 'p2' : 'p1'
-                ;(game as any).finishGame(winner)
-              }
-            } catch (e) {
-              this.fastify.log.error({ err: e }, 'Failed to abort game')
-            }
-          } else if (type === 'LEAVE') {
-            try {
-              game.removePlayer(socket as any)
-              const resp = JSON.stringify({ event: 'match:event', payload: { type: 'LEFT', message: 'You have left the match', sessionId } })
-              if (typeof (socket as any).send === 'function') {
-                (socket as any).send(resp)
-              }
-            } catch (e) {
-              this.fastify.log.warn({ err: e, sessionId }, 'Error while handling LEAVE control event')
-            } finally {
-              try { if (typeof (socket as any).close === 'function') { ;(socket as any).close() } } catch (e) {}
-            }
-          } else if (type === 'RESTART_MATCH') {
-            try {
-              const params = data.payload?.params
-              if (typeof (game as any).restartMatch === 'function') {
-                ;(game as any).restartMatch(params)
-              } else {
-                try { game.startGame() } catch (e) {}
-              }
-            } catch (e) {
-              this.fastify.log.warn({ err: e, sessionId }, 'Error while handling RESTART_MATCH control event')
-            }
-          }
+          await handleControlEvent({ fastify: this.fastify, game, data, socket, sessionId })
         }
       } catch (err) {
         this.fastify.log.error(err, 'Failed to parse message')
