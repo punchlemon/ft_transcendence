@@ -7,6 +7,15 @@ import { presenceService } from '../services/presence';
 import { WebSocket } from 'ws';
 import { sendToSockets } from './socketUtils';
 import connectionIndex, { SocketWithSessionId } from './connectionIndex';
+import { ChatMessagePayload } from '../types/protocol';
+
+type UserSummary = {
+  id: number;
+  displayName?: string | null;
+  login?: string;
+  status?: string;
+  avatarUrl?: string | null;
+};
 
 export default class ChatSocketHandler {
   fastify: FastifyInstance;
@@ -15,23 +24,23 @@ export default class ChatSocketHandler {
   // previously existed here and have been removed.
 
   // bound handlers so we can remove them on close
-  private onStatusChange = (event: any) => this.broadcastStatusChange(event.userId, event.status);
-  private onUserCreated = (user: any) => this.broadcastUserCreated(user);
-  private onUserUpdated = (user: any) => this.broadcastUserUpdated(user);
-  private onMatchHistory = (event: any) => this.handleMatchHistory(event);
-  private onChatMessage = async (message: any) => this.handleChatMessage(message);
-  private onChatRead = async (event: any) => this.handleChatRead(event);
-  private onChannelCreated = (channel: any) => this.handleChannelCreated(channel);
-  private onNotification = (notification: any) => this.handleNotification(notification);
-  private onNotificationDeleted = (event: any) => this.handleNotificationDeleted(event);
+  private onStatusChange = (event: { userId: number; status: string }) => this.broadcastStatusChange(event.userId, event.status);
+  private onUserCreated = (user: unknown) => this.broadcastUserCreated(user as any);
+  private onUserUpdated = (user: unknown) => this.broadcastUserUpdated(user as any);
+  private onMatchHistory = (event: { userId?: number; match?: unknown }) => this.handleMatchHistory(event as any);
+  private onChatMessage = async (message: ChatMessagePayload) => this.handleChatMessage(message as any);
+  private onChatRead = async (event: { channelId?: string } & Record<string, any>) => this.handleChatRead(event as any);
+  private onChannelCreated = (channel: { id?: string; members?: Array<{ userId: number }> } & Record<string, any>) => this.handleChannelCreated(channel as any);
+  private onNotification = (notification: { userId: number; [k: string]: any }) => this.handleNotification(notification);
+  private onNotificationDeleted = (event: { userId: number; id: number }) => this.handleNotificationDeleted(event);
 
-  private onFriendAccepted = async (event: any) => this.handleFriendAccepted(event);
-  private onFriendRemoved = (event: any) => this.handleFriendRemoved(event);
-  private onUserBlocked = (event: any) => this.handleUserBlocked(event);
-  private onUserUnblocked = (event: any) => this.handleUserUnblocked(event);
-  private onFriendRequestSent = (event: any) => this.handleFriendRequestSent(event);
-  private onFriendRequestCancelled = (event: any) => this.handleFriendRequestCancelled(event);
-  private onFriendRequestDeclined = (event: any) => this.handleFriendRequestDeclined(event);
+  private onFriendAccepted = async (event: { requesterId: number; addresseeId: number }) => this.handleFriendAccepted(event);
+  private onFriendRemoved = (event: { requesterId: number; addresseeId: number }) => this.handleFriendRemoved(event);
+  private onUserBlocked = (event: { blockerId: number; blockedId: number }) => this.handleUserBlocked(event);
+  private onUserUnblocked = (event: { blockerId: number; blockedId: number }) => this.handleUserUnblocked(event);
+  private onFriendRequestSent = (event: { senderId: number; receiverId: number; requestId?: number }) => this.handleFriendRequestSent(event);
+  private onFriendRequestCancelled = (event: { senderId: number; receiverId: number }) => this.handleFriendRequestCancelled(event);
+  private onFriendRequestDeclined = (event: { senderId: number; receiverId: number }) => this.handleFriendRequestDeclined(event);
 
   constructor(fastify: FastifyInstance) {
     this.fastify = fastify;
@@ -106,23 +115,24 @@ export default class ChatSocketHandler {
     }
   }
 
-  private broadcastUserCreated(user: any) {
+  private broadcastUserCreated(user: UserSummary) {
     const payload = JSON.stringify({ type: 'user_created', data: user });
     for (const userSockets of connectionIndex.getAllUserSockets()) {
       sendToSockets(userSockets, payload)
     }
   }
 
-  private broadcastUserUpdated(user: any) {
+  private broadcastUserUpdated(user: UserSummary) {
     const payload = JSON.stringify({ type: 'user_update', data: user });
     for (const userSockets of connectionIndex.getAllUserSockets()) {
       sendToSockets(userSockets, payload)
     }
   }
 
-  private async handleChatMessage(message: any) {
+  private async handleChatMessage(message: ChatMessagePayload | { channelId?: string } & Record<string, any>) {
+    const channelId = (message as any).channelId ?? (message as any).roomId;
     const members = await this.fastify.prisma.channelMember.findMany({
-      where: { channelId: message.channelId },
+      where: { channelId: channelId ? Number(channelId) : undefined },
       select: { userId: true }
     });
     const payload = JSON.stringify({ type: 'message', data: message });
@@ -132,9 +142,10 @@ export default class ChatSocketHandler {
     }
   }
 
-  private async handleChatRead(event: any) {
+  private async handleChatRead(event: { channelId?: string } & Record<string, any>) {
+    const channelId = event.channelId;
     const members = await this.fastify.prisma.channelMember.findMany({
-      where: { channelId: event.channelId },
+      where: { channelId: channelId ? Number(channelId) : undefined },
       select: { userId: true }
     });
     const payload = JSON.stringify({ type: 'read', data: event });
@@ -144,7 +155,7 @@ export default class ChatSocketHandler {
     }
   }
 
-  private handleChannelCreated(channel: any) {
+  private handleChannelCreated(channel: { id?: string; members?: Array<{ userId: number }> } & Record<string, any>) {
     const payload = JSON.stringify({ type: 'channel_created', data: { id: channel.id } });
     if (channel.members) {
       for (const member of channel.members) {
@@ -154,7 +165,7 @@ export default class ChatSocketHandler {
     }
   }
 
-  private handleNotification(notification: any) {
+  private handleNotification(notification: { userId: number } & Record<string, any>) {
     const userConns = connectionIndex.getSocketsByUser(notification.userId);
     if (userConns) {
       const payload = JSON.stringify({ type: 'notification', data: notification });
@@ -162,7 +173,7 @@ export default class ChatSocketHandler {
     }
   }
 
-  private handleNotificationDeleted(event: any) {
+  private handleNotificationDeleted(event: { userId: number; id: number }) {
     const userConns = connectionIndex.getSocketsByUser(event.userId);
     if (userConns) {
       const payload = JSON.stringify({ type: 'notification_deleted', data: { id: event.id } });
@@ -170,7 +181,7 @@ export default class ChatSocketHandler {
     }
   }
 
-  private handleMatchHistory(event: any) {
+  private handleMatchHistory(event: { userId?: number; match?: unknown } & Record<string, any>) {
     const payload = JSON.stringify({ type: 'match_history_update', data: event.match });
     if (typeof event.userId === 'number') {
       const userConns = connectionIndex.getSocketsByUser(event.userId);
@@ -180,7 +191,7 @@ export default class ChatSocketHandler {
     for (const userSockets of connectionIndex.getAllUserSockets()) sendToSockets(userSockets, payload)
   }
 
-  private async handleFriendAccepted(event: any) {
+  private async handleFriendAccepted(event: { requesterId: number; addresseeId: number }) {
     const { requesterId, addresseeId } = event;
     const requesterConns = connectionIndex.getSocketsByUser(requesterId);
     if (requesterConns) {
@@ -201,7 +212,7 @@ export default class ChatSocketHandler {
     }
   }
 
-  private handleFriendRemoved(event: any) {
+  private handleFriendRemoved(event: { requesterId: number; addresseeId: number }) {
     const { requesterId, addresseeId } = event;
     const requesterConns = connectionIndex.getSocketsByUser(requesterId);
     if (requesterConns) {
@@ -217,7 +228,7 @@ export default class ChatSocketHandler {
     this.broadcastPublicFriendUpdate({ userId: addresseeId, type: 'REMOVE', friendId: requesterId });
   }
 
-  private handleUserBlocked(event: any) {
+  private handleUserBlocked(event: { blockerId: number; blockedId: number }) {
     const { blockerId, blockedId } = event;
     const blockerConns = connectionIndex.getSocketsByUser(blockerId);
     if (blockerConns) {
@@ -226,7 +237,7 @@ export default class ChatSocketHandler {
     }
   }
 
-  private handleUserUnblocked(event: any) {
+  private handleUserUnblocked(event: { blockerId: number; blockedId: number }) {
     const { blockerId, blockedId } = event;
     const blockerConns = connectionIndex.getSocketsByUser(blockerId);
     if (blockerConns) {
@@ -235,7 +246,7 @@ export default class ChatSocketHandler {
     }
   }
 
-  private handleFriendRequestSent(event: any) {
+  private handleFriendRequestSent(event: { senderId: number; receiverId: number; requestId?: number }) {
     const { senderId, receiverId, requestId } = event;
     const senderConns = connectionIndex.getSocketsByUser(senderId);
     if (senderConns) {
@@ -249,7 +260,7 @@ export default class ChatSocketHandler {
     }
   }
 
-  private handleFriendRequestCancelled(event: any) {
+  private handleFriendRequestCancelled(event: { senderId: number; receiverId: number }) {
     const { senderId, receiverId } = event;
     const senderConns = connectionIndex.getSocketsByUser(senderId);
     if (senderConns) {
@@ -263,7 +274,7 @@ export default class ChatSocketHandler {
     }
   }
 
-  private handleFriendRequestDeclined(event: any) {
+  private handleFriendRequestDeclined(event: { senderId: number; receiverId: number }) {
     const { senderId, receiverId } = event;
     const senderConns = connectionIndex.getSocketsByUser(senderId);
     if (senderConns) {
@@ -277,7 +288,7 @@ export default class ChatSocketHandler {
     }
   }
 
-  private broadcastPublicFriendUpdate(data: any) {
+  private broadcastPublicFriendUpdate(data: { userId: number; type: 'ADD' | 'REMOVE'; friend?: UserSummary; friendId?: number } & Record<string, any>) {
     const payload = JSON.stringify({ type: 'public_friend_update', data });
     for (const userSockets of connectionIndex.getAllUserSockets()) sendToSockets(userSockets, payload)
   }
@@ -288,13 +299,19 @@ export default class ChatSocketHandler {
       return;
     }
 
-    const socket = connection.socket || (connection as SocketWithSessionId);
+    let socket: SocketWithSessionId | undefined;
+    if (connection && typeof connection === 'object' && 'socket' in connection) {
+      // connection is the wrapper object
+      socket = (connection as any).socket as SocketWithSessionId;
+    } else {
+      socket = connection as SocketWithSessionId;
+    }
     if (!socket) {
       req.log && req.log.warn && req.log.warn({ headers: req.headers }, 'WebSocket handler invoked without a socket (connection object present)');
       return;
     }
 
-    const token = (req.query as any).token;
+    const token = req.query && req.query.token;
     if (!token) {
       socket.close(1008, 'Token required');
       return;
@@ -303,7 +320,7 @@ export default class ChatSocketHandler {
     let userId: number;
     let sessionId: number;
     try {
-      const user = this.fastify.jwt.verify(token) as any;
+      const user = this.fastify.jwt.verify(token) as { userId: number; sessionId: number };
       userId = user.userId;
       sessionId = user.sessionId;
     } catch (err) {
@@ -319,14 +336,14 @@ export default class ChatSocketHandler {
     (socket as SocketWithSessionId).__sessionId = sessionId;
     connectionIndex.addSocket(userId, sessionId, socket as SocketWithSessionId);
     if (connectionIndex.getConnectionCount(userId) === 1) {
-      await this.fastify.prisma.user.update({ where: { id: userId }, data: { status: 'ONLINE' } }).catch((e) => this.fastify.log.error(e));
+      await this.fastify.prisma.user.update({ where: { id: userId }, data: { status: 'ONLINE' } }).catch((e: unknown) => this.fastify.log.error(e as Error));
       this.broadcastStatusChange(userId, 'ONLINE');
     }
 
     socket.on('close', async () => {
       connectionIndex.removeSocket(userId, sessionId, socket as SocketWithSessionId);
       if (connectionIndex.getConnectionCount(userId) === 0) {
-        await this.fastify.prisma.user.update({ where: { id: userId }, data: { status: 'OFFLINE' } }).catch((e) => this.fastify.log.error(e));
+        await this.fastify.prisma.user.update({ where: { id: userId }, data: { status: 'OFFLINE' } }).catch((e: unknown) => this.fastify.log.error(e as Error));
         this.broadcastStatusChange(userId, 'OFFLINE');
       }
     });
