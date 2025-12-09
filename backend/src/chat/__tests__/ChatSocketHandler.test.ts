@@ -87,3 +87,37 @@ describe('ChatSocketHandler (unit)', () => {
     expect(cnt2).toBe(0)
   })
 })
+
+it('broadcasts messages to members including multiple sockets per user', async () => {
+  // reuse fastifyMock from the describe scope by creating a fresh handler
+  const handler = new ChatSocketHandler((global as any).fastifyMock || {
+    jwt: { verify: (t: string) => ({ userId: 1, sessionId: 1 }) },
+    prisma: { user: { update: async () => ({}) }, channelMember: { findMany: async () => [] } },
+    addHook: (_: string, __: Function) => {}
+  })
+
+  const s1a = new MockSocket()
+  const s1b = new MockSocket()
+  const s2 = new MockSocket()
+
+  // register sockets for users 1 and 2 by simulating proper jwt.verify tokens
+  // we call handler.handle directly with tokens satisfied by a small wrapper
+  await handler.handle({ socket: s1a }, { query: { token: 'u1' }, log: { warn: () => {} }, jwt: { verify: (t: string) => ({ userId: 1, sessionId: 101 }) } });
+  await handler.handle({ socket: s1b }, { query: { token: 'u1' }, log: { warn: () => {} }, jwt: { verify: (t: string) => ({ userId: 1, sessionId: 101 }) } });
+  await handler.handle({ socket: s2 }, { query: { token: 'u2' }, log: { warn: () => {} }, jwt: { verify: (t: string) => ({ userId: 2, sessionId: 102 }) } });
+
+  // make channelMember.findMany return the two users as members
+  ;(handler as any).fastify.prisma.channelMember.findMany = async () => [{ userId: 1 }, { userId: 2 }]
+
+  const message = { channelId: 10, id: 'm_b', content: 'broadcast' }
+  await (handler as any).handleChatMessage(message)
+
+  expect(s1a.sent.length).toBeGreaterThan(0)
+  expect(s1b.sent.length).toBeGreaterThan(0)
+  expect(s2.sent.length).toBeGreaterThan(0)
+
+  const payload = JSON.parse(s2.sent[0])
+  expect(payload.type).toBe('message')
+  expect(payload.data.id).toBe('m_b')
+})
+
