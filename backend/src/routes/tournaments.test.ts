@@ -262,8 +262,8 @@ describe('Tournaments API', () => {
   })
 
   it('prevents start when invites are pending and allows start after all accept', async () => {
-    const owner = await register(server, { email: 'owner-start@example.com', username: 'owner-start', displayName: 'OwnerStart', password: 'Pass1234' })
-    const friend = await register(server, { email: 'friend-start@example.com', username: 'friend-start', displayName: 'FriendStart', password: 'Pass1234' })
+    const owner = await register(server, { email: 'owner-start@example.com', username: 'owner_start', displayName: 'OwnerStart', password: 'Pass1234' })
+    const friend = await register(server, { email: 'friend-start@example.com', username: 'friend_start', displayName: 'FriendStart', password: 'Pass1234' })
 
     // Create draft tournament with friend invited
     const createRes = await server.inject({
