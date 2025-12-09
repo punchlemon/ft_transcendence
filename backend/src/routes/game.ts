@@ -2,7 +2,7 @@ import { FastifyInstance } from 'fastify'
 import { GameManager } from '../game/GameManager'
 import { notificationService } from '../services/notification'
 import { getDisplayNameOrFallback } from '../services/user'
-import GameSocketHandler, { sharedGameSockets as gameSockets } from '../game/GameSocketHandler'
+import GameSocketHandler from '../game/GameSocketHandler'
 // Manage game sockets separately to avoid interfering with chat sockets
 // Shared registry is provided by `GameSocketHandler` to keep behavior compatible
 // with the original inline implementation.

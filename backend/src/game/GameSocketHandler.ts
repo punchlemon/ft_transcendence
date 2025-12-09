@@ -2,8 +2,7 @@ import { FastifyInstance } from 'fastify'
 import { GameManager } from './GameManager'
 import { notificationService } from '../services/notification'
 import { getDisplayNameOrFallback } from '../services/user'
-
-export const sharedGameSockets = new Map<number, { socket: any; sessionId: string }>()
+import connectionManager, { registerConnection, unregisterConnection, getConnection } from '../utils/connectionManager'
 
 export default class GameSocketHandler {
   private fastify: FastifyInstance
@@ -119,8 +118,7 @@ export default class GameSocketHandler {
               if (userId) {
                 const dbUser = await this.fastify.prisma.user.findUnique({ where: { id: userId }, select: { status: true } })
                 if (dbUser && dbUser.status === 'IN_GAME') {
-                  const existingRec = sessionId ? sharedGameSockets.get(userId) : null
-                  const existing = existingRec && existingRec.sessionId === sessionId ? existingRec : null
+                  const existing = sessionId ? getConnection(userId as number, sessionId) : null
 
                   let isRejoiningCurrentGame = false
                   if (!existing && sessionId) {
@@ -156,7 +154,7 @@ export default class GameSocketHandler {
                     return
                   }
 
-                    try { if (typeof waiting.userId === 'number') sharedGameSockets.set(waiting.userId, { socket: waiting.socket, sessionId }) } catch (e) {}
+                    try { if (typeof waiting.userId === 'number') registerConnection(waiting.userId, sessionId, waiting.socket, 'game') } catch (e) {}
 
                   try {
                     this.fastify.log.info({ sessionId, waitingUser: waiting.userId }, 'Adding waiting socket to created game')
@@ -170,7 +168,7 @@ export default class GameSocketHandler {
                   pairedWaitingUserId = waiting.userId
 
                   if (userId && sessionId) {
-                    try { sharedGameSockets.set(userId, { socket, sessionId }) } catch (e) {}
+                    try { registerConnection(userId, sessionId, socket, 'game', authSessionId) } catch (e) {}
                   }
                 } else {
                   const waitId = manager.createWaitingSlot(undefined, socket, userId, displayName)
@@ -179,7 +177,7 @@ export default class GameSocketHandler {
                     if (userId && waitId) {
                       try { console.info(`[game/ws] Registering game socket (wait) user=${userId} session=${waitId}`) } catch (e) {}
                       try { console.info(new Error('stack:').stack) } catch (e) {}
-                      sharedGameSockets.set(userId, { socket, sessionId: waitId })
+                      registerConnection(userId, waitId, socket, 'game', authSessionId)
                     }
                   } catch (e) {}
                   const resp = JSON.stringify({ event: 'match:event', payload: { type: 'CONNECTED', message: 'Waiting for opponent', slot: 'p1', waiting: true } })
@@ -190,7 +188,7 @@ export default class GameSocketHandler {
                 if (userId && sessionId) {
                   try { console.info(`[game/ws] Registering game socket user=${userId} session=${sessionId}`) } catch (e) {}
                   try { console.info(new Error('stack:').stack) } catch (e) {}
-                  sharedGameSockets.set(userId, { socket, sessionId })
+                  registerConnection(userId, sessionId, socket, 'game', authSessionId)
                 }
               }
             } catch (e) {
@@ -294,21 +292,21 @@ export default class GameSocketHandler {
 
     const handleClose = () => {
       this.fastify.log.info({ sessionId, userId: (socket as any).__userId ?? null }, 'Client disconnected from game websocket')
-        try {
-        const maybeUserId = (socket as any).__userId as number | undefined
-        if (maybeUserId) {
-          try {
-            const rec = sharedGameSockets.get(maybeUserId)
-            if (rec && rec.socket === socket) {
-              try { console.info(`[game/ws] Removing game socket for user=${maybeUserId} session=${rec.sessionId} on close`) } catch (e) {}
-              try { console.info(new Error('stack:').stack) } catch (e) {}
-              sharedGameSockets.delete(maybeUserId)
-            } else if (rec) {
-              try { console.info(`[game/ws] Close event for user=${maybeUserId} did not match stored game socket (storedSession=${rec.sessionId})`) } catch (e) {}
+            try {
+            const maybeUserId = (socket as any).__userId as number | undefined
+            if (maybeUserId) {
+              try {
+                const rec = getConnection(maybeUserId, sessionId ?? '')
+                if (rec && rec.socket === socket) {
+                  try { console.info(`[game/ws] Removing game socket for user=${maybeUserId} session=${rec.sessionId} on close`) } catch (e) {}
+                  try { console.info(new Error('stack:').stack) } catch (e) {}
+                  unregisterConnection(maybeUserId, rec.sessionId, socket, 'game')
+                } else if (rec) {
+                  try { console.info(`[game/ws] Close event for user=${maybeUserId} did not match stored game socket (storedSession=${rec.sessionId})`) } catch (e) {}
+                }
+              } catch (e) {}
             }
           } catch (e) {}
-        }
-      } catch (e) {}
       try {
         if (game) {
           game.removePlayer(socket as any)
