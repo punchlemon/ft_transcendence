@@ -10,19 +10,9 @@ import connectionIndex, { SocketWithSessionId } from './connectionIndex';
 
 export default class ChatSocketHandler {
   fastify: FastifyInstance;
-  // compatibility accessors: provide minimal Map-like shape for existing consumers/tests
-  get connections() {
-    return {
-      get: (userId: number) => connectionIndex.getSocketsByUser(userId),
-      values: () => connectionIndex.getAllUserSockets()
-    } as any
-  }
-
-  get sessionSockets() {
-    return {
-      get: (sessionId: number) => connectionIndex.getSocketsBySession(sessionId)
-    } as any
-  }
+  // No longer expose `connections`/`sessionSockets` maps directly —
+  // use `connectionIndex` module instead. Compatibility accessors
+  // previously existed here and have been removed.
 
   // bound handlers so we can remove them on close
   private onStatusChange = (event: any) => this.broadcastStatusChange(event.userId, event.status);

@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import ChatSocketHandler from '../ChatSocketHandler'
+import connectionIndex from '../connectionIndex'
 import { presenceService } from '../../services/presence'
 
 // Minimal mock WebSocket
@@ -62,9 +63,9 @@ describe('ChatSocketHandler (unit)', () => {
     await handler.handle(connection, req)
 
     // connection should be registered
-    const conns = (handler as any).connections.get(42)
+    const conns = connectionIndex.getSocketsByUser(42)
     expect(conns).toBeDefined()
-    expect(conns.size).toBe(1)
+    expect(conns!.size).toBe(1)
 
     // presenceService should report connection count via the installed impl
     const cnt = await presenceService.getConnectionCount(42)
@@ -79,8 +80,8 @@ describe('ChatSocketHandler (unit)', () => {
     expect(socket.closeCalls.length).toBe(1)
 
     // connections map should be updated (user offline)
-    const after = (handler as any).connections.get(42)
-    expect(after === undefined || after.size === 0).toBe(true)
+    const after = connectionIndex.getSocketsByUser(42)
+    expect(after === undefined || after!.size === 0).toBe(true)
 
     // presence count now reports 0
     const cnt2 = await presenceService.getConnectionCount(42)

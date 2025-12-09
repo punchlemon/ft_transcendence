@@ -176,19 +176,17 @@ export default class GameSocketHandler {
                   sessionId = waitId
                   try {
                     if (userId && waitId) {
-                      try { console.info(`[game/ws] Registering game socket (wait) user=${userId} session=${waitId}`) } catch (e) {}
-                      try { console.info(new Error('stack:').stack) } catch (e) {}
+                      this.fastify.log.debug({ userId, waitId }, 'Registering game socket (wait)')
                       registerConnection(userId, waitId, socket, 'game', authSessionId)
                     }
-                  } catch (e) {}
+                  } catch (e) { this.fastify.log.warn({ err: e }, 'Failed to register waiting connection') }
                   const resp = JSON.stringify({ event: 'match:event', payload: { type: 'CONNECTED', message: 'Waiting for opponent', slot: 'p1', waiting: true } })
                   if (typeof (socket as any).send === 'function') (socket as any).send(resp)
                   return
                 }
               } else {
                 if (userId && sessionId) {
-                  try { console.info(`[game/ws] Registering game socket user=${userId} session=${sessionId}`) } catch (e) {}
-                  try { console.info(new Error('stack:').stack) } catch (e) {}
+                  this.fastify.log.debug({ userId, sessionId }, 'Registering game socket')
                   registerConnection(userId, sessionId, socket, 'game', authSessionId)
                 }
               }
@@ -259,11 +257,10 @@ export default class GameSocketHandler {
               try {
                 const rec = getConnection(maybeUserId, sessionId ?? '')
                 if (rec && rec.socket === socket) {
-                  try { console.info(`[game/ws] Removing game socket for user=${maybeUserId} session=${rec.sessionId} on close`) } catch (e) {}
-                  try { console.info(new Error('stack:').stack) } catch (e) {}
+                  this.fastify.log.debug({ userId: maybeUserId, session: rec.sessionId }, 'Removing game socket for user on close')
                   unregisterConnection(maybeUserId, rec.sessionId, socket, 'game')
                 } else if (rec) {
-                  try { console.info(`[game/ws] Close event for user=${maybeUserId} did not match stored game socket (storedSession=${rec.sessionId})`) } catch (e) {}
+                  this.fastify.log.debug({ userId: maybeUserId, storedSession: rec.sessionId }, 'Close event did not match stored game socket')
                 }
               } catch (e) {}
             }
