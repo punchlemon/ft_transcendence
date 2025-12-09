@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useNotificationStore, Notification } from '../../stores/notificationStore'
-import { respondTournamentParticipant } from '../../lib/api'
+import { respondTournamentParticipant, fetchTournament } from '../../lib/api'
 
 type ToastState = {
   notification: Notification
@@ -70,6 +70,30 @@ export default function NotificationToast() {
     setLoading(true)
     try {
       await respondTournamentParticipant(data.tournamentId, data.participantId, action)
+      // If accepted and tournament already running, send the player straight to their match.
+      if (action === 'ACCEPT') {
+        try {
+          const detail = await fetchTournament(data.tournamentId)
+          const participantId = data.participantId
+          const match = detail.data.matches.find((m) =>
+            (m.playerA?.participantId === participantId || m.playerB?.participantId === participantId) && !m.winnerId
+          )
+          if (match) {
+            const p1Name = match.playerA?.alias ?? 'Player 1'
+            const p2Name = match.playerB?.alias ?? 'Player 2'
+            const params = new URLSearchParams()
+            params.set('tournamentId', String(data.tournamentId))
+            if (match.playerA?.participantId) params.set('p1Id', String(match.playerA.participantId))
+            if (match.playerB?.participantId) params.set('p2Id', String(match.playerB.participantId))
+            params.set('p1Name', p1Name)
+            params.set('p2Name', p2Name)
+            params.set('mode', 'remote')
+            navigate(`/game/local-match-${match.id}?${params.toString()}`)
+          }
+        } catch (err) {
+          console.error('Failed to auto-join tournament match after accept', err)
+        }
+      }
       await markAsRead(n.id)
       setToast(null)
     } catch (e) {
