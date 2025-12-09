@@ -549,17 +549,10 @@ const tournamentsRoutes: FastifyPluginAsync = async (fastify) => {
         notifyPromises.push(
           notificationService.createNotification(playerARecord.userId, 'TOURNAMENT_MATCH_READY', title, body, payload)
         )
-        // Also send a SYSTEM notification so it appears in the system inbox even if custom types are filtered.
-        notifyPromises.push(
-          notificationService.createNotification(playerARecord.userId, 'SYSTEM', title, body, payload)
-        )
       }
       if (playerBRecord?.userId) {
         notifyPromises.push(
           notificationService.createNotification(playerBRecord.userId, 'TOURNAMENT_MATCH_READY', title, body, payload)
-        )
-        notifyPromises.push(
-          notificationService.createNotification(playerBRecord.userId, 'SYSTEM', title, body, payload)
         )
       }
     }

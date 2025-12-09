@@ -199,20 +199,8 @@ const GameLobbyPage = () => {
   const handleStartTournamentNow = async (tournamentOverride?: any) => {
     const tournament = tournamentOverride ?? createdTournament
     if (!tournament) return
-    // Find the first match and navigate similarly to previous flow
-    const firstMatch = tournament.matches.find((m: any) => !m.winnerId)
-    if (firstMatch) {
-      const p1 = firstMatch.playerA?.alias ?? 'Unknown'
-      const p2 = firstMatch.playerB?.alias ?? null
-      const p1Id = firstMatch.playerA?.participantId ?? -1
-      const p2Id = firstMatch.playerB?.participantId ?? null
-
-      let url = `/game/local-match-${firstMatch.id}?mode=remote&p1Name=${encodeURIComponent(p1)}&p2Name=${encodeURIComponent(p2 ?? '')}`
-      url += `&tournamentId=${tournament.id}`
-      if (p1Id) url += `&p1Id=${p1Id}`
-      if (p2Id) url += `&p2Id=${p2Id}`
-      navigate(url)
-    }
+    // Starting the tournament no longer auto-navigates. Owner joins via notification like other participants.
+    navigate(`/tournaments/${tournament.id}`)
   }
 
   const handleCancelMatching = () => {

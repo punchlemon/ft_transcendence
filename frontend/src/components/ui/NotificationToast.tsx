@@ -19,7 +19,7 @@ export default function NotificationToast() {
   useEffect(() => {
     if (!notifications || notifications.length === 0) return
 
-    const priorityTypes: Notification['type'][] = ['TOURNAMENT_INVITE', 'TOURNAMENT_MATCH_READY', 'SYSTEM']
+    const priorityTypes: Notification['type'][] = ['TOURNAMENT_INVITE', 'TOURNAMENT_MATCH_READY']
     const next = notifications.find((n) => !n.read && priorityTypes.includes(n.type))
     if (next) setToast({ notification: next })
   }, [notifications])
