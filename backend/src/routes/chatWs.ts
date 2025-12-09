@@ -601,6 +601,11 @@ export default async function chatWsRoutes(fastify: FastifyInstance) {
       sessionSockets.set(sessionId, new Set());
     }
     sessionSockets.get(sessionId)!.add(socket as SocketWithSessionId);
+    try { console.info(`[chat/ws] Added sessionSocket user=${userId} session=${sessionId}`) } catch (e) {}
+    try { console.info(new Error('stack:').stack) } catch (e) {}
+
+    // Chat handler manages its own `connections` map; do not register
+    // with the central connection manager here to avoid cross-type evictions.
 
     if (!connections.has(userId)) {
       console.log(`[WS] User ${userId} connected (First connection)`);
@@ -615,6 +620,8 @@ export default async function chatWsRoutes(fastify: FastifyInstance) {
       console.log(`[WS] User ${userId} connected (New tab/window)`);
     }
     connections.get(userId)!.add(socket as SocketWithSessionId);
+    try { console.info(`[chat/ws] Added chat connection user=${userId} session=${sessionId} totalConns=${connections.get(userId)!.size}`) } catch (e) {}
+    try { console.info(new Error('stack:').stack) } catch (e) {}
 
     socket.on('close', async () => {
       console.log(`[WS] Socket closed for user ${userId}, sessionId ${sessionId}`);
@@ -628,9 +635,17 @@ export default async function chatWsRoutes(fastify: FastifyInstance) {
         }
       }
 
+      try { console.info(`[chat/ws] Removed sessionSocket user=${userId} session=${sessionId}`) } catch (e) {}
+      try { console.info(new Error('stack:').stack) } catch (e) {}
+
+      // Chat handler manages its own `connections` map; nothing to unregister
+      // in the central connection manager.
+
       const userConns = connections.get(userId);
       if (userConns) {
         userConns.delete(socket as SocketWithSessionId);
+        try { console.info(`[chat/ws] Removed chat connection user=${userId} remaining=${userConns.size}`) } catch (e) {}
+        try { console.info(new Error('stack:').stack) } catch (e) {}
         if (userConns.size === 0) {
           console.log(`[WS] User ${userId} went OFFLINE`);
           connections.delete(userId);

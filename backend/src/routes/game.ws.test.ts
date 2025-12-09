@@ -42,11 +42,13 @@ describe('Game WebSocket', () => {
       event: 'match:event',
       payload: { 
         type: 'CONNECTED', 
-        message: 'Successfully connected to game server',
-        slot: 'p1'
+        message: 'Waiting for opponent',
+        slot: 'p1',
+        waiting: true
       }
     })
-    expect(response.payload.sessionId).toBeDefined()
+    // Session ID is not returned for waiting players to prevent direct access
+    // expect(response.payload.sessionId).toBeDefined()
 
     ws.close()
   })

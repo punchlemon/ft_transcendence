@@ -7,6 +7,9 @@ import { prisma } from '../utils/prisma';
 export class GameManager {
   private static instance: GameManager;
   private games: Map<string, GameEngine> = new Map();
+  // waitingSlots hold sockets/users who are waiting for an opponent.
+  // Keyed by sessionId (e.g. game_wait_<ts>), value contains socket and optional user metadata.
+  private waitingSlots: Map<string, { socket: any; userId?: number; displayName?: string; createdAt: number }> = new Map();
   // Track session IDs that have been removed/expired so they cannot be
   // re-created or re-joined using the same ID. This prevents recreated
   // rooms from appearing after a room was intentionally destroyed.
@@ -85,24 +88,27 @@ export class GameManager {
               const g = this.games.get(sessionId);
               if (g) {
                 const players = (g as any).players as { p1?: number; p2?: number } | undefined;
-                if (players) {
-                  Object.values(players).forEach((uid) => {
-                    if (typeof uid === 'number') {
-                      try {
+                const clients = (g as any).clients as { p1?: any; p2?: any } | undefined;
+                
+                const setOnline = (uid: number) => {
+                    try {
                         prisma.user.update({ where: { id: uid }, data: { status: 'ONLINE' } })
                           .catch((e) => console.error('[game-manager] Failed to set user status ONLINE on destroy', e));
                         try {
-                          // Use userService dynamic import to avoid circulars if any
                           const { userService } = require('../services/user');
                           userService.emitStatusChange(uid, 'ONLINE');
                         } catch (e) {
                           console.error('[game-manager] Failed to emit status change for ONLINE on destroy', e);
                         }
-                      } catch (e) {
-                        // swallow per-user errors
-                      }
-                    }
-                  });
+                    } catch (e) {}
+                };
+
+                if (players) {
+                    // Only set ONLINE if the client is still connected (meaning removePlayer wasn't called yet).
+                    // If removePlayer WAS called, the user status was already set to ONLINE (or they are in a new game),
+                    // so we shouldn't touch it.
+                    if (players.p1 && clients?.p1) setOnline(players.p1);
+                    if (players.p2 && clients?.p2) setOnline(players.p2);
                 }
               }
             } catch (e) {
@@ -120,6 +126,7 @@ export class GameManager {
       }
     );
     this.games.set(sessionId, game);
+    try { console.info(`[game-manager] Game registered: ${sessionId} (games=${this.games.size})`) } catch (e) {}
     return game;
   }
 
@@ -254,6 +261,45 @@ export class GameManager {
     const game = this.createGame(sessionId);
     game.addAIPlayer(difficulty);
     return { game, sessionId };
+  }
+
+  // Waiting slot API
+  createWaitingSlot(sessionId?: string, socket?: any, userId?: number, displayName?: string) {
+    const id = sessionId ?? `game_wait_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`
+    this.waitingSlots.set(id, { socket, userId, displayName, createdAt: Date.now() })
+    try { console.info(`[game-manager] createWaitingSlot -> ${id} (user=${userId ?? 'anon'})`) } catch (e) {}
+    try { console.info(`[game-manager] waitingSlots count=${this.waitingSlots.size}`) } catch (e) {}
+    return id
+  }
+
+  hasWaitingSlot(): string | null {
+    for (const key of this.waitingSlots.keys()) return key
+    return null
+  }
+
+  takeWaitingSlot(sessionId?: string) {
+    if (sessionId) {
+      const v = this.waitingSlots.get(sessionId)
+      if (!v) return null
+      this.waitingSlots.delete(sessionId)
+      try { console.info(`[game-manager] takeWaitingSlot explicit -> ${sessionId}`) } catch (e) {}
+      try { console.info(`[game-manager] waitingSlots count=${this.waitingSlots.size}`) } catch (e) {}
+      return { sessionId, ...v }
+    }
+    // take the first available
+    for (const [key, value] of this.waitingSlots.entries()) {
+      this.waitingSlots.delete(key)
+      try { console.info(`[game-manager] takeWaitingSlot -> ${key}`) } catch (e) {}
+      try { console.info(`[game-manager] waitingSlots count=${this.waitingSlots.size}`) } catch (e) {}
+      return { sessionId: key, ...value }
+    }
+    return null
+  }
+
+  removeWaitingSlot(sessionId: string) {
+    const existed = this.waitingSlots.delete(sessionId)
+    try { console.info(`[game-manager] removeWaitingSlot ${sessionId} -> removed=${existed}`) } catch (e) {}
+    try { console.info(`[game-manager] waitingSlots count=${this.waitingSlots.size}`) } catch (e) {}
   }
 
   getGame(sessionId: string): GameEngine | undefined {
