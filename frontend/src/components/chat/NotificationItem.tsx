@@ -39,7 +39,7 @@ const NotificationItem = ({ notification }: { notification: Notification }) => {
     deleteNotification(notification.id)
   }
 
-  const handleGameInvite = () => {
+  const handleGameInvite = async () => {
     const gameId = notification.data?.gameId || notification.data?.sessionId
     if (!gameId) return
 
@@ -54,6 +54,16 @@ const NotificationItem = ({ notification }: { notification: Notification }) => {
     if (desiredMode) params.set('mode', String(desiredMode))
 
     navigate(`/game/${gameId}${params.toString() ? `?${params.toString()}` : ''}`)
+    try {
+      await markAsRead(notification.id)
+    } catch (err) {
+      console.error('Failed to mark notification as read on join', err)
+    }
+    try {
+      await deleteNotification(notification.id)
+    } catch (err) {
+      console.error('Failed to delete notification after join', err)
+    }
   }
 
   return (

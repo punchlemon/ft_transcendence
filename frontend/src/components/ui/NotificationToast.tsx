@@ -12,6 +12,7 @@ const AUTO_DISMISS_MS = Number(import.meta.env.VITE_TOURNAMENT_INVITE_TTL_MS ?? 
 export default function NotificationToast() {
   const notifications = useNotificationStore((s) => s.notifications)
   const markAsRead = useNotificationStore((s) => s.markAsRead)
+  const deleteNotification = useNotificationStore((s) => s.deleteNotification)
   const [toast, setToast] = useState<ToastState>(null)
   const [loading, setLoading] = useState(false)
   const navigate = useNavigate()
@@ -23,6 +24,14 @@ export default function NotificationToast() {
     const next = notifications.find((n) => !n.read && priorityTypes.includes(n.type))
     if (next) setToast({ notification: next })
   }, [notifications])
+
+  useEffect(() => {
+    if (!toast) return
+    const stillExists = notifications?.some((n) => n.id === toast.notification.id)
+    if (!stillExists) {
+      setToast(null)
+    }
+  }, [notifications, toast])
 
   // Auto-dismiss after TTL to avoid lingering stale invites in UI
   useEffect(() => {
@@ -58,6 +67,11 @@ export default function NotificationToast() {
       if (desiredMode) params.set('mode', String(desiredMode))
       navigate(`/game/${data.sessionId}?${params.toString()}`)
       await markAsRead(n.id)
+      try {
+        await deleteNotification(n.id)
+      } catch (err) {
+        console.error('Failed to delete notification after join', err)
+      }
       setToast(null)
     } catch (e) {
       console.error('Failed to navigate to match', e)
@@ -96,6 +110,11 @@ export default function NotificationToast() {
         }
       }
       await markAsRead(n.id)
+      try {
+        await deleteNotification(n.id)
+      } catch (err) {
+        console.error('Failed to delete notification after response', err)
+      }
       setToast(null)
     } catch (e) {
       console.error('Failed to respond to invite', e)
