@@ -2,7 +2,8 @@ import { FastifyInstance } from 'fastify'
 import { GameManager } from '../game/GameManager'
 import { notificationService } from '../services/notification'
 import { getDisplayNameOrFallback } from '../services/user'
-import { registerConnection, unregisterConnection } from '../utils/connectionManager'
+// Manage game sockets separately to avoid interfering with chat sockets
+const gameSockets = new Map<number, { socket: any; sessionId: string }>();
 
 // Request/Response types for invite endpoint
 interface InviteBody {
@@ -159,7 +160,12 @@ export default async function gameRoutes(fastify: FastifyInstance) {
     const manager = GameManager.getInstance();
     const query = req.query as { mode?: string; difficulty?: string; sessionId?: string; aiSlot?: string };
     
-    let gameResult;
+    let game: any = undefined;
+    let gameResult: { game: any; sessionId: string } | undefined = undefined;
+    let sessionId: string | undefined = undefined;
+    let pairedWaitingSocket: any = null
+    let pairedWaitingUserId: number | undefined = undefined
+
     if (query.sessionId) {
       // If client provides a specific session ID (e.g. tournament match), use it.
       // This allows the frontend to dictate the session ID for tournament matches.
@@ -194,18 +200,30 @@ export default async function gameRoutes(fastify: FastifyInstance) {
           }
         }
 
-      if (query.mode === 'ai') {
-        gameResult.game.addAIPlayer((query.difficulty as any) || 'NORMAL', (query.aiSlot as any));
-      }
+        // Ensure local references are set so later handlers (ready/addPlayer)
+        // can safely access `game` and `sessionId` regardless of mode.
+        if (gameResult) {
+          game = gameResult.game;
+          sessionId = gameResult.sessionId;
+        }
+
+        if (query.mode === 'ai' && game) {
+          // existing specific-session + ai slot
+          game.addAIPlayer((query.difficulty as any) || 'NORMAL', (query.aiSlot as any));
+        }
     } else if (query.mode === 'ai') {
-      gameResult = manager.createAIGame((query.difficulty as any) || 'NORMAL');
+      const g = manager.createAIGame((query.difficulty as any) || 'NORMAL');
+      game = g.game
+      sessionId = g.sessionId
     } else if (query.mode === 'local') {
-      gameResult = manager.createLocalGame();
+      const g = manager.createLocalGame();
+      game = g.game
+      sessionId = g.sessionId
     } else {
-      gameResult = manager.findOrCreatePublicGame();
+      // public mode: do not create game yet. We'll handle waiting/creation on 'ready'.
+      sessionId = undefined
+      game = undefined
     }
-    
-    const { game, sessionId } = gameResult;
     
     let playerSlot: 'p1' | 'p2' | null = null;
     let authSessionId: number | null = null;
@@ -229,7 +247,7 @@ export default async function gameRoutes(fastify: FastifyInstance) {
           // session is expired.
           try {
             const mgr = GameManager.getInstance();
-            if (mgr.isExpired(sessionId)) {
+            if (sessionId && mgr.isExpired(sessionId)) {
               try {
                 const resp = JSON.stringify({ event: 'match:event', payload: { type: 'UNAVAILABLE', message: 'Session is no longer available', sessionId } });
                 if (typeof (socket as any).send === 'function') (socket as any).send(resp);
@@ -270,7 +288,8 @@ export default async function gameRoutes(fastify: FastifyInstance) {
                 const dbUser = await fastify.prisma.user.findUnique({ where: { id: userId }, select: { status: true } })
                 if (dbUser && dbUser.status === 'IN_GAME') {
                   // If there's an existing connection for the same user/session, allow (reconnect)
-                  const existing = (await import('../utils/connectionManager')).getConnection(userId, sessionId)
+                  const existingRec = sessionId ? gameSockets.get(userId) : null
+                  const existing = existingRec && existingRec.sessionId === sessionId ? existingRec : null
                   if (!existing) {
                     try {
                       const resp = JSON.stringify({ event: 'match:event', payload: { type: 'UNAVAILABLE', message: 'User already in a different game', sessionId } });
@@ -281,9 +300,73 @@ export default async function gameRoutes(fastify: FastifyInstance) {
                   }
                 }
               }
+              // Public mode lazy matching: if no sessionId supplied and mode is public,
+              // either create a waiting slot (first player) or pair with an existing waiter.
+              if (!query.sessionId && query.mode === undefined) {
+                // public
+                const waiting = manager.takeWaitingSlot()
+                if (waiting) {
+                  // Found a waiting player: create a new GameEngine session now and add both players
+                  const newSessionId = `game_${Date.now()}_${Math.random().toString(36).substr(2,9)}`
+                  sessionId = newSessionId
+                  try {
+                    game = manager.createGame(sessionId)
+                  } catch (e) {
+                    // if createGame fails, notify and close
+                    try { const resp = JSON.stringify({ event: 'match:event', payload: { type: 'UNAVAILABLE', message: 'Failed to create game', sessionId } }); if (typeof (socket as any).send === 'function') (socket as any).send(resp); } catch (e) {}
+                    try { if (typeof (socket as any).close === 'function') (socket as any).close(); } catch (e) {}
+                    return
+                  }
 
-              // Register this connection and terminate any existing connection for the same user/session
-              if (userId && sessionId) registerConnection(userId, sessionId, socket, authSessionId ?? null)
+                  // register waiting player's connection under the new session id
+                  try {
+                    if (typeof waiting.userId === 'number') gameSockets.set(waiting.userId, { socket: waiting.socket, sessionId })
+                  } catch (e) {}
+
+                  // add the waiting socket first
+                  try {
+                    fastify.log.info({ sessionId, waitingUser: waiting.userId }, 'Adding waiting socket to created game')
+                    const slot = game.addPlayer(waiting.socket, waiting.userId, waiting.displayName)
+                    fastify.log.info({ sessionId, slot, waitingUser: waiting.userId }, 'Added waiting socket to game')
+                  } catch (e) {
+                    fastify.log.warn({ err: e }, 'Failed to add waiting player to newly created game')
+                  }
+
+                  // remember paired waiting socket so we can notify it after current joins
+                  pairedWaitingSocket = waiting.socket
+                  pairedWaitingUserId = waiting.userId
+
+                  // then proceed to register & add current socket (registration now binds to new sessionId)
+                  if (userId && sessionId) {
+                    try { gameSockets.set(userId, { socket, sessionId }) } catch (e) {}
+                  }
+                } else {
+                  // No waiter: create waiting slot for this socket and return CONNECTED WAITING
+                  const waitId = manager.createWaitingSlot(undefined, socket, userId, displayName)
+                  // remember the waiting slot id in this handler so socket close
+                  // will remove the waiting slot correctly
+                  sessionId = waitId
+                  try {
+                    if (userId && waitId) {
+                      // Diagnostic log: registering/writing game socket for user
+                      try { console.info(`[game/ws] Registering game socket (wait) user=${userId} session=${waitId}`) } catch (e) {}
+                      try { console.info(new Error('stack:').stack) } catch (e) {}
+                      gameSockets.set(userId, { socket, sessionId: waitId })
+                    }
+                  } catch (e) {}
+                  // Send waiting response WITHOUT sessionId to avoid exposing a navigable URL
+                  const resp = JSON.stringify({ event: 'match:event', payload: { type: 'CONNECTED', message: 'Waiting for opponent', slot: 'p1', waiting: true } })
+                  if (typeof (socket as any).send === 'function') (socket as any).send(resp)
+                  return
+                }
+              } else {
+                // Non-public or explicit session: register connection normally
+                if (userId && sessionId) {
+                  try { console.info(`[game/ws] Registering game socket user=${userId} session=${sessionId}`) } catch (e) {}
+                  try { console.info(new Error('stack:').stack) } catch (e) {}
+                  gameSockets.set(userId, { socket, sessionId })
+                }
+              }
             } catch (e) {
               fastify.log.warn({ err: e }, 'Failed to register connection in connectionManager')
             }
@@ -297,7 +380,13 @@ export default async function gameRoutes(fastify: FastifyInstance) {
             game.addPlayer(socket as any);
             playerSlot = 'p1';
           } else {
-            playerSlot = game.addPlayer(socket as any, userId, displayName as any);
+            try {
+              fastify.log.info({ sessionId, userId }, 'Adding joining socket to game')
+              playerSlot = game.addPlayer(socket as any, userId, displayName as any);
+              fastify.log.info({ sessionId, playerSlot, userId }, 'Added joining socket to game')
+            } catch (e) {
+              fastify.log.warn({ err: e, sessionId, userId }, 'Failed to add joining socket to game')
+            }
           }
           
           const response = JSON.stringify({
@@ -312,6 +401,20 @@ export default async function gameRoutes(fastify: FastifyInstance) {
           
           if (typeof (socket as any).send === 'function') {
             (socket as any).send(response)
+          }
+          // If we paired this socket with a previously-waiting socket,
+          // notify both participants that a match was found and include
+          // the newly-created sessionId so clients can navigate.
+          if (pairedWaitingSocket && sessionId) {
+            try {
+              const msgWaiting = JSON.stringify({ event: 'match:event', payload: { type: 'MATCH_FOUND', message: 'Opponent found', sessionId, slot: 'p1' } })
+              if (typeof (pairedWaitingSocket as any).send === 'function') (pairedWaitingSocket as any).send(msgWaiting)
+            } catch (e) { /* swallow */ }
+
+            try {
+              const msgJoining = JSON.stringify({ event: 'match:event', payload: { type: 'MATCH_FOUND', message: 'Match started', sessionId, slot: playerSlot } })
+              if (typeof (socket as any).send === 'function') (socket as any).send(msgJoining)
+            } catch (e) { /* swallow */ }
           }
         } else if (data.event === 'input') {
           if (query.mode === 'local') {
@@ -389,13 +492,40 @@ export default async function gameRoutes(fastify: FastifyInstance) {
     }
 
     const handleClose = () => {
-      fastify.log.info('Client disconnected from game websocket')
+      fastify.log.info({ sessionId, userId: (socket as any).__userId ?? null }, 'Client disconnected from game websocket')
+        try {
+          const maybeUserId = (socket as any).__userId as number | undefined
+          if (maybeUserId) {
+            // If this socket is registered in the local gameSockets map, remove it
+              try {
+                const rec = gameSockets.get(maybeUserId)
+                if (rec && rec.socket === socket) {
+                  try { console.info(`[game/ws] Removing game socket for user=${maybeUserId} session=${rec.sessionId} on close`) } catch (e) {}
+                  try { console.info(new Error('stack:').stack) } catch (e) {}
+                  gameSockets.delete(maybeUserId)
+                } else if (rec) {
+                  try { console.info(`[game/ws] Close event for user=${maybeUserId} did not match stored game socket (storedSession=${rec.sessionId})`) } catch (e) {}
+                }
+              } catch (e) {}
+          }
+        } catch (e) {}
+      // Central unregister is not used here; gameSockets map is the source
+      // of truth for game connections and was cleaned up above.
       try {
-        // attempt to unregister connection if present (userId/sessionId may be attached)
-        const maybeUserId = (socket as any).__userId as number | undefined
-        if (maybeUserId && sessionId) unregisterConnection(maybeUserId, sessionId, socket)
-      } catch (e) {}
-      game.removePlayer(socket as any)
+        if (game) {
+          game.removePlayer(socket as any)
+        } else {
+          // if no game and sessionId corresponds to a waiting slot, remove it
+          if (sessionId) {
+            try {
+              fastify.log.info({ sessionId }, 'Removing waiting slot on socket close')
+              manager.removeWaitingSlot(sessionId)
+            } catch (e) { fastify.log.warn({ err: e, sessionId }, 'Failed to remove waiting slot on close') }
+          }
+        }
+      } catch (e) {
+        // swallow
+      }
     }
 
     if (typeof (socket as any).on === 'function') {

@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
 import useAuthStore from '../stores/authStore'
 // Tournament alias registration UI removed
@@ -15,10 +15,12 @@ type AIDifficulty = 'EASY' | 'NORMAL' | 'HARD'
 const GameLobbyPage = () => {
   const navigate = useNavigate()
   const user = useAuthStore((s) => s.user)
+  const token = useAuthStore((s) => s.accessToken)
   const [selectedMode, setSelectedMode] = useState<GameMode | null>(null)
   const [matchType, setMatchType] = useState<MatchType | null>(null)
   const [aiDifficulty, setAiDifficulty] = useState<AIDifficulty>('NORMAL')
   const [isMatching, setIsMatching] = useState(false)
+  const matchingSocketRef = useRef<WebSocket | null>(null)
   
 
   // Local 1v1 State
@@ -92,12 +94,54 @@ const GameLobbyPage = () => {
       }
     } else if (selectedMode === 'remote') {
       if (matchType === 'public') {
+        // Start real matching: open a WS to /api/ws/game without sessionId
         setIsMatching(true)
-        // ここでWebSocket接続＆マッチング待機を開始する想定
-        // モックとして3秒後に遷移
-        setTimeout(() => {
-          navigate(`/game/remote-${Date.now()}?mode=remote`)
-        }, 3000)
+        try {
+          const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:'
+          const host = window.location.host
+          const wsUrl = `${protocol}//${host}/api/ws/game`
+          const ws = new WebSocket(wsUrl)
+          matchingSocketRef.current = ws
+
+          ws.onopen = () => {
+            // send ready with token to authenticate and join waiting slot
+            try { if (token) ws.send(JSON.stringify({ event: 'ready', payload: { token } })) } catch (e) { /* ignore */ }
+          }
+
+          ws.onmessage = (evt) => {
+            try {
+              const data = JSON.parse(evt.data)
+              if (data.event === 'match:event') {
+                if (data.payload.type === 'CONNECTED' && data.payload.waiting) {
+                  // waiting: show spinner (already isMatching=true)
+                } else if (data.payload.type === 'MATCH_FOUND' && data.payload.sessionId) {
+                  // navigate to the newly-created session and close the matching socket
+                  const sid = data.payload.sessionId
+                  try { ws.close() } catch (e) { /* ignore */ }
+                  matchingSocketRef.current = null
+                  setIsMatching(false)
+                  navigate(`/game/${encodeURIComponent(sid)}?mode=remote`)
+                } else if (data.payload.type === 'UNAVAILABLE' || data.payload.type === 'CLOSED') {
+                  // stop matching and show message
+                  try { ws.close() } catch (e) {}
+                  matchingSocketRef.current = null
+                  setIsMatching(false)
+                  alert(data.payload.message || 'Match unavailable')
+                }
+              }
+            } catch (err) {
+              console.error('Failed to parse matching ws message', err)
+            }
+          }
+
+          ws.onclose = () => {
+            matchingSocketRef.current = null
+            setIsMatching(false)
+          }
+        } catch (err) {
+          console.error('Failed to start matching socket', err)
+          setIsMatching(false)
+        }
       } else if (matchType === 'private') {
         try {
           // Create a new private room via API (no manual code entry)
@@ -136,7 +180,31 @@ const GameLobbyPage = () => {
 
   const handleCancelMatching = () => {
     setIsMatching(false)
+    try {
+      if (matchingSocketRef.current) {
+        try { matchingSocketRef.current.send(JSON.stringify({ event: 'control', payload: { type: 'LEAVE' } })) } catch (e) {}
+        try { matchingSocketRef.current.close() } catch (e) {}
+        matchingSocketRef.current = null
+      }
+    } catch (e) {
+      // ignore
+    }
   }
+
+  // Ensure matching socket is closed when this component unmounts
+  useEffect(() => {
+    return () => {
+      try {
+        if (matchingSocketRef.current) {
+          try { matchingSocketRef.current.send(JSON.stringify({ event: 'control', payload: { type: 'LEAVE' } })) } catch (e) {}
+          try { matchingSocketRef.current.close() } catch (e) {}
+          matchingSocketRef.current = null
+        }
+      } catch (e) {
+        // ignore
+      }
+    }
+  }, [])
 
   return (
     <div className="mx-auto max-w-4xl px-6 py-12">
