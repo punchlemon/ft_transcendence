@@ -97,7 +97,7 @@ const GameLobbyPage = () => {
               // will wait until participants accept invites — participants will navigate directly
               // into the game when they Accept (NotificationToast handles that).
               const tid = detail.data.id
-              const sid = `tournament-${tid}-room-${roomId ?? 'unknown'}-${Date.now()}`
+              const sid = `tournament-${tid}-room-${roomId ?? 'unknown'}`
               navigate(`/game/${encodeURIComponent(sid)}?mode=tournament&tournamentId=${encodeURIComponent(tid)}&roomId=${encodeURIComponent(String(roomId))}`)
               return
             } catch (e) {

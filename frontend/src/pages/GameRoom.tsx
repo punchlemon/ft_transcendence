@@ -41,6 +41,8 @@ const GameRoomPage = () => {
   const location = useLocation()
   const prevLocationRef = useRef<string | null>(null)
 
+  const isTournamentMode = Boolean(searchParams.get('tournamentId') || searchParams.get('mode') === 'tournament' || (id && id.startsWith('tournament-')))
+
   // Helper to send LEAVE and close socket (centralized so multiple places can call)
   const sendLeaveAndClose = () => {
     try {
@@ -552,7 +554,7 @@ const GameRoomPage = () => {
       e.preventDefault()
 
       if (status === 'finished') {
-        if (id?.startsWith('local-')) {
+        if (isTournamentMode || id?.startsWith('local-')) {
           handleNextMatch()
         } else {
           playAgain()
@@ -741,7 +743,7 @@ const GameRoomPage = () => {
                 <div className="flex gap-4 justify-center">
                   <button 
                     onClick={() => {
-                      if (id?.startsWith('local-')) {
+                      if (isTournamentMode || id?.startsWith('local-')) {
                         handleNextMatch()
                       } else {
                         playAgain()
@@ -749,7 +751,7 @@ const GameRoomPage = () => {
                     }}
                     className="rounded-full bg-white px-8 py-3 font-bold text-slate-900 hover:bg-indigo-50 transition-colors shadow-lg hover:shadow-xl transform hover:-translate-y-0.5"
                   >
-                    {id?.startsWith('local-') ? (advanceToNextMatch(matchQueue, currentMatchIndex) === -1 ? 'View Results' : 'Next Match') : 'Play Again'}
+                    {(isTournamentMode || id?.startsWith('local-')) ? (advanceToNextMatch(matchQueue, currentMatchIndex) === -1 ? 'View Results' : 'Next Match') : 'Play Again'}
                   </button>
                 </div>
               </div>

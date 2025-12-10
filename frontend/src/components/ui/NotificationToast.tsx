@@ -52,7 +52,7 @@ export default function NotificationToast() {
           try {
             const tid = data.tournamentId != null ? Number(data.tournamentId) : data.tournamentId
             const rid = Number(data.roomId)
-            const sessionId = `tournament-${tid}-room-${rid}-${Date.now()}`
+            const sessionId = `tournament-${tid}-room-${rid}`
             try {
               navigate(`/game/${encodeURIComponent(sessionId)}?mode=tournament&tournamentId=${encodeURIComponent(tid)}&roomId=${encodeURIComponent(rid)}`)
             } catch (e) {
@@ -75,7 +75,7 @@ export default function NotificationToast() {
         try {
           const tid = data.tournamentId != null ? Number(data.tournamentId) : data.tournamentId
           const rid = data.roomId != null ? Number(data.roomId) : data.roomId
-          const sessionId = `tournament-${tid}-room-${rid}-${Date.now()}`
+          const sessionId = `tournament-${tid}-room-${rid}`
           try {
             navigate(`/game/${encodeURIComponent(sessionId)}?mode=tournament&tournamentId=${encodeURIComponent(tid)}&roomId=${encodeURIComponent(rid)}`)
           } catch (e) {

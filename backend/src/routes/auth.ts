@@ -8,6 +8,7 @@ import { z } from 'zod'
 import type { PrismaClient } from '@prisma/client'
 import { userService } from '../services/user'
 import { presenceService } from '../services/presence'
+import { enqueuePrismaWork } from '../utils/prismaQueue'
 
 const SESSION_TTL_MS = 1000 * 60 * 60 * 24 * 7 // 7 days
 const MFA_CHALLENGE_TTL_MS = 1000 * 60 * 5 // 5 minutes
@@ -527,8 +528,10 @@ const authRoutes: FastifyPluginAsync = async (fastify) => {
         }
       }
     }
-
-    const passwordHash = await argon2.hash(password, { type: argon2.argon2id })
+    // Hash the password before persisting. Previously `passwordHash` was
+    // referenced without being defined which could cause a runtime error
+    // when registration validation passes. Ensure we compute the hash here.
+    const passwordHash = await argon2.hash(password)
 
     const user = await fastify.prisma.user.create({
       data: {
@@ -976,7 +979,7 @@ const authRoutes: FastifyPluginAsync = async (fastify) => {
     const secret = authenticator.generateSecret(32)
     const otpauthUrl = authenticator.keyuri(user.email ?? user.login, 'ft_transcendence', secret)
 
-    await fastify.prisma.$transaction(async (tx) => {
+    await enqueuePrismaWork(() => fastify.prisma.$transaction(async (tx) => {
       await tx.user.update({
         where: { id: userId },
         data: {
@@ -985,7 +988,7 @@ const authRoutes: FastifyPluginAsync = async (fastify) => {
         }
       })
       await tx.twoFactorBackupCode.deleteMany({ where: { userId } })
-    })
+    }))
 
     return {
       secret,
@@ -1102,12 +1105,12 @@ const authRoutes: FastifyPluginAsync = async (fastify) => {
         codes.map((code) => argon2.hash(code, { type: argon2.argon2id }))
       )
 
-      await fastify.prisma.$transaction(async (tx) => {
+      await enqueuePrismaWork(() => fastify.prisma.$transaction(async (tx) => {
         await tx.twoFactorBackupCode.deleteMany({ where: { userId } })
         await tx.twoFactorBackupCode.createMany({
           data: codeHashes.map((codeHash) => ({ userId, codeHash }))
         })
-      })
+      }))
 
       return {
         regenerated: true,
@@ -1223,7 +1226,7 @@ const authRoutes: FastifyPluginAsync = async (fastify) => {
       }
     }
 
-    await fastify.prisma.$transaction(async (tx) => {
+    await enqueuePrismaWork(() => fastify.prisma.$transaction(async (tx) => {
       await tx.user.update({
         where: { id: userId },
         data: {
@@ -1232,7 +1235,7 @@ const authRoutes: FastifyPluginAsync = async (fastify) => {
         }
       })
       await tx.twoFactorBackupCode.deleteMany({ where: { userId } })
-    })
+    }))
 
     reply.code(204)
     return null
@@ -1358,7 +1361,7 @@ const authRoutes: FastifyPluginAsync = async (fastify) => {
 
     const clientMetadata = extractClientMetadata(request)
 
-    const result = await fastify.prisma.$transaction(async (tx) => {
+    const result = await enqueuePrismaWork(() => fastify.prisma.$transaction(async (tx) => {
       await tx.mfaChallenge.delete({ where: { id: challenge.id } })
 
       if (matchedBackupCodeId) {
@@ -1391,7 +1394,7 @@ const authRoutes: FastifyPluginAsync = async (fastify) => {
       })
 
       return { updatedUser, session }
-    })
+    }))
 
     const accessToken = await fastify.issueAccessToken({ userId: result.updatedUser.id, sessionId: result.session.id })
 
