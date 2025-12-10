@@ -5,7 +5,7 @@ import useAuthStore from '../stores/authStore'
 // Tournament alias registration UI removed
 import BracketView from '../components/tournament/BracketView'
 import { useTournamentSetup } from '../hooks/useTournamentSetup'
-import { generatePreviewMatches } from '../lib/tournament'
+import { generatePreviewMatches, normalizeAlias } from '../lib/tournament'
 // FriendSelectorModal removed — use lobby flow / toasts instead
 import { fetchUserFriends, createTournament, fetchTournament, createTournamentRoom } from '../lib/api'
 
@@ -440,18 +440,57 @@ const GameLobbyPage = () => {
                 {/* Invite Friends button removed — use NotificationToast for invites */}
 
                 {(() => {
-                  const aliases = [user?.displayName ?? 'You', ...friends.filter(f => selectedFriendIds.includes(f.id)).map(f => f.displayName)]
-                  return aliases.length > 0 ? (
+                  const selectedFriends = friends.filter(f => selectedFriendIds.includes(f.id))
+                  const aliases = [user?.displayName ?? 'You', ...selectedFriends.map(f => f.displayName)]
+                  if (aliases.length === 0) return null
+
+                  // Build participants for preview so avatars/status can resolve
+                  const participantsForPreview: Array<any> = []
+                  let nextId = 1
+                  // Owner / current user
+                  participantsForPreview.push({ id: nextId++, alias: user?.displayName ?? 'You', userId: user?.id ?? null, inviteState: 'ACCEPTED', seed: null, joinedAt: new Date().toISOString() })
+                  // Selected friends
+                  selectedFriends.forEach((f) => {
+                    participantsForPreview.push({ id: nextId++, alias: f.displayName, userId: f.id, inviteState: 'ACCEPTED', seed: null, joinedAt: new Date().toISOString() })
+                  })
+                  // Pad with AI if needed
+                  if (participantsForPreview.length % 2 !== 0) {
+                    participantsForPreview.push({ id: nextId++, alias: 'AI', userId: null, inviteState: 'PLACEHOLDER', seed: null, joinedAt: new Date().toISOString() })
+                  }
+
+                  // Generate matches and then map participantId on preview matches to our participants
+                  const rawMatches = generatePreviewMatches(aliases) as any[]
+                  // Build lookup by normalized alias
+                  const lookupByAlias: Record<string, any> = {}
+                  participantsForPreview.forEach((p) => { lookupByAlias[normalizeAlias(p.alias)] = p })
+
+                  const matchesWithIds = rawMatches.map((m) => {
+                    const clone = { ...m }
+                    if (clone.playerA && clone.playerA.alias) {
+                      const key = normalizeAlias(clone.playerA.alias)
+                      const p = lookupByAlias[key]
+                      if (p) clone.playerA.participantId = p.id
+                    }
+                    if (clone.playerB && clone.playerB.alias) {
+                      const key = normalizeAlias(clone.playerB.alias)
+                      const p = lookupByAlias[key]
+                      if (p) clone.playerB.participantId = p.id
+                    }
+                    return clone
+                  })
+
+                  return (
                     <div className="mt-6 border-t border-slate-200 pt-6 dark:border-slate-700">
                       <h4 className="mb-4 text-sm font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">Tournament Bracket</h4>
                       <BracketView 
-                        matches={generatePreviewMatches(aliases) as any} 
+                        matches={matchesWithIds as any} 
                         currentMatchIndex={-1}
                         onRemovePlayer={undefined}
                         currentUserAlias={user?.displayName}
+                        participants={participantsForPreview}
                       />
                     </div>
-                  ) : null
+                  )
                 })()}
               </div>
             </div>

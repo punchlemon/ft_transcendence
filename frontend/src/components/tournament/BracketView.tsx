@@ -3,13 +3,21 @@ import { MatchCard } from './MatchCard'
 
 type BracketViewProps = {
   matches: TournamentDetail['matches']
+  participants?: TournamentDetail['participants']
   currentMatchIndex: number
   onRemovePlayer?: (alias: string) => void
   currentUserAlias?: string
 }
 
-const BracketView = ({ matches, onRemovePlayer, currentUserAlias }: BracketViewProps) => {
+const BracketView = ({ matches, onRemovePlayer, currentUserAlias, participants }: BracketViewProps) => {
   if (!matches || matches.length === 0) return null
+
+  const participantLookup: Record<number, TournamentDetail['participants'][0]> | undefined = participants
+    ? participants.reduce((acc, p) => {
+        acc[p.id] = p
+        return acc
+      }, {} as Record<number, TournamentDetail['participants'][0]>)
+    : undefined
 
   // Group by round
   const roundsMap: Record<number, typeof matches> = {}
@@ -73,6 +81,7 @@ const BracketView = ({ matches, onRemovePlayer, currentUserAlias }: BracketViewP
                 playerWidth={PLAYER_WIDTH}
                 currentUserAlias={currentUserAlias}
                 isLeaf={roundNum === 1}
+                participantLookup={participantLookup}
               />
             ))}
           </div>

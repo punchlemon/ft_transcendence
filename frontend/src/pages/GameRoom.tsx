@@ -678,8 +678,9 @@ const GameRoomPage = () => {
                 <h2 className="text-sm font-bold text-slate-900 mb-1 dark:text-slate-100">{activeTournament.name}</h2>
                 {activeTournament.matches && activeTournament.matches.length > 0 && (
                     <BracketView 
-                        matches={activeTournament.matches} 
-                        currentMatchIndex={currentMatchIndex} 
+                    matches={activeTournament.matches} 
+                    participants={activeTournament.participants}
+                    currentMatchIndex={currentMatchIndex} 
                     />
                 )}
             </div>

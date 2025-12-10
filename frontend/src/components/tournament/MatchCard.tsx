@@ -1,4 +1,67 @@
+import React, { useEffect, useState } from 'react'
 import type { TournamentDetail } from '../../lib/api'
+import UserAvatar from '../ui/UserAvatar'
+import { fetchUserProfile, baseURL } from '../../lib/api'
+
+const PlayerAvatarAndLabel: React.FC<{
+  userId?: number | null
+  alias?: string | null
+  fallbackAvatarUrl?: string | null
+  isPlaceholder: boolean
+  isAI: boolean
+  isWinner: boolean
+}> = ({ userId = null, alias, fallbackAvatarUrl = null, isPlaceholder, isAI, isWinner }) => {
+  const [meta, setMeta] = useState<{ id: number; displayName: string; avatarUrl?: string | null; login?: string; status?: string | null } | null>(null)
+
+  useEffect(() => {
+    let mounted = true
+    if (!userId) {
+      // avoid synchronous setState in effect body
+      Promise.resolve().then(() => { if (mounted) setMeta(null) })
+      return () => { mounted = false }
+    }
+
+    const idStr = String(userId)
+    fetchUserProfile(idStr)
+      .then((res) => {
+        if (!mounted) return
+        setMeta({ id: res.id, displayName: res.displayName, avatarUrl: res.avatarUrl ?? null, login: res.login, status: res.status ?? null })
+      })
+      .catch(() => { if (mounted) setMeta(null) })
+
+    return () => { mounted = false }
+  }, [userId])
+
+  // Resolve avatar URL to absolute backend URL when necessary so we don't rely on nginx root routing
+  const resolvedAvatar = (() => {
+    const candidate = (meta?.avatarUrl ?? fallbackAvatarUrl) ?? null
+    if (!candidate || typeof candidate !== 'string') return null
+    const s = candidate.trim()
+    if (s.length === 0) return null
+    const lower = s.toLowerCase()
+    if (lower === 'null' || lower === 'undefined' || lower === 'false') return null
+
+    // Absolute URLs should be used as-is
+    if (s.startsWith('http://') || s.startsWith('https://')) return s
+
+    // For origin-relative paths (e.g. "/uploads/...") use them directly
+    // Do NOT prefix with api baseURL ("/api") because static uploads are served at origin '/uploads/'
+    if (s.startsWith('/')) return s
+
+    // Otherwise treat as relative to origin root
+    return `/${s}`
+  })()
+  const avatarUser: any = meta ? { ...meta, avatarUrl: resolvedAvatar ?? meta.avatarUrl, status: meta.status ?? 'OFFLINE' } : { id: userId ?? -1, displayName: alias ?? 'Unknown', avatarUrl: resolvedAvatar ?? null, login: undefined, status: 'OFFLINE' }
+
+  return (
+    <div className="flex items-center gap-2 w-full">
+      <UserAvatar user={avatarUser as any} size="sm" linkToProfile={false} />
+      <span className={`truncate text-xs font-bold ${isWinner ? 'text-indigo-700 dark:text-indigo-400' : (isPlaceholder && !isAI ? 'text-slate-400 italic dark:text-slate-500' : 'text-slate-700 dark:text-slate-300')}`}>
+        {isPlaceholder ? (isAI ? 'AI' : 'Waiting...') : (meta ? meta.displayName : (alias ?? 'Unknown'))}
+      </span>
+    </div>
+  )
+}
 
 type MatchCardProps = {
   match: TournamentDetail['matches'][0]
@@ -7,6 +70,7 @@ type MatchCardProps = {
   playerWidth?: number
   currentUserAlias?: string
   isLeaf?: boolean
+  participantLookup?: Record<number, TournamentDetail['participants'][0]>
 }
 
 export const MatchCard = ({ 
@@ -16,6 +80,7 @@ export const MatchCard = ({
   playerWidth = 100,
   currentUserAlias,
   isLeaf = true
+  , participantLookup
 }: MatchCardProps) => {
   if (!match) return null
 
@@ -50,9 +115,18 @@ export const MatchCard = ({
         }`}
         style={{ width: `${playerWidth}px`, height: '40px' }}
       >
-        <span className={`truncate text-xs font-bold ${isWinner ? 'text-indigo-700 dark:text-indigo-400' : (isPlaceholder && !isAI ? 'text-slate-400 italic dark:text-slate-500' : 'text-slate-700 dark:text-slate-300')}`}>
-          {isPlaceholder ? (isAI ? 'AI' : 'Waiting...') : (player?.alias ?? 'Unknown')}
-        </span>
+        <PlayerAvatarAndLabel
+          userId={
+            (player as any)?.userId ?? (player as any)?.user?.id ??
+            // Try resolving via participantLookup when match player only has participantId
+            (participantLookup && player?.participantId ? participantLookup[player.participantId]?.userId ?? null : null)
+          }
+          alias={player?.alias}
+          fallbackAvatarUrl={(player as any)?.avatarUrl ?? null}
+          isPlaceholder={isPlaceholder}
+          isAI={isAI}
+          isWinner={isWinner}
+        />
         
         {isAI && (
           <span className="absolute -top-1 -right-1 rounded bg-amber-100 px-1 text-[8px] font-bold text-amber-600 dark:bg-amber-900/50 dark:text-amber-300">AI</span>
