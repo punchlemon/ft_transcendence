@@ -452,7 +452,7 @@ export default async function gameRoutes(fastify: FastifyInstance) {
                 // Fallback: determine winner by score
                 const s = (game as any).state?.score
                 const winner = s && s.p2 > s.p1 ? 'p2' : 'p1'
-                ;(game as any).finishGame(winner)
+                ;(game as any).finishGame(winner, { reason: 'ABORT' })
               }
             } catch (e) {
               fastify.log.error({ err: e }, 'Failed to abort game')

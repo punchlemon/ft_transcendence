@@ -4,6 +4,8 @@ import { userService } from '../services/user';
 import { GameState, GameConfig, DEFAULT_CONFIG, PlayerInput } from './types';
 import { AIOpponent, AIDifficulty } from './ai';
 
+export type FinishReason = 'SCORE' | 'FORFEIT' | 'ABORT';
+
 export class GameEngine {
   public readonly sessionId: string;
   // If set, the userId of the player who created this private session.
@@ -42,13 +44,13 @@ export class GameEngine {
   // restartMatch triggers persistence of the previous match.
   private lastResultPersisted: boolean = false;
 
-  private onGameEnd?: (result: { winner: 'p1' | 'p2'; score: { p1: number; p2: number }; p1Id?: number; p2Id?: number; p1Alias?: string; p2Alias?: string; startedAt?: Date }) => Promise<void> | void;
+  private onGameEnd?: (result: { winner: 'p1' | 'p2'; score: { p1: number; p2: number }; p1Id?: number; p2Id?: number; p1Alias?: string; p2Alias?: string; startedAt?: Date; reason?: FinishReason; meta?: Record<string, unknown> }) => Promise<void> | void;
   private onEmpty?: () => void;
 
   constructor(
     sessionId: string,
     config: GameConfig = DEFAULT_CONFIG,
-    onGameEnd?: (result: { winner: 'p1' | 'p2'; score: { p1: number; p2: number }; p1Id?: number; p2Id?: number; p1Alias?: string; p2Alias?: string; startedAt?: Date }) => Promise<void> | void,
+    onGameEnd?: (result: { winner: 'p1' | 'p2'; score: { p1: number; p2: number }; p1Id?: number; p2Id?: number; p1Alias?: string; p2Alias?: string; startedAt?: Date; reason?: FinishReason; meta?: Record<string, unknown> }) => Promise<void> | void,
     onEmpty?: () => void
   ) {
     this.sessionId = sessionId;
@@ -201,14 +203,25 @@ export class GameEngine {
     // Short-circuit if we are already tearing this game down.
     if (this.isBeingDestroyed) return;
     let removedSlot: 'p1' | 'p2' | null = null;
+    let disconnectMessage: string | null = null;
     if (this.clients.p1 === socket) {
       this.clients.p1 = undefined;
-      removedSlot = 'p1'
-      this.pauseGame('Player 1 disconnected');
+      removedSlot = 'p1';
+      disconnectMessage = 'Player 1 disconnected';
     } else if (this.clients.p2 === socket) {
       this.clients.p2 = undefined;
-      removedSlot = 'p2'
-      this.pauseGame('Player 2 disconnected');
+      removedSlot = 'p2';
+      disconnectMessage = 'Player 2 disconnected';
+    }
+
+    const isTournamentMatch = this.sessionId.startsWith('local-match-');
+    let handledForfeit = false;
+    if (removedSlot && isTournamentMatch) {
+      handledForfeit = this.handleTournamentForfeit(removedSlot);
+    }
+
+    if (removedSlot && !handledForfeit && disconnectMessage) {
+      this.pauseGame(disconnectMessage);
     }
 
     // Immediately mark the removed player as ONLINE in the DB and emit
@@ -361,6 +374,40 @@ export class GameEngine {
         }
       }
     }
+  }
+
+  private handleTournamentForfeit(loserSlot: 'p1' | 'p2'): boolean {
+    if (this.state.status === 'FINISHED') {
+      return true;
+    }
+    if (this.state.status !== 'PLAYING' && this.state.status !== 'COUNTDOWN') {
+      return false;
+    }
+
+    const winnerSlot: 'p1' | 'p2' = loserSlot === 'p1' ? 'p2' : 'p1';
+    if (!winnerSlot) return false;
+
+    const loserAlias = this.playersAliases[loserSlot];
+    const winnerAlias = this.playersAliases[winnerSlot];
+
+    const loserScore = this.state.score[loserSlot];
+    const winnerScore = this.state.score[winnerSlot];
+    const adjustedWinnerScore = Math.max(winnerScore ?? 0, (loserScore ?? 0) + 1, 1);
+    this.state.score[winnerSlot] = adjustedWinnerScore;
+
+    const message = loserAlias ? `${loserAlias} forfeited the match.` : 'Opponent forfeited the match.';
+    const meta = {
+      forfeit: {
+        loserSlot,
+        winnerSlot,
+        loserAlias: loserAlias ?? null,
+        winnerAlias: winnerAlias ?? null
+      }
+    };
+
+    this.finishGame(winnerSlot, { reason: 'FORFEIT', message, meta })
+      .catch((err) => console.error('[engine] Failed to finish tournament forfeit', err));
+    return true;
   }
 
   private checkStart() {
@@ -540,16 +587,21 @@ export class GameEngine {
 
     if (this.state.score[scorer] >= (this.config.winningScore || 5)) {
       // Fire and forget finishGame, but catch errors
-      this.finishGame(scorer).catch(err => console.error('Error finishing game:', err));
+      this.finishGame(scorer, { reason: 'SCORE' }).catch(err => console.error('Error finishing game:', err));
     } else {
       this.resetBall(scorer === 'p1' ? 'p2' : 'p1'); // Serve to loser
     }
   }
 
-  public async finishGame(winner: 'p1' | 'p2') {
-    this.state.status = 'FINISHED';
+  public async finishGame(winner: 'p1' | 'p2', options?: { reason?: FinishReason; message?: string; meta?: Record<string, unknown> }) {
+    if (this.state.status === 'FINISHED') {
+      return;
+    }
+
     this.stop();
-    
+
+    const reason: FinishReason = options?.reason ?? 'SCORE';
+
     // Persist result first
     if (this.onGameEnd) {
       try {
@@ -560,7 +612,9 @@ export class GameEngine {
           p2Id: this.players.p2,
           p1Alias: this.playersAliases.p1,
           p2Alias: this.playersAliases.p2,
-          startedAt: this.startedAt
+          startedAt: this.startedAt,
+          reason,
+          meta: options?.meta
         });
         // Mark that we've persisted this match so restartMatch won't re-persist
         this.lastResultPersisted = true;
@@ -570,7 +624,14 @@ export class GameEngine {
     }
 
     // Then notify clients
-    this.broadcast({ event: 'match:event', payload: { type: 'FINISHED', winner, score: this.state.score } });
+    const payload: Record<string, unknown> = { type: 'FINISHED', winner, score: this.state.score, reason };
+    if (options?.message) {
+      payload.message = options.message;
+    }
+    if (options?.meta) {
+      payload.meta = options.meta;
+    }
+    this.broadcast({ event: 'match:event', payload });
   }
 
   // Abort the game and save current score as final (winner determined by current score)
@@ -578,7 +639,7 @@ export class GameEngine {
     const { p1, p2 } = this.state.score
     let winner: 'p1' | 'p2' = 'p1'
     if (p2 > p1) winner = 'p2'
-    this.finishGame(winner).catch(err => console.error('Error aborting game:', err));
+    this.finishGame(winner, { reason: 'ABORT' }).catch(err => console.error('Error aborting game:', err));
   }
 
   // Restart the match in the same session. This resets scores/ball and
@@ -608,7 +669,8 @@ export class GameEngine {
               p2Id: this.players.p2,
               p1Alias: this.playersAliases.p1,
               p2Alias: this.playersAliases.p2,
-              startedAt: this.startedAt
+              startedAt: this.startedAt,
+              reason: 'SCORE'
             });
             // Mark persisted so subsequent restart attempts won't persist again
             this.lastResultPersisted = true;

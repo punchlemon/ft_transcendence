@@ -129,4 +129,38 @@ describe('GameEngine', () => {
     
     vi.useRealTimers();
   });
+
+  it('marks tournament disconnect as a forfeit', async () => {
+    vi.useFakeTimers();
+    const onGameEnd = vi.fn().mockResolvedValue(undefined);
+    game = new GameEngine('local-match-42', undefined, onGameEnd);
+    mockWs1 = { send: vi.fn(), readyState: WebSocket.OPEN };
+    mockWs2 = { send: vi.fn(), readyState: WebSocket.OPEN };
+
+    expect(game.addPlayer(mockWs1, 100, 'Alice')).toBe('p1');
+    expect(game.addPlayer(mockWs2, 200, 'Bob')).toBe('p2');
+
+    vi.advanceTimersByTime(3000);
+
+    game.removePlayer(mockWs2 as any);
+
+    await Promise.resolve();
+    await Promise.resolve();
+
+    expect(onGameEnd).toHaveBeenCalledWith(expect.objectContaining({
+      winner: 'p1',
+      reason: 'FORFEIT'
+    }));
+
+    await vi.waitUntil(() => {
+      return mockWs1.send.mock.calls.some(([data]: any[]) => typeof data === 'string' && data.includes('"FINISHED"'));
+    }, { timeout: 1000, interval: 10 });
+
+    const finishPayload = mockWs1.send.mock.calls.find(([data]: any[]) => typeof data === 'string' && data.includes('"FINISHED"'))?.[0];
+    expect(finishPayload).toBeTruthy();
+    expect(finishPayload).toContain('"reason":"FORFEIT"');
+    expect(finishPayload).toContain('"loserSlot":"p2"');
+
+    vi.useRealTimers();
+  });
 });
