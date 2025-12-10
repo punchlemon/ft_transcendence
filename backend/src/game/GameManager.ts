@@ -1,4 +1,4 @@
-import { GameEngine } from './engine';
+import { GameEngine, FinishReason } from './engine';
 import { notificationService } from '../services/notification';
 import { WebSocket } from 'ws';
 import { AIDifficulty } from './ai';
@@ -135,7 +135,7 @@ export class GameManager {
     return this.expiredSessions.has(sessionId);
   }
 
-  private async handleGameEnd(sessionId: string, result: { winner: 'p1' | 'p2'; score: { p1: number; p2: number }; p1Id?: number; p2Id?: number; p1Alias?: string; p2Alias?: string; startedAt?: Date }) {
+  private async handleGameEnd(sessionId: string, result: { winner: 'p1' | 'p2'; score: { p1: number; p2: number }; p1Id?: number; p2Id?: number; p1Alias?: string; p2Alias?: string; startedAt?: Date; reason?: FinishReason; meta?: Record<string, unknown> }) {
     // Do not delete the game here. A match ending should not destroy the
     // underlying room — players may remain connected and want to play again
     // within the same session. Room destruction is handled by onEmpty/removeGame.
@@ -199,7 +199,8 @@ export class GameManager {
           endedAt: created.endedAt,
           scoreA: result.score.p1,
           scoreB: result.score.p2,
-          mode: 'standard'
+          mode: 'standard',
+          finishReason: result.reason ?? 'SCORE'
         };
 
         // Update Stats only for real users (userId present)

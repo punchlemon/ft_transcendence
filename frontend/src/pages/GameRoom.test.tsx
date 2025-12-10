@@ -197,4 +197,55 @@ describe('GameRoomPage', () => {
 
     expect(screen.queryByText('Back to Home')).not.toBeInTheDocument()
   })
+
+  it('shows walkover messaging when opponent forfeits', async () => {
+    let wsInstance: MockWebSocket | undefined
+    vi.spyOn(global, 'WebSocket').mockImplementation((url) => {
+      wsInstance = new MockWebSocket(url as string)
+      return wsInstance as any
+    })
+
+    render(
+      <MemoryRouter>
+        <GameRoomPage />
+      </MemoryRouter>
+    )
+
+    await waitFor(() => expect(wsInstance).toBeDefined())
+
+    act(() => {
+      wsInstance?.onmessage?.({
+        data: JSON.stringify({
+          event: 'match:event',
+          payload: { type: 'CONNECTED', slot: 'p1' }
+        })
+      })
+    })
+
+    act(() => {
+      wsInstance?.onmessage?.({
+        data: JSON.stringify({
+          event: 'match:event',
+          payload: {
+            type: 'FINISHED',
+            winner: 'p1',
+            score: { p1: 1, p2: 0 },
+            reason: 'FORFEIT',
+            meta: {
+              forfeit: {
+                loserSlot: 'p2',
+                winnerSlot: 'p1',
+                loserAlias: 'Opponent'
+              }
+            }
+          }
+        })
+      })
+    })
+
+    await waitFor(() => {
+      expect(screen.getByText('Opponent forfeited the match. Walkover win recorded.')).toBeInTheDocument()
+    })
+    expect(screen.getByText('Walkover')).toBeInTheDocument()
+  })
 })

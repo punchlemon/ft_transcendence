@@ -27,6 +27,7 @@ const GameRoomPage = () => {
   const [winner, setWinner] = useState<string | null>(null)
   const [playerSlot, setPlayerSlot] = useState<'p1' | 'p2' | null>(null)
   const playerSlotRef = useRef<'p1' | 'p2' | null>(null)
+  const [finishContext, setFinishContext] = useState<{ reason?: string; message?: string } | null>(null)
   const [reconnectKey, setReconnectKey] = useState(0)
   // Initialize sessionId from the route param so the invite modal can
   // be shown immediately when navigating to `/game/:id?showInvite=1`.
@@ -173,6 +174,7 @@ const GameRoomPage = () => {
             // connection handled
           } else if (data.payload.type === 'START') {
             setStatus('playing')
+            setFinishContext(null)
             try {
               // Mark local user's presence as in-game while playing
               updateUser?.({ status: 'IN_GAME' })
@@ -193,14 +195,38 @@ const GameRoomPage = () => {
             setStatus('finished')
             // Do NOT restore presence here. Presence (IN_GAME) should remain
             // until the player explicitly leaves or the server destroys the room.
-            const winnerSlot = data.payload.winner
-            
+            const winnerSlot = data.payload.winner as 'p1' | 'p2'
+            const finalScore = data.payload.score || gameStateRef.current?.score || { p1: 0, p2: 0 }
+            setScores(finalScore)
+
+            const reason = data.payload.reason as string | undefined
+            const meta = (data.payload.meta ?? {}) as { forfeit?: { loserSlot?: 'p1' | 'p2'; winnerSlot?: 'p1' | 'p2'; loserAlias?: string | null; winnerAlias?: string | null } }
+            const currentSlot = playerSlotRef.current
+            let finishMessage: string | undefined
+
+            if (reason === 'FORFEIT') {
+              const loserSlot = meta?.forfeit?.loserSlot ?? null
+              const winnerSlotMeta = meta?.forfeit?.winnerSlot ?? null
+              if (currentSlot && loserSlot && currentSlot === loserSlot) {
+                finishMessage = 'You forfeited the match. Walkover loss recorded.'
+              } else if (currentSlot && winnerSlotMeta && currentSlot === winnerSlotMeta) {
+                finishMessage = 'Opponent forfeited the match. Walkover win recorded.'
+              } else {
+                const loserAlias = meta?.forfeit?.loserAlias || 'A player'
+                finishMessage = `${loserAlias} forfeited the match. Walkover result recorded.`
+              }
+            } else if (typeof data.payload.message === 'string') {
+              finishMessage = data.payload.message
+            }
+
+            setFinishContext(reason || finishMessage ? { reason, message: finishMessage } : null)
+
             if (mode === 'local') {
                 const p1Name = searchParams.get('p1Name') || 'Player 1'
                 const p2Name = searchParams.get('p2Name') || 'Player 2'
                 setWinner(winnerSlot === 'p1' ? p1Name : p2Name)
             } else {
-                setWinner(winnerSlot === playerSlotRef.current ? 'You' : 'Opponent')
+                setWinner(winnerSlot === currentSlot ? 'You' : 'Opponent')
             }
             
             soundManager.playGameOver()
@@ -211,9 +237,6 @@ const GameRoomPage = () => {
               const winnerId = winnerSlot === 'p1' ? p1Id : p2Id
               
               if (winnerId) {
-                // Use score from payload if available (most reliable), fallback to state
-                const finalScore = data.payload.score || gameStateRef.current?.score || { p1: 0, p2: 0 }
-
                 api.post(`/tournaments/matches/${matchId}/result`, { 
                     winnerId: parseInt(winnerId),
                     scoreA: finalScore.p1,
@@ -443,6 +466,7 @@ const GameRoomPage = () => {
     setScores({ p1: 0, p2: 0 })
     setWinner(null)
     setPlayerSlot(null)
+    setFinishContext(null)
 
     if (currentMode === 'local' || id?.startsWith('local-')) {
       // For local matches we try to keep the socket open and request the server
@@ -485,6 +509,7 @@ const GameRoomPage = () => {
         setScores({ p1: 0, p2: 0 })
         setWinner(null)
         setPlayerSlot(null)
+        setFinishContext(null)
         setStatus('connecting')
         return
       }
@@ -517,6 +542,7 @@ const GameRoomPage = () => {
     } catch (e) {
       // ignore
     }
+    setFinishContext(null)
     navigate('/')
   }, [navigate, updateUser])
 
@@ -731,6 +757,14 @@ const GameRoomPage = () => {
                 <div className="mb-6 text-3xl font-bold text-white">
                   {searchParams.get('mode') === 'local' ? `🏆 ${winner} Won!` : (winner === 'You' ? '🏆 You Won!' : '💀 You Lost')}
                 </div>
+                {finishContext?.message && (
+                  <div className="mb-6 text-lg font-medium text-white/90">
+                    {finishContext?.reason === 'FORFEIT' && (
+                      <span className="mb-1 block text-sm uppercase tracking-[0.35em] text-amber-200">Walkover</span>
+                    )}
+                    {finishContext.message}
+                  </div>
+                )}
                 {/* Scores intentionally omitted from finished overlay per UX request */}
                 <div className="flex flex-wrap gap-4 justify-center">
                   {!isTournamentMatch && (
