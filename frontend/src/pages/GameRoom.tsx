@@ -392,30 +392,34 @@ const GameRoomPage = () => {
     const intervalId = setInterval(() => {
       if (!socketRef.current || socketRef.current.readyState !== WebSocket.OPEN) return
 
+      // Guard: if the client is a spectator (no player slot), do not send input
+      if (!playerSlotRef.current) return
+
       const mode = searchParams.get('mode')
 
       if (mode === 'local') {
-        // P1 Input (WASD)
-        let axisP1 = 0
-        if (keys.w) axisP1 -= 1
-        if (keys.s) axisP1 += 1
+        // Only send input for the slot this client controls
+        if (playerSlotRef.current === 'p1') {
+          let axisP1 = 0
+          if (keys.w) axisP1 -= 1
+          if (keys.s) axisP1 += 1
 
-        socketRef.current.send(JSON.stringify({
-          event: 'input',
-          payload: { tick: Date.now(), axis: axisP1, boost: false, player: 'p1' }
-        }))
+          socketRef.current.send(JSON.stringify({
+            event: 'input',
+            payload: { tick: Date.now(), axis: axisP1, boost: false, player: 'p1' }
+          }))
+        } else if (playerSlotRef.current === 'p2') {
+          let axisP2 = 0
+          if (keys.up) axisP2 -= 1
+          if (keys.down) axisP2 += 1
 
-        // P2 Input (O / L)
-        let axisP2 = 0
-        if (keys.up) axisP2 -= 1
-        if (keys.down) axisP2 += 1
-
-        socketRef.current.send(JSON.stringify({
-          event: 'input',
-          payload: { tick: Date.now(), axis: axisP2, boost: false, player: 'p2' }
-        }))
+          socketRef.current.send(JSON.stringify({
+            event: 'input',
+            payload: { tick: Date.now(), axis: axisP2, boost: false, player: 'p2' }
+          }))
+        }
       } else {
-        // Standard Input (WASD or O/L)
+        // Standard Input (WASD or O/L) — only send if this client has an assigned player slot
         let axis = 0
         if (keys.w || keys.up) axis -= 1
         if (keys.s || keys.down) axis += 1
@@ -555,7 +559,18 @@ const GameRoomPage = () => {
 
       if (status === 'finished') {
         if (isTournamentMode || id?.startsWith('local-')) {
-          handleNextMatch()
+          // Only participants (or clients with an assigned player slot) may trigger Next Match.
+          const p1Id = searchParams.get('p1Id')
+          const p2Id = searchParams.get('p2Id')
+          const numeric = (s?: string | null) => s ? Number(s) : null
+          const allowedById = user && ((numeric(p1Id) && user.id === numeric(p1Id)) || (numeric(p2Id) && user.id === numeric(p2Id)))
+          const allowed = Boolean(playerSlotRef.current) || Boolean(allowedById)
+          if (allowed) {
+            handleNextMatch()
+          } else {
+            // If not allowed, simply ignore the space key (spectator)
+            return
+          }
         } else {
           playAgain()
         }
@@ -741,18 +756,35 @@ const GameRoomPage = () => {
                 </div>
                 {/* Scores intentionally omitted from finished overlay per UX request */}
                 <div className="flex gap-4 justify-center">
-                  <button 
-                    onClick={() => {
-                      if (isTournamentMode || id?.startsWith('local-')) {
-                        handleNextMatch()
-                      } else {
-                        playAgain()
-                      }
-                    }}
-                    className="rounded-full bg-white px-8 py-3 font-bold text-slate-900 hover:bg-indigo-50 transition-colors shadow-lg hover:shadow-xl transform hover:-translate-y-0.5"
-                  >
-                    {(isTournamentMode || id?.startsWith('local-')) ? (advanceToNextMatch(matchQueue, currentMatchIndex) === -1 ? 'View Results' : 'Next Match') : 'Play Again'}
-                  </button>
+                  {(() => {
+                    if (isTournamentMode || id?.startsWith('local-')) {
+                      const nextIndex = advanceToNextMatch(matchQueue, currentMatchIndex)
+                      const nextMatch = nextIndex === -1 ? null : matchQueue[nextIndex]
+                      const p1Id = nextMatch?.participantIds?.[0]
+                      const p2Id = nextMatch?.participantIds?.[1]
+                      const allowedById = user && ((p1Id && user.id === Number(p1Id)) || (p2Id && user.id === Number(p2Id)))
+                      const allowed = Boolean(playerSlot) || Boolean(allowedById)
+
+                      const btnLabel = nextIndex === -1 ? 'View Results' : 'Next Match'
+                      return (
+                        <button
+                          onClick={() => { if (allowed) handleNextMatch() }}
+                          disabled={!allowed}
+                          className={`rounded-full px-8 py-3 font-bold ${allowed ? 'bg-white text-slate-900 hover:bg-indigo-50 shadow-lg hover:shadow-xl transform hover:-translate-y-0.5' : 'bg-slate-200 text-slate-500 cursor-not-allowed'}`}
+                        >
+                          {btnLabel}
+                        </button>
+                      )
+                    }
+                    return (
+                      <button
+                        onClick={() => playAgain()}
+                        className="rounded-full bg-white px-8 py-3 font-bold text-slate-900 hover:bg-indigo-50 transition-colors shadow-lg hover:shadow-xl transform hover:-translate-y-0.5"
+                      >
+                        Play Again
+                      </button>
+                    )
+                  })()}
                 </div>
               </div>
             </div>

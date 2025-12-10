@@ -61,6 +61,17 @@ export const buildServer = async () => {
 
   return server
 }
+
+// During test runs make uncaught exceptions and unhandled rejections visible
+// to the test harness instead of letting the process abort silently.
+if (process.env.VITEST === 'true') {
+  process.on('uncaughtException', (err) => {
+    try { console.error('[VITEST] uncaughtException', err && (err.stack || err)) } catch (e) {}
+  })
+  process.on('unhandledRejection', (reason) => {
+    try { console.error('[VITEST] unhandledRejection', reason) } catch (e) {}
+  })
+}
 const start = async () => {
   let server: Awaited<ReturnType<typeof buildServer>> | undefined
   try {

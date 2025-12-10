@@ -3,6 +3,7 @@ import { notificationService } from '../services/notification';
 import { WebSocket } from 'ws';
 import { AIDifficulty } from './ai';
 import { prisma } from '../utils/prisma';
+import { enqueuePrismaWork } from '../utils/prismaQueue';
 import persistMatchResult from './matchPersistence';
 import logger from '../utils/logger';
 
@@ -94,8 +95,10 @@ export class GameManager {
                 
                 const setOnline = (uid: number) => {
                     try {
-                        prisma.user.update({ where: { id: uid }, data: { status: 'ONLINE' } })
-                          .catch((e) => logger.error('[game-manager] Failed to set user status ONLINE on destroy', e));
+                        try {
+                          const { enqueueUserStatusUpdate } = require('../utils/prismaQueue')
+                          enqueueUserStatusUpdate(uid, { status: 'ONLINE' })
+                        } catch (e) {}
                           try {
                             const { userService } = require('../services/user');
                             userService.emitStatusChange(uid, 'ONLINE');
@@ -235,8 +238,10 @@ export class GameManager {
           if (players) {
             Object.values(players).forEach((uid) => {
               if (typeof uid === 'number') {
-                prisma.user.update({ where: { id: uid }, data: { status: 'ONLINE' } })
-                  .catch((e) => logger.error('[game-manager] Failed to set user status ONLINE on removeGame', e));
+                try {
+                  const { enqueueUserStatusUpdate } = require('../utils/prismaQueue')
+                  enqueueUserStatusUpdate(uid, { status: 'ONLINE' })
+                } catch (e) {}
                 try {
                   const { userService } = require('../services/user');
                   userService.emitStatusChange(uid, 'ONLINE');
@@ -293,20 +298,20 @@ export class GameManager {
 
   private async handleTournamentMatchEnd(matchId: number, result: { winner: 'p1' | 'p2' }) {
     try {
-      const match = await prisma.tournamentMatch.findUnique({
-        where: { id: matchId }
-      });
-      if (!match) return;
+      await enqueuePrismaWork(async () => {
+        const match = await prisma.tournamentMatch.findUnique({ where: { id: matchId } });
+        if (!match) return;
 
-      const winnerParticipantId = result.winner === 'p1' ? match.playerAId : match.playerBId;
+        const winnerParticipantId = result.winner === 'p1' ? match.playerAId : match.playerBId;
 
-      await prisma.tournamentMatch.update({
-        where: { id: matchId },
-        data: {
-          winnerId: winnerParticipantId,
-          status: 'COMPLETED'
-        }
-      });
+        await prisma.tournamentMatch.update({
+          where: { id: matchId },
+          data: {
+            winnerId: winnerParticipantId,
+            status: 'COMPLETED'
+          }
+        });
+      })
     } catch (e) {
       logger.error('Failed to update tournament match', e);
     }

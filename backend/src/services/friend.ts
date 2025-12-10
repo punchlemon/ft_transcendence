@@ -2,6 +2,7 @@ import { prisma } from '../utils/prisma';
 import { notificationService } from './notification';
 import { chatService } from './chat';
 import { EventEmitter } from 'events';
+import { enqueuePrismaWork } from '../utils/prismaQueue';
 
 export class FriendService extends EventEmitter {
   async sendFriendRequest(senderId: number, receiverId: number) {
@@ -46,29 +47,30 @@ export class FriendService extends EventEmitter {
       }
     });
 
-    let request;
-
-    if (existingRequest) {
+    const request = await enqueuePrismaWork(async () => {
+      let req;
+      if (existingRequest) {
         if (existingRequest.status === 'PENDING') throw new Error("Request already pending");
-        
         // Update existing request
-        request = await prisma.friendRequest.update({
+        req = await prisma.friendRequest.update({
           where: { id: existingRequest.id },
           data: {
             status: 'PENDING',
             createdAt: new Date(), // Refresh timestamp
           },
         });
-    } else {
+      } else {
         // Create new request
-        request = await prisma.friendRequest.create({
+        req = await prisma.friendRequest.create({
           data: {
             senderId,
             receiverId,
             status: 'PENDING',
           },
         });
-    }
+      }
+      return req;
+    });
 
     const sender = await prisma.user.findUnique({ where: { id: senderId } });
     await notificationService.createNotification(
@@ -94,20 +96,22 @@ export class FriendService extends EventEmitter {
     if (request.receiverId !== userId) throw new Error("Not authorized");
     if (request.status !== 'PENDING') throw new Error("Request not pending");
 
-    // Create friendship
-    await prisma.$transaction([
-      prisma.friendRequest.update({
-        where: { id: requestId },
-        data: { status: 'ACCEPTED' },
-      }),
-      prisma.friendship.create({
-        data: {
-          requesterId: request.senderId,
-          addresseeId: request.receiverId,
-          status: 'ACCEPTED',
-        },
-      }),
-    ]);
+    await enqueuePrismaWork(async () => {
+      // Create friendship
+      await prisma.$transaction([
+        prisma.friendRequest.update({
+          where: { id: requestId },
+          data: { status: 'ACCEPTED' },
+        }),
+        prisma.friendship.create({
+          data: {
+            requesterId: request.senderId,
+            addresseeId: request.receiverId,
+            status: 'ACCEPTED',
+          },
+        }),
+      ]);
+    });
 
     // Automatically create DM channel
     await chatService.getOrCreateDmChannel(request.senderId, request.receiverId);
@@ -136,8 +140,8 @@ export class FriendService extends EventEmitter {
     if (request.receiverId !== userId) throw new Error("Not authorized");
     if (request.status !== 'PENDING') throw new Error("Request not pending");
 
-    await prisma.friendRequest.delete({
-      where: { id: requestId },
+    await enqueuePrismaWork(async () => {
+      await prisma.friendRequest.delete({ where: { id: requestId } });
     });
 
     // Remove notification from receiver
@@ -162,7 +166,9 @@ export class FriendService extends EventEmitter {
 
     if (!friendship) throw new Error("Friendship not found");
 
-    await prisma.friendship.delete({ where: { id: friendship.id } });
+    await enqueuePrismaWork(async () => {
+      await prisma.friendship.delete({ where: { id: friendship.id } });
+    });
 
     const actor = await prisma.user.findUnique({ where: { id: userId } });
     await notificationService.createNotification(
@@ -183,11 +189,8 @@ export class FriendService extends EventEmitter {
     // Note: We do NOT remove friendship here anymore, as requested.
     // Friend state and Block state are decoupled.
 
-    const block = await prisma.blocklist.create({
-      data: {
-        blockerId,
-        blockedId,
-      },
+    const block = await enqueuePrismaWork(async () => {
+      return prisma.blocklist.create({ data: { blockerId, blockedId } });
     });
 
     this.emit('user_blocked', { blockerId, blockedId });
@@ -206,7 +209,9 @@ export class FriendService extends EventEmitter {
 
     if (!block) throw new Error("Block not found");
 
-    await prisma.blocklist.delete({ where: { id: block.id } });
+    await enqueuePrismaWork(async () => {
+      await prisma.blocklist.delete({ where: { id: block.id } });
+    });
     this.emit('user_unblocked', { blockerId, blockedId });
     return block;
   }
@@ -278,8 +283,8 @@ export class FriendService extends EventEmitter {
     if (!request) throw new Error("Request not found");
     if (request.status !== 'PENDING') throw new Error("Request not pending");
 
-    await prisma.friendRequest.delete({
-      where: { id: request.id }
+    await enqueuePrismaWork(async () => {
+      await prisma.friendRequest.delete({ where: { id: request.id } });
     });
 
     // Update notification for receiver to remove buttons

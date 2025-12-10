@@ -115,6 +115,35 @@ export default class GameSocketHandler {
             }
             if (userId) { (socket as any).__userId = userId }
 
+            // If this connection is for a tournament local-match session, ensure
+            // the connecting user is one of the scheduled participants. Reject
+            // otherwise to prevent unauthorized players occupying match slots.
+            try {
+              if (sessionId && typeof sessionId === 'string' && sessionId.startsWith('local-match-') && userId) {
+                const matchIdStr = sessionId.replace('local-match-', '')
+                const matchId = parseInt(matchIdStr, 10)
+                if (!isNaN(matchId)) {
+                  const m = await this.fastify.prisma.tournamentMatch.findUnique({ where: { id: matchId }, include: { playerA: true, playerB: true } })
+                  if (m) {
+                    const pAUser = m.playerA?.userId
+                    const pBUser = m.playerB?.userId
+                    const allowed = (typeof pAUser === 'number' && pAUser === userId) || (typeof pBUser === 'number' && pBUser === userId)
+                    if (!allowed) {
+                      // Not a scheduled participant: reject connection
+                      try {
+                        const resp = JSON.stringify({ event: 'match:event', payload: { type: 'UNAVAILABLE', message: 'Not a participant of this match', sessionId } })
+                        if (typeof (socket as any).send === 'function') (socket as any).send(resp)
+                      } catch (e) {}
+                      try { if (typeof (socket as any).close === 'function') (socket as any).close(); } catch (e) {}
+                      return
+                    }
+                  }
+                }
+              }
+            } catch (e) {
+              this.fastify.log.warn({ err: e }, 'Failed to validate local-match participant')
+            }
+
             try {
               if (userId) {
                 const dbUser = await this.fastify.prisma.user.findUnique({ where: { id: userId }, select: { status: true } })
@@ -251,32 +280,39 @@ export default class GameSocketHandler {
 
     const handleClose = () => {
       this.fastify.log.info({ sessionId, userId: (socket as any).__userId ?? null }, 'Client disconnected from game websocket')
-            try {
-            const maybeUserId = (socket as any).__userId as number | undefined
-            if (maybeUserId) {
-              try {
-                const rec = getConnection(maybeUserId, sessionId ?? '')
-                if (rec && rec.socket === socket) {
-                  this.fastify.log.debug({ userId: maybeUserId, session: rec.sessionId }, 'Removing game socket for user on close')
-                  unregisterConnection(maybeUserId, rec.sessionId, socket, 'game')
-                } else if (rec) {
-                  this.fastify.log.debug({ userId: maybeUserId, storedSession: rec.sessionId }, 'Close event did not match stored game socket')
-                }
-              } catch (e) {}
+      try {
+        const maybeUserId = (socket as any).__userId as number | undefined
+        if (maybeUserId) {
+          try {
+            const rec = getConnection(maybeUserId, sessionId ?? '')
+            if (rec && rec.socket === socket) {
+              this.fastify.log.debug({ userId: maybeUserId, session: rec.sessionId }, 'Removing game socket for user on close')
+              unregisterConnection(maybeUserId, rec.sessionId, socket, 'game')
+            } else if (rec) {
+              this.fastify.log.debug({ userId: maybeUserId, storedSession: rec.sessionId }, 'Close event did not match stored game socket')
             }
           } catch (e) {}
-      try {
-        if (game) {
-          game.removePlayer(socket as any)
-        } else {
-          if (sessionId) {
-            try {
-              this.fastify.log.info({ sessionId }, 'Removing waiting slot on socket close')
-              manager.removeWaitingSlot(sessionId)
-            } catch (e) { this.fastify.log.warn({ err: e, sessionId }, 'Failed to remove waiting slot on close') }
-          }
         }
       } catch (e) {}
+
+      // Defer game teardown to next tick to avoid interacting with the
+      // underlying socket object while the close event is still being processed
+      // by the ws implementation. This helps avoid native-level races leading
+      // to process aborts.
+      setImmediate(() => {
+        try {
+          if (game) {
+            game.removePlayer(socket as any)
+          } else {
+            if (sessionId) {
+              try {
+                this.fastify.log.info({ sessionId }, 'Removing waiting slot on socket close')
+                manager.removeWaitingSlot(sessionId)
+              } catch (e) { this.fastify.log.warn({ err: e, sessionId }, 'Failed to remove waiting slot on close') }
+            }
+          }
+        } catch (e) {}
+      })
     }
 
     try {

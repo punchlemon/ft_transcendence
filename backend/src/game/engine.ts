@@ -1,6 +1,7 @@
 import { WebSocket } from 'ws';
 import { prisma } from '../utils/prisma';
 import { userService } from '../services/user';
+import { enqueueUserStatusUpdate } from '../utils/prismaQueue';
 import { GameState, GameConfig, DEFAULT_CONFIG, PlayerInput } from './types';
 import { AIOpponent, AIDifficulty } from './ai';
 import logger from '../utils/logger';
@@ -110,7 +111,9 @@ export class GameEngine {
         }
         this.clients.p1 = socket;
         // Ensure status is IN_GAME (in case it was set to ONLINE on disconnect)
-        prisma.user.update({ where: { id: userId }, data: { status: 'IN_GAME' } }).catch(() => {});
+        try {
+          enqueueUserStatusUpdate(userId, { status: 'IN_GAME' })
+        } catch (e) {}
         try { userService.emitStatusChange(userId, 'IN_GAME'); } catch (e) {}
         
         this.checkStart();
@@ -122,7 +125,9 @@ export class GameEngine {
         }
         this.clients.p2 = socket;
         // Ensure status is IN_GAME
-        prisma.user.update({ where: { id: userId }, data: { status: 'IN_GAME' } }).catch(() => {});
+        try {
+          enqueueUserStatusUpdate(userId, { status: 'IN_GAME' })
+        } catch (e) {}
         try { userService.emitStatusChange(userId, 'IN_GAME'); } catch (e) {}
 
         this.checkStart();
@@ -136,8 +141,9 @@ export class GameEngine {
         this.players.p1 = userId;
 
         // Mark the user as being in a valid (non-destroyed) room.
-        prisma.user.update({ where: { id: userId }, data: { status: 'IN_GAME' } })
-          .catch((e) => logger.error('[engine] Failed to set user status IN_GAME on addPlayer', e));
+        try {
+          enqueueUserStatusUpdate(userId, { status: 'IN_GAME' })
+        } catch (e) {}
         try {
           userService.emitStatusChange(userId, 'IN_GAME');
         } catch (e) {
@@ -153,8 +159,9 @@ export class GameEngine {
         this.players.p2 = userId;
 
         // Mark the user as being in a valid (non-destroyed) room.
-        prisma.user.update({ where: { id: userId }, data: { status: 'IN_GAME' } })
-          .catch((e) => logger.error('[engine] Failed to set user status IN_GAME on addPlayer', e));
+        try {
+          enqueueUserStatusUpdate(userId, { status: 'IN_GAME' })
+        } catch (e) {}
         try {
           userService.emitStatusChange(userId, 'IN_GAME');
         } catch (e) {
@@ -199,6 +206,11 @@ export class GameEngine {
   }
 
   removePlayer(socket: WebSocket) {
+    try {
+      logger.debug(`[engine:${this.sessionId}] removePlayer called socket.__sessionId=${(socket as any).__sessionId ?? 'nil'} socket.__userId=${(socket as any).__userId ?? 'nil'} clients={p1:${!!this.clients.p1},p2:${!!this.clients.p2}} players=${JSON.stringify(this.players)}`)
+    } catch (e) {
+      try { logger.debug('[engine] removePlayer debug logging failed', e) } catch (e) {}
+    }
     // Short-circuit if we are already tearing this game down.
     if (this.isBeingDestroyed) return;
     let removedSlot: 'p1' | 'p2' | null = null;
@@ -220,8 +232,7 @@ export class GameEngine {
       if (removedSlot) {
         const removedUserId = this.players[removedSlot]
         if (typeof removedUserId === 'number') {
-          prisma.user.update({ where: { id: removedUserId }, data: { status: 'ONLINE' } })
-            .catch((e) => logger.error('[engine] Failed to set user status ONLINE on removePlayer', e));
+            try { enqueueUserStatusUpdate(removedUserId, { status: 'ONLINE' }) } catch (e) {}
           try {
             userService.emitStatusChange(removedUserId, 'ONLINE');
           } catch (e) {
@@ -267,18 +278,21 @@ export class GameEngine {
           // Attempt to close remaining sockets (if any). It's okay if this
           // triggers their close handlers — removePlayer is idempotent enough.
           try {
+            logger.debug(`[engine:${this.sessionId}] closing remaining sockets due to creator leave (clients p1=${!!this.clients.p1}, p2=${!!this.clients.p2})`)
+          } catch (e) {}
+          try {
             if (this.clients.p1 && this.clients.p1 !== socket) {
-              this.clients.p1.close();
+              try { this.clients.p1.close(); } catch (e) { logger.debug('[engine] close p1 failed', e) }
             }
           } catch (e) {
-            // ignore
+            try { logger.debug('[engine] error while attempting to close p1', e) } catch (e) {}
           }
           try {
             if (this.clients.p2 && this.clients.p2 !== socket) {
-              this.clients.p2.close();
+              try { this.clients.p2.close(); } catch (e) { logger.debug('[engine] close p2 failed', e) }
             }
           } catch (e) {
-            // ignore
+            try { logger.debug('[engine] error while attempting to close p2', e) } catch (e) {}
           }
 
           // Mark destruction in progress so subsequent removePlayer calls
@@ -348,17 +362,21 @@ export class GameEngine {
         try {
           this.teardownTimer = setTimeout(() => {
             this.teardownTimer = undefined;
-            try { this.stop(); } catch (e) {}
+            try { logger.debug(`[engine:${this.sessionId}] teardownTimer fired — stopping game and invoking onEmpty`) } catch (e) {}
+            try { this.stop(); } catch (e) { try { logger.debug('[engine] stop() threw', e) } catch (e) {} }
             try {
-              if (this.onEmpty) this.onEmpty();
+              if (this.onEmpty) {
+                try { this.onEmpty(); } catch (e) { try { logger.debug('[engine] onEmpty threw', e) } catch (e) {} }
+              }
             } catch (e) {
-              // swallow
+              try { logger.debug('[engine] error while calling onEmpty', e) } catch (e) {}
             }
           }, 1000);
         } catch (e) {
           // fallback: immediate teardown
-          try { this.stop(); } catch (err) {}
-          try { if (this.onEmpty) this.onEmpty(); } catch (err) {}
+          try { logger.debug('[engine] failed to schedule teardownTimer, performing immediate teardown', e) } catch (e) {}
+          try { this.stop(); } catch (err) { try { logger.debug('[engine] stop() threw during immediate teardown', err) } catch (e) {} }
+          try { if (this.onEmpty) this.onEmpty(); } catch (err) { try { logger.debug('[engine] onEmpty threw during immediate teardown', err) } catch (e) {} }
         }
       }
     }
@@ -388,9 +406,8 @@ export class GameEngine {
     try {
       Object.values(this.players).forEach((uid) => {
         if (typeof uid === 'number') {
-          // fire-and-forget DB update and status event so chat WS can broadcast
-          prisma.user.update({ where: { id: uid }, data: { status: 'IN_GAME' } })
-            .catch((e) => logger.error('[engine] Failed to set user status IN_GAME', e));
+          // serialized DB update via queue and status event so chat WS can broadcast
+          try { enqueueUserStatusUpdate(uid, { status: 'IN_GAME' }) } catch (e) {}
           try {
             userService.emitStatusChange(uid, 'IN_GAME');
           } catch (e) {
@@ -659,9 +676,21 @@ export class GameEngine {
 
   private broadcast(message: any) {
     const data = JSON.stringify(message);
-    [this.clients.p1, this.clients.p2].forEach(client => {
-      if (client && client.readyState === WebSocket.OPEN) {
-        client.send(data);
+    [this.clients.p1, this.clients.p2].forEach((client, idx) => {
+      try {
+        if (!client) return;
+        // Best-effort guard: ensure send exists and the socket appears open
+        const ready = (client as any).readyState;
+        try { logger.debug(`[engine:${this.sessionId}] broadcasting to slot p${idx+1} readyState=${ready}`) } catch (e) {}
+        if (typeof (client as any).send === 'function' && ready === (WebSocket as any).OPEN) {
+          try {
+            (client as any).send(data);
+          } catch (e) {
+            try { logger.error('[engine] client.send threw', e) } catch (e) {}
+          }
+        }
+      } catch (e) {
+        try { logger.error('[engine] error during broadcast to client', e) } catch (e) {}
       }
     });
   }

@@ -23,15 +23,26 @@ export class SocketManager {
     return meta;
   }
 
-  unregister(metaOrSocket: SocketMeta | AnySocket) {
-    if (!metaOrSocket) return;
+  // Unregister returns the removed meta entries so callers can react to
+  // the disconnect (e.g., perform room-level cleanup or application logic).
+  unregister(metaOrSocket: SocketMeta | AnySocket): SocketMeta[] {
+    const removed: SocketMeta[] = []
+    if (!metaOrSocket) return removed;
     if ((metaOrSocket as SocketMeta).socket) {
-      this.sockets.delete(metaOrSocket as SocketMeta);
-      return;
+      const meta = metaOrSocket as SocketMeta
+      if (this.sockets.has(meta)) {
+        this.sockets.delete(meta)
+        removed.push(meta)
+      }
+      return removed
     }
     for (const m of Array.from(this.sockets)) {
-      if (m.socket === metaOrSocket) this.sockets.delete(m);
+      if (m.socket === metaOrSocket) {
+        this.sockets.delete(m)
+        removed.push(m)
+      }
     }
+    return removed
   }
 
   findByUserId(userId: number) {
@@ -40,6 +51,16 @@ export class SocketManager {
 
   findByRoomId(roomId: string) {
     return Array.from(this.sockets).filter((m) => m.roomId === roomId).map((m) => m.socket);
+  }
+
+  // Return raw meta entries for a room (includes userId, socket reference etc.)
+  findMetaByRoomId(roomId: string) {
+    return Array.from(this.sockets).filter((m) => m.roomId === roomId);
+  }
+
+  // Find meta entries for a specific user within a specific room
+  findMetaByUserAndRoom(userId: number, roomId: string) {
+    return Array.from(this.sockets).filter((m) => m.roomId === roomId && m.userId === userId);
   }
 
   broadcastToRoom(roomId: string, data: unknown) {

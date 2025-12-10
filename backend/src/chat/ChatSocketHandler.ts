@@ -8,6 +8,7 @@ import { WebSocket } from 'ws';
 import { sendToSockets } from './socketUtils';
 import connectionIndex, { SocketWithSessionId } from './connectionIndex';
 import { ChatMessagePayload } from '../types/protocol';
+import { enqueueUserStatusUpdate } from '../utils/prismaQueue';
 
 type UserSummary = {
   id: number;
@@ -344,7 +345,7 @@ export default class ChatSocketHandler {
       connectionIndex.addSocket(userId, sessionId, socket as SocketWithSessionId);
     }
     if (connectionIndex.getConnectionCount(userId) === 1) {
-      await this.fastify.prisma.user.update({ where: { id: userId }, data: { status: 'ONLINE' } }).catch((e: unknown) => this.fastify.log.error(e as Error));
+      try { enqueueUserStatusUpdate(userId, { status: 'ONLINE' }) } catch (e) { this.fastify.log.error(e as Error) }
       this.broadcastStatusChange(userId, 'ONLINE');
     }
 
@@ -356,7 +357,7 @@ export default class ChatSocketHandler {
         connectionIndex.removeSocket(userId, sessionId, socket as SocketWithSessionId);
       }
       if (connectionIndex.getConnectionCount(userId) === 0) {
-        await this.fastify.prisma.user.update({ where: { id: userId }, data: { status: 'OFFLINE' } }).catch((e: unknown) => this.fastify.log.error(e as Error));
+        try { enqueueUserStatusUpdate(userId, { status: 'OFFLINE' }) } catch (e) { this.fastify.log.error(e as Error) }
         this.broadcastStatusChange(userId, 'OFFLINE');
       }
     });

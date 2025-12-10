@@ -9,6 +9,7 @@ import { randomUUID } from 'crypto'
 import sharp from 'sharp'
 import { userService } from '../services/user'
 import { calculateUserStats, calculateMultipleUserStats } from '../utils/stats'
+import { enqueuePrismaWork } from '../utils/prismaQueue'
 
 const STATUS_VALUES = ['OFFLINE', 'ONLINE', 'IN_GAME', 'AWAY', 'DO_NOT_DISTURB'] as const
 
@@ -440,7 +441,7 @@ const usersRoutes: FastifyPluginAsync = async (fastify) => {
       userId = user.id
     }
 
-    const [total, matches] = await fastify.prisma.$transaction([
+    const [total, matches] = await enqueuePrismaWork(() => fastify.prisma.$transaction([
       fastify.prisma.match.count({
         where: {
           OR: [{ playerAId: userId }, { playerBId: userId }],
@@ -467,7 +468,7 @@ const usersRoutes: FastifyPluginAsync = async (fastify) => {
         skip,
         take: limit
       })
-    ])
+    ]))
 
     const data = matches.map((match) => {
       const isPlayerA = match.playerAId === userId
@@ -731,7 +732,7 @@ const usersRoutes: FastifyPluginAsync = async (fastify) => {
     // If winRateSort or gamesSort is active, we need to fetch all matching users to sort by stats
     const needsStatsSorting = winRateSort !== 'off' || gamesSort !== 'off'
 
-    const [total, allUsers] = await fastify.prisma.$transaction([
+    const [total, allUsers] = await enqueuePrismaWork(() => fastify.prisma.$transaction([
       fastify.prisma.user.count({ where }),
       fastify.prisma.user.findMany({
         where,
@@ -747,7 +748,7 @@ const usersRoutes: FastifyPluginAsync = async (fastify) => {
         skip: needsStatsSorting ? undefined : skip,
         take: needsStatsSorting ? undefined : limit
       })
-    ])
+    ]))
 
     // Calculate statistics using shared utility (source of truth)
     const userIds = allUsers.map(u => u.id)

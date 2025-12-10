@@ -1,5 +1,6 @@
 import { prisma } from '../utils/prisma';
 import { Prisma } from '@prisma/client';
+import { enqueuePrismaWork } from '../utils/prismaQueue';
 
 export const tournamentService = {
   async handleMatchResult(matchId: number, winnerUserId: number, scoreA?: number, scoreB?: number) {
@@ -8,54 +9,56 @@ export const tournamentService = {
       throw new Error('SCORES_REQUIRED')
     }
 
-    await prisma.$transaction(async (tx) => {
-      // 1. Get the match with participants
-      const match = await tx.tournamentMatch.findUnique({
-        where: { id: matchId },
-        include: {
-          playerA: true,
-          playerB: true,
-          tournament: true
+    await enqueuePrismaWork(async () => {
+      await prisma.$transaction(async (tx) => {
+        // 1. Get the match with participants
+        const match = await tx.tournamentMatch.findUnique({
+          where: { id: matchId },
+          include: {
+            playerA: true,
+            playerB: true,
+            tournament: true
+          }
+        });
+
+        if (!match) {
+          throw new Error('Match not found');
         }
-      });
 
-      if (!match) {
-        throw new Error('Match not found');
-      }
-
-      if (match.status === 'FINISHED') {
-        return;
-      }
-
-      // Lock the tournament
-      await tx.tournament.update({
-        where: { id: match.tournamentId },
-        data: { updatedAt: new Date() }
-      });
-
-      // 2. Identify the winner participant
-      let winnerParticipantId: number;
-      if (match.playerA.userId === winnerUserId || match.playerA.id === winnerUserId) {
-        winnerParticipantId = match.playerA.id;
-      } else if (match.playerB && (match.playerB.userId === winnerUserId || match.playerB.id === winnerUserId)) {
-        winnerParticipantId = match.playerB.id;
-      } else {
-        throw new Error('Winner is not a participant of this match');
-      }
-
-      // 3. Update match status and winner
-      await tx.tournamentMatch.update({
-        where: { id: matchId },
-        data: {
-          status: 'FINISHED',
-          winnerId: winnerParticipantId,
-          scoreA: scoreA,
-          scoreB: scoreB
+        if (match.status === 'FINISHED') {
+          return;
         }
-      });
 
-      // 4. Advance winner to next round
-      await this.advanceWinner(match, winnerParticipantId, tx);
+        // Lock the tournament
+        await tx.tournament.update({
+          where: { id: match.tournamentId },
+          data: { updatedAt: new Date() }
+        });
+
+        // 2. Identify the winner participant
+        let winnerParticipantId: number;
+        if (match.playerA.userId === winnerUserId || match.playerA.id === winnerUserId) {
+          winnerParticipantId = match.playerA.id;
+        } else if (match.playerB && (match.playerB.userId === winnerUserId || match.playerB.id === winnerUserId)) {
+          winnerParticipantId = match.playerB.id;
+        } else {
+          throw new Error('Winner is not a participant of this match');
+        }
+
+        // 3. Update match status and winner
+        await tx.tournamentMatch.update({
+          where: { id: matchId },
+          data: {
+            status: 'FINISHED',
+            winnerId: winnerParticipantId,
+            scoreA: scoreA,
+            scoreB: scoreB
+          }
+        });
+
+        // 4. Advance winner to next round
+        await this.advanceWinner(match, winnerParticipantId, tx);
+      });
     });
   },
 

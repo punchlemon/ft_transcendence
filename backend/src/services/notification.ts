@@ -1,5 +1,6 @@
 import { prisma } from '../utils/prisma';
 import { EventEmitter } from 'events';
+import { enqueuePrismaWork } from '../utils/prismaQueue'
 
 export type NotificationType = 
   | 'FRIEND_REQUEST'
@@ -17,7 +18,7 @@ export class NotificationService extends EventEmitter {
     body?: string,
     data?: any
   ) {
-    const notification = await prisma.notification.create({
+    const notification = await enqueuePrismaWork(() => prisma.notification.create({
       data: {
         userId,
         type,
@@ -25,7 +26,7 @@ export class NotificationService extends EventEmitter {
         body,
         data: data ? JSON.stringify(data) : null,
       },
-    });
+    }))
 
     this.emit('notification', notification);
     return notification;
@@ -51,17 +52,17 @@ export class NotificationService extends EventEmitter {
       throw new Error('Notification not found or unauthorized');
     }
 
-    return prisma.notification.update({
+    return enqueuePrismaWork(() => prisma.notification.update({
       where: { id: notificationId },
       data: { readAt: new Date() },
-    });
+    }))
   }
 
   async markAllAsRead(userId: number) {
-    return prisma.notification.updateMany({
+    return enqueuePrismaWork(() => prisma.notification.updateMany({
       where: { userId, readAt: null },
       data: { readAt: new Date() },
-    });
+    }))
   }
 
   async deleteNotification(id: number, userId: number) {
@@ -73,9 +74,9 @@ export class NotificationService extends EventEmitter {
       throw new Error('Notification not found or unauthorized');
     }
 
-    return prisma.notification.delete({
+    return enqueuePrismaWork(() => prisma.notification.delete({
       where: { id },
-    });
+    }))
   }
 
   async deleteNotificationByRequestId(requestId: number) {
@@ -97,7 +98,7 @@ export class NotificationService extends EventEmitter {
     });
 
     if (target) {
-      await prisma.notification.delete({ where: { id: target.id } });
+      await enqueuePrismaWork(() => prisma.notification.delete({ where: { id: target.id } }));
       this.emit('notification_deleted', { id: target.id, userId: target.userId });
     }
   }
@@ -119,13 +120,13 @@ export class NotificationService extends EventEmitter {
     });
 
     if (target) {
-      const updatedNotification = await prisma.notification.update({
+      const updatedNotification = await enqueuePrismaWork(() => prisma.notification.update({
         where: { id: target.id },
         data: {
           type: 'SYSTEM',
           body: (target.body || target.title) + ' (Cancelled)',
         },
-      });
+      }))
       this.emit('notification', updatedNotification);
     }
   }

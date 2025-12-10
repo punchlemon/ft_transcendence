@@ -2,6 +2,7 @@ import { prisma } from '../utils/prisma';
 import { Channel, Message, ChannelMember, Prisma } from '@prisma/client';
 import { EventEmitter } from 'events';
 import logger from '../utils/logger';
+import { enqueuePrismaWork } from '../utils/prismaQueue';
 
 export class ChatService extends EventEmitter {
   async getOrCreateDmChannel(userId1: number, userId2: number) {
@@ -17,7 +18,7 @@ export class ChatService extends EventEmitter {
     if (!channel) {
       logger.info(`Creating new DM channel: ${slug}`);
       try {
-        channel = await prisma.channel.create({
+        channel = await enqueuePrismaWork(() => prisma.channel.create({
           data: {
             name: `DM`,
             slug,
@@ -32,7 +33,7 @@ export class ChatService extends EventEmitter {
             },
           },
           include: { members: { include: { user: true } } },
-        });
+          }))
         this.emit('channel_created', channel);
       } catch (e) {
         logger.error('Failed to create DM channel:', e);
@@ -58,7 +59,7 @@ export class ChatService extends EventEmitter {
       slug = `${slug}-${Date.now()}`;
     }
 
-    return prisma.channel.create({
+    return enqueuePrismaWork(() => prisma.channel.create({
       data: {
         name,
         slug,
@@ -70,7 +71,7 @@ export class ChatService extends EventEmitter {
           create: { userId: ownerId, role: 'OWNER' },
         },
       },
-    });
+    }))
   }
 
   async sendMessage(channelId: number, userId: number, content: string) {
@@ -136,7 +137,7 @@ export class ChatService extends EventEmitter {
       }
     }
 
-    const message = await prisma.message.create({
+    const message = await enqueuePrismaWork(() => prisma.message.create({
       data: {
         channelId,
         userId,
@@ -152,7 +153,7 @@ export class ChatService extends EventEmitter {
           },
         },
       },
-    });
+    }))
 
     this.emit('message', message);
     return message;
@@ -168,7 +169,7 @@ export class ChatService extends EventEmitter {
 
     const metadata = JSON.stringify(payload);
 
-    const message = await prisma.message.create({
+    const message = await enqueuePrismaWork(() => prisma.message.create({
       data: {
         channelId,
         userId,
@@ -186,7 +187,7 @@ export class ChatService extends EventEmitter {
           },
         },
       },
-    });
+    }))
 
     this.emit('message', message);
     return message;
@@ -270,13 +271,13 @@ export class ChatService extends EventEmitter {
           throw new Error("Cannot join private channel without invite");
       }
 
-      return prisma.channelMember.create({
+        return enqueuePrismaWork(() => prisma.channelMember.create({
           data: {
-              channelId,
-              userId,
-              role: 'MEMBER'
+            channelId,
+            userId,
+            role: 'MEMBER'
           }
-      });
+        }))
   }
 
   async markAsRead(channelId: number, userId: number) {
@@ -291,14 +292,14 @@ export class ChatService extends EventEmitter {
       throw new Error('Member not found');
     }
 
-    const updated = await prisma.channelMember.update({
+    const updated = await enqueuePrismaWork(() => prisma.channelMember.update({
       where: {
         id: member.id,
       },
       data: {
         lastReadAt: new Date(),
       },
-    });
+    }))
 
     this.emit('read', { channelId, userId, lastReadAt: updated.lastReadAt });
     return updated;

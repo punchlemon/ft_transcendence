@@ -1,5 +1,6 @@
 import { prisma } from '../utils/prisma'
 import { notificationService } from './notification'
+import { enqueuePrismaWork } from '../utils/prismaQueue'
 import { SocketEvent } from '../types/protocol'
 import socketFacade from '../lib/socketFacade'
 
@@ -9,20 +10,20 @@ const tournamentRoomService = {
     const tournament = await prisma.tournament.findUnique({ where: { id: tournamentId } })
     if (!tournament) throw new Error('TOURNAMENT_NOT_FOUND')
 
-    const room = await prisma.tournamentRoom.create({
+    const room = await enqueuePrismaWork(() => prisma.tournamentRoom.create({
       data: {
         tournamentId,
         ownerId,
         mode: opts.mode || 'REMOTE'
       }
-    })
+    }))
 
     // create invites
     const invites: any[] = []
     for (const uid of invitedUserIds) {
       const u = await prisma.user.findUnique({ where: { id: uid }, select: { id: true, displayName: true } })
       if (!u) continue
-      const invite = await prisma.tournamentRoomInvite.create({ data: { roomId: room.id, userId: uid } })
+      const invite = await enqueuePrismaWork(() => prisma.tournamentRoomInvite.create({ data: { roomId: room.id, userId: uid } }))
       invites.push(invite)
 
       // notification record (include inviteId so clients can accept via the room invite endpoint)
@@ -54,7 +55,7 @@ const tournamentRoomService = {
     if (invite.userId !== userId) throw new Error('FORBIDDEN')
     if (invite.roomId !== roomId) throw new Error('INVITE_MISMATCH')
 
-    const updated = await prisma.tournamentRoomInvite.update({ where: { id: inviteId }, data: { state: 'ACCEPTED', updatedAt: new Date() } })
+    const updated = await enqueuePrismaWork(() => prisma.tournamentRoomInvite.update({ where: { id: inviteId }, data: { state: 'ACCEPTED', updatedAt: new Date() } }))
 
     // Join socket room if user has sockets
     try {

@@ -1,4 +1,5 @@
 import { prisma } from '../utils/prisma'
+import { enqueuePrismaWork } from '../utils/prismaQueue'
 import { notificationService } from '../services/notification'
 import logger from '../utils/logger'
 
@@ -19,8 +20,9 @@ export async function persistMatchResult(result: MatchResult) {
 
     let createdMatchId: number | null = null
     let createdMatchSummary: any = null
-    await prisma.$transaction(async (tx) => {
-      const created = await tx.match.create({
+    await enqueuePrismaWork(async () => {
+      await prisma.$transaction(async (tx) => {
+        const created = await tx.match.create({
         data: {
           playerAId: result.p1Id ?? null,
           playerBId: result.p2Id ?? null,
@@ -80,6 +82,7 @@ export async function persistMatchResult(result: MatchResult) {
           }
         })
       }
+      })
     })
 
     try {

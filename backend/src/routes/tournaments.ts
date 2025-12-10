@@ -4,6 +4,7 @@ import { z } from 'zod'
 import { tournamentService } from '../services/tournamentService'
 import { presenceService } from '../services/presence'
 import { notificationService } from '../services/notification'
+import { enqueuePrismaWork } from '../utils/prismaQueue'
 
 const STATUS_VALUES = ['DRAFT', 'READY', 'RUNNING', 'COMPLETED'] as const
 const BRACKET_VALUES = ['SINGLE_ELIMINATION', 'DOUBLE_ELIMINATION'] as const
@@ -120,11 +121,12 @@ const tournamentsRoutes: FastifyPluginAsync = async (fastify) => {
       }
     }
 
-    const participantsPayload = data.participants?.map((participant) => ({
+    const participantsPayload = data.participants?.map((participant, idx) => ({
       alias: participant.alias,
       userId: participant.userId,
       inviteState: participant.inviteState ?? (participant.userId ? 'INVITED' : 'LOCAL'),
-      seed: participant.seed
+      // If the client supplied an explicit seed use it, otherwise derive seed from input order
+      seed: typeof participant.seed === 'number' ? participant.seed : (idx + 1)
     }))
 
     const tournament = await fastify.prisma.tournament.create({
@@ -144,9 +146,13 @@ const tournamentsRoutes: FastifyPluginAsync = async (fastify) => {
 
     // Generate Full Bracket
     if (tournament.participants.length >= 2) {
-      // Sort participants by ID to ensure they are in the order of creation (which matches input order)
-      // This is our "Seed Order" (Seed 1, Seed 2, ...)
-      const sortedParticipants = [...tournament.participants].sort((a, b) => a.id - b.id)
+      // Sort participants by explicit seed when present, otherwise fall back to DB id.
+      // This preserves the input order from the creator (frontend sets seed by input order)
+      const sortedParticipants = [...tournament.participants].sort((a, b) => {
+        const sa = typeof a.seed === 'number' ? a.seed : a.id
+        const sb = typeof b.seed === 'number' ? b.seed : b.id
+        return sa - sb
+      })
       
       // Reorder participants based on seeding logic, padding with Byes (nulls)
       const seededParticipants = tournamentService.padWithBye(sortedParticipants)
@@ -459,7 +465,7 @@ const tournamentsRoutes: FastifyPluginAsync = async (fastify) => {
       where.createdById = ownerId
     }
 
-    const [total, tournaments] = await fastify.prisma.$transaction([
+    const [total, tournaments] = await enqueuePrismaWork(() => fastify.prisma.$transaction([
       fastify.prisma.tournament.count({ where }),
       fastify.prisma.tournament.findMany({
         where,
@@ -471,7 +477,7 @@ const tournamentsRoutes: FastifyPluginAsync = async (fastify) => {
         skip,
         take: limit
       })
-    ])
+    ]))
 
     return {
       data: tournaments.map((tournament) => ({
