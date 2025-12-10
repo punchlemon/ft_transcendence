@@ -37,7 +37,7 @@ const GameLobbyPage = () => {
   const [selectedFriendIds, setSelectedFriendIds] = useState<number[]>([])
   const [isCreatingTournament, setIsCreatingTournament] = useState(false)
   const [isStartDisabled, setIsStartDisabled] = useState(true)
-  const [isInviteModalOpen, setIsInviteModalOpen] = useState(false)
+  
 
   const handleModeSelect = (mode: GameMode) => {
     if (!user) return
@@ -99,9 +99,8 @@ const GameLobbyPage = () => {
             } catch (e) {
               logger.error('Failed to create tournament room', e)
             }
-
-            // fallback: open invite modal if room creation failed
-            setIsInviteModalOpen(true)
+            // fallback: room creation failed — log and keep user on lobby
+            logger.error('Room creation failed; staying on lobby')
           } catch (err) {
             logger.error('Failed to create tournament', err)
             alert('Failed to create tournament')
@@ -436,16 +435,7 @@ const GameLobbyPage = () => {
                   </div>
                 </div>
 
-                {createdTournament && (
-                  <div className="mt-4 flex items-center gap-3">
-                    <button
-                      onClick={() => setIsInviteModalOpen(true)}
-                      className="rounded-md border px-4 py-2 text-sm"
-                    >
-                      Invite Friends
-                    </button>
-                  </div>
-                )}
+                {/* Invite Friends button removed — use NotificationToast for invites */}
 
                 {(() => {
                   const aliases = [user?.displayName ?? 'You', ...friends.filter(f => selectedFriendIds.includes(f.id)).map(f => f.displayName)]
