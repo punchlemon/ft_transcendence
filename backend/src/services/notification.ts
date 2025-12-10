@@ -6,6 +6,7 @@ export type NotificationType =
   | 'FRIEND_RESPONSE'
   | 'MATCH_INVITE'
   | 'TOURNAMENT_INVITE'
+  | 'TOURNAMENT_MATCH_READY'
   | 'CHAT_MENTION'
   | 'SYSTEM';
 

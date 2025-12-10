@@ -3,10 +3,8 @@ import { useNavigate } from 'react-router-dom'
 import useAuthStore from '../stores/authStore'
 // Tournament alias registration UI removed
 import BracketView from '../components/tournament/BracketView'
-import { useTournamentSetup } from '../hooks/useTournamentSetup'
 import { generatePreviewMatches } from '../lib/tournament'
-import FriendSelectorModal from '../components/tournament/FriendSelectorModal'
-import { fetchUserFriends, createTournament, fetchTournament } from '../lib/api'
+import { fetchUserFriends, createTournament, fetchTournament, inviteTournamentParticipant, startTournament } from '../lib/api'
 
 type GameMode = 'local' | 'remote' | 'ai' | 'tournament'
 type MatchType = 'public' | 'private'
@@ -28,7 +26,6 @@ const GameLobbyPage = () => {
   const [localP2, setLocalP2] = useState('Player 2')
 
   // Tournament State
-  const tournamentSetup = useTournamentSetup()
   const [createdTournament, setCreatedTournament] = useState<any | null>(null)
   const [tournamentName, setTournamentName] = useState<string>(`${user?.displayName ?? 'Tournament'}'s Tournament`)
   const [friends, setFriends] = useState<Array<any>>([])
@@ -36,7 +33,7 @@ const GameLobbyPage = () => {
   const [selectedFriendIds, setSelectedFriendIds] = useState<number[]>([])
   const [isCreatingTournament, setIsCreatingTournament] = useState(false)
   const [isStartDisabled, setIsStartDisabled] = useState(true)
-  const [isInviteModalOpen, setIsInviteModalOpen] = useState(false)
+  const [isSendingInvites, setIsSendingInvites] = useState(false)
 
   const handleModeSelect = (mode: GameMode) => {
     if (!user) return
@@ -54,6 +51,55 @@ const GameLobbyPage = () => {
       .finally(() => setFriendsLoading(false))
   }, [selectedMode, user])
 
+  const refreshTournament = async (id: number) => {
+    const detail = await fetchTournament(id)
+    setCreatedTournament(detail.data)
+    const hasPending = detail.data.participants.some((p: any) => p.userId && p.inviteState !== 'ACCEPTED')
+    setIsStartDisabled(hasPending)
+    return detail.data
+  }
+
+  const handleInviteSelected = async () => {
+    if (!user) return
+    const targets = friends.filter((f) => selectedFriendIds.includes(f.id) && f.status === 'ONLINE')
+    if (targets.length === 0) {
+      alert('招待対象がありません（オンラインの選択済みフレンドなし）')
+      return
+    }
+
+    setIsSendingInvites(true)
+    try {
+      if (!createdTournament) {
+        const baseParticipants = [{ alias: user.displayName, userId: user.id }, ...targets.map((f) => ({ alias: f.displayName, userId: f.id }))]
+        const participants = baseParticipants.length % 2 === 0 ? baseParticipants : [...baseParticipants, { alias: 'AI' }]
+
+        const created = await createTournament({
+          name: tournamentName || `${user.displayName}'s Tournament`,
+          createdById: user.id,
+          participants
+        })
+
+        await refreshTournament(created.data.id)
+      } else {
+        const tournamentId = createdTournament.id
+        const existing = new Set(createdTournament.participants?.map((p: any) => p.userId).filter(Boolean))
+        await Promise.all(
+          targets
+            .filter((f) => !existing.has(f.id))
+            .map((f) => inviteTournamentParticipant(tournamentId, f.id))
+        )
+        await refreshTournament(tournamentId)
+      }
+
+      alert('招待を送信しました')
+    } catch (e) {
+      console.error('Failed to send invites', e)
+      alert('招待に失敗しました')
+    } finally {
+      setIsSendingInvites(false)
+    }
+  }
+
   const handleStartMatch = async () => {
     if (selectedMode === 'local') {
       const mockGameId = `game-${selectedMode}-${Date.now()}`
@@ -64,31 +110,21 @@ const GameLobbyPage = () => {
       const mockGameId = `game-${selectedMode}-${Date.now()}`
       navigate(`/game/${mockGameId}?mode=ai&difficulty=${aiDifficulty}`)
     } else if (selectedMode === 'tournament') {
-      // Create tournament using selected friends + current user
       if (!user) return
+      if (!createdTournament) {
+        alert('先にフレンドを招待してください')
+        return
+      }
       setIsCreatingTournament(true)
       try {
-        const participants: Array<any> = []
-        participants.push({ alias: user.displayName, userId: user.id })
-        const selectedFriends = friends.filter((f) => selectedFriendIds.includes(f.id))
-        selectedFriends.forEach((f) => participants.push({ alias: f.displayName, userId: f.id }))
-        if (participants.length % 2 !== 0) {
-          participants.push({ alias: 'AI' })
-        }
-
-        const res = await createTournament({
-          name: tournamentName || `${user.displayName}'s Tournament`,
-          createdById: user.id,
-          participants: participants.map((p) => ({ alias: p.alias, userId: p.userId }))
-        })
-
-        const detail = await fetchTournament(res.data.id)
-        setCreatedTournament(detail.data)
+        const res = await startTournament(createdTournament.id)
+        setCreatedTournament(res.data)
         setIsStartDisabled(false)
-        setIsInviteModalOpen(true)
-      } catch (err) {
-        console.error('Failed to create tournament', err)
-        alert('Failed to create tournament')
+        handleStartTournamentNow(res.data)
+      } catch (err: any) {
+        console.error('Failed to start tournament', err)
+        const message = err?.response?.data?.error?.message ?? '招待が未承認のフレンドがいます'
+        alert(message)
       } finally {
         setIsCreatingTournament(false)
       }
@@ -160,22 +196,10 @@ const GameLobbyPage = () => {
     }
   }
 
-  const handleStartTournamentNow = async () => {
-    if (!createdTournament) return
-    // Find the first match and navigate similarly to previous flow
-    const firstMatch = createdTournament.matches.find((m: any) => !m.winnerId)
-    if (firstMatch) {
-      const p1 = firstMatch.playerA?.alias ?? 'Unknown'
-      const p2 = firstMatch.playerB?.alias ?? null
-      const p1Id = firstMatch.playerA?.participantId ?? -1
-      const p2Id = firstMatch.playerB?.participantId ?? null
-
-      let url = `/game/local-match-${firstMatch.id}?mode=local&p1Name=${encodeURIComponent(p1)}&p2Name=${encodeURIComponent(p2 ?? '')}`
-      url += `&tournamentId=${createdTournament.id}`
-      if (p1Id) url += `&p1Id=${p1Id}`
-      if (p2Id) url += `&p2Id=${p2Id}`
-      navigate(url)
-    }
+  const handleStartTournamentNow = async (tournamentOverride?: any) => {
+    const tournament = tournamentOverride ?? createdTournament
+    if (!tournament) return
+    // Starting the tournament no longer auto-navigates; stay in place so notifications can be consumed.
   }
 
   const handleCancelMatching = () => {
@@ -313,7 +337,6 @@ const GameLobbyPage = () => {
                   />
                 </div>
               </div>
-              <FriendSelectorModal open={isInviteModalOpen} onClose={() => setIsInviteModalOpen(false)} tournamentId={createdTournament?.id ?? -1} />
             </div>
           )}
 
@@ -420,22 +443,32 @@ const GameLobbyPage = () => {
                   </div>
                 </div>
 
-                {createdTournament && (
-                  <div className="mt-4 flex items-center gap-3">
+
+                <div className="mt-4 flex items-center gap-3">
+                  <button
+                    onClick={handleInviteSelected}
+                    disabled={isSendingInvites}
+                    className="rounded-md border px-4 py-2 text-sm disabled:opacity-60"
+                  >
+                    {isSendingInvites ? 'Inviting...' : createdTournament ? 'Invite Selected Friends' : 'Create & Invite'}
+                  </button>
+                  <button
+                    onClick={handleStartMatch}
+                    className="ml-2 rounded-md bg-indigo-600 px-4 py-2 text-sm text-white"
+                    disabled={!createdTournament || isStartDisabled || isCreatingTournament}
+                  >
+                    Start Tournament
+                  </button>
+                  {createdTournament && (
                     <button
-                      onClick={() => setIsInviteModalOpen(true)}
-                      className="rounded-md border px-4 py-2 text-sm"
+                      onClick={() => refreshTournament(createdTournament.id)}
+                      className="rounded-md border px-3 py-2 text-xs"
+                      disabled={isCreatingTournament}
                     >
-                      Invite Friends
+                      Refresh status
                     </button>
-                    <button
-                      onClick={handleStartTournamentNow}
-                      className="ml-2 rounded-md bg-indigo-600 px-4 py-2 text-sm text-white"
-                    >
-                      Start Tournament
-                    </button>
-                  </div>
-                )}
+                  )}
+                </div>
 
                 {(() => {
                   const aliases = [user?.displayName ?? 'You', ...friends.filter(f => selectedFriendIds.includes(f.id)).map(f => f.displayName)]
@@ -463,14 +496,14 @@ const GameLobbyPage = () => {
                   !user ||
                   !selectedMode ||
                   (selectedMode === 'remote' && !matchType) ||
-                  (selectedMode === 'tournament' && (1 + selectedFriendIds.length) < 2) ||
+                  (selectedMode === 'tournament' && (!createdTournament || isStartDisabled)) ||
                   isCreatingTournament
                 }
               className="min-w-[200px] rounded-full bg-slate-900 px-8 py-3 font-semibold text-white transition-transform hover:scale-105 hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:scale-100 dark:bg-indigo-600 dark:hover:bg-indigo-700 dark:hover:scale-105"
             >
               {selectedMode === 'tournament'
                 ? isCreatingTournament
-                  ? 'Creating...'
+                  ? 'Starting...'
                   : 'Start Tournament'
                 : 'Start Game'}
             </button>

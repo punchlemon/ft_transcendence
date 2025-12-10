@@ -3,7 +3,7 @@ import { api } from '../lib/api';
 
 export interface Notification {
   id: number;
-  type: 'FRIEND_REQUEST' | 'FRIEND_RESPONSE' | 'MATCH_INVITE' | 'TOURNAMENT_INVITE' | 'CHAT_MENTION' | 'SYSTEM';
+    type: 'FRIEND_REQUEST' | 'FRIEND_RESPONSE' | 'MATCH_INVITE' | 'TOURNAMENT_INVITE' | 'TOURNAMENT_MATCH_READY' | 'CHAT_MENTION' | 'SYSTEM';
   message: string;
   read: boolean;
   createdAt: string;

@@ -2,6 +2,11 @@ import { describe, it, expect, beforeAll, afterAll, beforeEach } from 'vitest'
 import type { FastifyInstance } from 'fastify'
 import { buildServer } from '../app'
 
+const register = async (server: FastifyInstance, payload: { email: string; username: string; displayName: string; password: string }) => {
+  const res = await server.inject({ method: 'POST', url: '/api/auth/register', payload })
+  return res.json<{ user: { id: number }; tokens: { access: string; refresh: string } }>()
+}
+
 const createUser = async (
   server: FastifyInstance,
   data: Partial<{ login: string; email: string; displayName: string }>
@@ -103,6 +108,31 @@ describe('Tournaments API', () => {
       include: { participants: true }
     })
     expect(tournamentInDb?.participants).toHaveLength(2)
+  })
+
+  it('sends notifications to invited users when participants include userIds on creation', async () => {
+    const owner = await createUser(server, { displayName: 'Owner' })
+    const friend = await createUser(server, { displayName: 'Friend' })
+
+    await server.prisma.user.update({ where: { id: friend.id }, data: { status: 'ONLINE' } })
+
+    const response = await server.inject({
+      method: 'POST',
+      url: '/api/tournaments',
+      payload: {
+        name: 'Creation Invite Cup',
+        createdById: owner.id,
+        participants: [
+          { alias: owner.displayName, userId: owner.id, inviteState: 'ACCEPTED' },
+          { alias: friend.displayName, userId: friend.id }
+        ]
+      }
+    })
+
+    expect(response.statusCode).toBe(201)
+
+    const notifications = await server.prisma.notification.findMany({ where: { userId: friend.id } })
+    expect(notifications.some((n) => n.type === 'TOURNAMENT_INVITE')).toBe(true)
   })
 
   it('lists tournaments with filters and pagination', async () => {
@@ -229,5 +259,58 @@ describe('Tournaments API', () => {
 
     const listResponse = await server.inject({ method: 'GET', url: '/api/tournaments', query: { page: '0' } })
     expect(listResponse.statusCode).toBe(400)
+  })
+
+  it('prevents start when invites are pending and allows start after all accept', async () => {
+    const owner = await register(server, { email: 'owner-start@example.com', username: 'owner_start', displayName: 'OwnerStart', password: 'Pass1234' })
+    const friend = await register(server, { email: 'friend-start@example.com', username: 'friend_start', displayName: 'FriendStart', password: 'Pass1234' })
+
+    // Create draft tournament with friend invited
+    const createRes = await server.inject({
+      method: 'POST',
+      url: '/api/tournaments',
+      payload: {
+        name: 'Start Flow Cup',
+        createdById: owner.user.id,
+        participants: [
+          { alias: 'OwnerStart', userId: owner.user.id, inviteState: 'ACCEPTED' },
+          { alias: 'FriendStart', userId: friend.user.id }
+        ]
+      }
+    })
+
+    expect(createRes.statusCode).toBe(201)
+    const created = createRes.json<{ data: { id: number } }>()
+
+    const startRes = await server.inject({
+      method: 'POST',
+      url: `/api/tournaments/${created.data.id}/start`,
+      headers: { authorization: `Bearer ${owner.tokens.access}` }
+    })
+
+    expect(startRes.statusCode).toBe(409)
+    const friendParticipant = await server.prisma.tournamentParticipant.findFirst({
+      where: { tournamentId: created.data.id, userId: friend.user.id }
+    })
+    expect(friendParticipant).toBeTruthy()
+
+    const acceptRes = await server.inject({
+      method: 'PATCH',
+      url: `/api/tournaments/${created.data.id}/participants/${friendParticipant!.id}`,
+      headers: { authorization: `Bearer ${friend.tokens.access}` },
+      payload: { action: 'ACCEPT' }
+    })
+    expect(acceptRes.statusCode).toBe(200)
+
+    const startOk = await server.inject({
+      method: 'POST',
+      url: `/api/tournaments/${created.data.id}/start`,
+      headers: { authorization: `Bearer ${owner.tokens.access}` }
+    })
+
+    expect(startOk.statusCode).toBe(200)
+    const started = startOk.json<{ data: { status: string; matches: Array<any> } }>()
+    expect(started.data.status).toBe('RUNNING')
+    expect(started.data.matches.length).toBeGreaterThan(0)
   })
 })
