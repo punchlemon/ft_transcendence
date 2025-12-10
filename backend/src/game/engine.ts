@@ -88,7 +88,7 @@ export class GameEngine {
     return this.players.p1 === userId || this.players.p2 === userId;
   }
 
-  addPlayer(socket: WebSocket, userId?: number, alias?: string): 'p1' | 'p2' | null {
+  addPlayer(socket: WebSocket, userId?: number, alias?: string, preferredSlot?: 'p1' | 'p2'): 'p1' | 'p2' | null {
     const aiSlot = (this as any).aiSlot;
     // If a player joins while a previous empty-game teardown was scheduled,
     // cancel that teardown — the game is active again.
@@ -131,29 +131,29 @@ export class GameEngine {
       }
     }
 
-    if (!this.clients.p1 && aiSlot !== 'p1') {
-      this.clients.p1 = socket;
-      if (userId) {
-        this.players.p1 = userId;
-
-        // Mark the user as being in a valid (non-destroyed) room.
-        prisma.user.update({ where: { id: userId }, data: { status: 'IN_GAME' } })
-          .catch((e) => console.error('[engine] Failed to set user status IN_GAME on addPlayer', e));
-        try {
-          userService.emitStatusChange(userId, 'IN_GAME');
-        } catch (e) {
-          console.error('[engine] Failed to emit status change for IN_GAME on addPlayer', e);
+    const assignSlot = (slot: 'p1' | 'p2'): 'p1' | 'p2' | null => {
+      if (slot === 'p1') {
+        if (this.clients.p1 || aiSlot === 'p1') return null;
+        this.clients.p1 = socket;
+        if (userId) {
+          this.players.p1 = userId;
+          prisma.user.update({ where: { id: userId }, data: { status: 'IN_GAME' } })
+            .catch((e) => console.error('[engine] Failed to set user status IN_GAME on addPlayer', e));
+          try {
+            userService.emitStatusChange(userId, 'IN_GAME');
+          } catch (e) {
+            console.error('[engine] Failed to emit status change for IN_GAME on addPlayer', e);
+          }
         }
+        if (alias) this.playersAliases.p1 = alias;
+        this.checkStart();
+        return 'p1';
       }
-      if (alias) this.playersAliases.p1 = alias;
-      this.checkStart();
-      return 'p1';
-    } else if (!this.clients.p2 && aiSlot !== 'p2') {
+
+      if (this.clients.p2 || aiSlot === 'p2') return null;
       this.clients.p2 = socket;
       if (userId) {
         this.players.p2 = userId;
-
-        // Mark the user as being in a valid (non-destroyed) room.
         prisma.user.update({ where: { id: userId }, data: { status: 'IN_GAME' } })
           .catch((e) => console.error('[engine] Failed to set user status IN_GAME on addPlayer', e));
         try {
@@ -165,7 +165,21 @@ export class GameEngine {
       if (alias) this.playersAliases.p2 = alias;
       this.checkStart();
       return 'p2';
+    };
+
+    if (preferredSlot) {
+      const forcedSlot = assignSlot(preferredSlot);
+      if (forcedSlot) {
+        return forcedSlot;
+      }
     }
+
+    const fallbackP1 = assignSlot('p1');
+    if (fallbackP1) return fallbackP1;
+
+    const fallbackP2 = assignSlot('p2');
+    if (fallbackP2) return fallbackP2;
+
     return null; // Spectator?
   }
 

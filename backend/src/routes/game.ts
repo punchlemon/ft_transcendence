@@ -226,6 +226,7 @@ export default async function gameRoutes(fastify: FastifyInstance) {
     }
     
     let playerSlot: 'p1' | 'p2' | null = null;
+    let preferredSlot: 'p1' | 'p2' | null = null;
     let authSessionId: number | null = null;
 
     const handleMessage = async (message: any) => {
@@ -239,7 +240,7 @@ export default async function gameRoutes(fastify: FastifyInstance) {
           fastify.log.info({ msg: 'Received message', data })
         }
 
-        if (data.event === 'ready') {
+          if (data.event === 'ready') {
           // Defensive: re-check expiration at the time the client declares
           // readiness. Fastify accepts websocket connections before this
           // handler runs, so a client may connect briefly even for an
@@ -280,6 +281,44 @@ export default async function gameRoutes(fastify: FastifyInstance) {
              }
             if (userId) {
               ;(socket as any).__userId = userId
+            }
+
+            if (!preferredSlot && sessionId && sessionId.startsWith('local-match-')) {
+              const matchId = parseInt(sessionId.replace('local-match-', ''), 10)
+              if (!Number.isNaN(matchId)) {
+                try {
+                  const match = await fastify.prisma.tournamentMatch.findUnique({
+                    where: { id: matchId },
+                    select: {
+                      playerA: { select: { userId: true, alias: true } },
+                      playerB: { select: { userId: true, alias: true } }
+                    }
+                  })
+                  if (match) {
+                    if (typeof userId === 'number') {
+                      if (match.playerA?.userId === userId) {
+                        preferredSlot = 'p1'
+                      } else if (match.playerB?.userId === userId) {
+                        preferredSlot = 'p2'
+                      }
+                    }
+
+                    if (!preferredSlot && displayName) {
+                      const normalize = (value?: string | null) => value?.trim().toLowerCase() ?? null
+                      const normalizedDisplay = normalize(displayName)
+                      const aliasA = normalize(match.playerA?.alias)
+                      const aliasB = normalize(match.playerB?.alias)
+                      if (normalizedDisplay && aliasA && aliasA === normalizedDisplay) {
+                        preferredSlot = 'p1'
+                      } else if (normalizedDisplay && aliasB && aliasB === normalizedDisplay) {
+                        preferredSlot = 'p2'
+                      }
+                    }
+                  }
+                } catch (err) {
+                  fastify.log.warn({ err, matchId }, 'Failed to resolve tournament slot assignment')
+                }
+              }
             }
             // If the user is already in a different game (IN_GAME) and is not
             // reconnecting to the same session, refuse to join/start another game.
@@ -396,7 +435,7 @@ export default async function gameRoutes(fastify: FastifyInstance) {
           } else {
             try {
               fastify.log.info({ sessionId, userId }, 'Adding joining socket to game')
-              playerSlot = game.addPlayer(socket as any, userId, displayName as any);
+              playerSlot = game.addPlayer(socket as any, userId, displayName as any, preferredSlot ?? undefined);
               fastify.log.info({ sessionId, playerSlot, userId }, 'Added joining socket to game')
             } catch (e) {
               fastify.log.warn({ err: e, sessionId, userId }, 'Failed to add joining socket to game')
