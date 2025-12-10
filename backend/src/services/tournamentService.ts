@@ -133,7 +133,7 @@ export const tournamentService = {
     });
 
     const matchIndex = currentRoundMatches.findIndex(m => m.id === match.id);
-    if (matchIndex === -1) return;
+    if (matchIndex === -1) return null;
 
     // Calculate next match index
     const nextMatchIndex = Math.floor(matchIndex / 2);
@@ -160,7 +160,7 @@ export const tournamentService = {
              });
          }
       }
-      return;
+      return null;
     }
 
     const targetMatch = nextRoundMatches[nextMatchIndex];
