@@ -1,6 +1,7 @@
 import { describe, it, expect, beforeAll, afterAll, beforeEach } from 'vitest'
 import type { FastifyInstance } from 'fastify'
 import { buildServer } from '../app'
+import { tournamentService } from '../services/tournamentService'
 
 const register = async (server: FastifyInstance, payload: { email: string; username: string; displayName: string; password: string }) => {
   const res = await server.inject({ method: 'POST', url: '/api/auth/register', payload })
@@ -312,5 +313,67 @@ describe('Tournaments API', () => {
     const started = startOk.json<{ data: { status: string; matches: Array<any> } }>()
     expect(started.data.status).toBe('RUNNING')
     expect(started.data.matches.length).toBeGreaterThan(0)
+  })
+
+  it('notifies winners when a next round match becomes ready', async () => {
+    const owner = await createUser(server, { displayName: 'Owner' })
+    const alice = await createUser(server, { displayName: 'Alice' })
+    const bob = await createUser(server, { displayName: 'Bob' })
+    const carol = await createUser(server, { displayName: 'Carol' })
+    const dave = await createUser(server, { displayName: 'Dave' })
+
+    const tournament = await server.prisma.tournament.create({
+      data: {
+        name: 'Knockout Cup',
+        status: 'RUNNING',
+        bracketType: 'SINGLE_ELIMINATION',
+        createdById: owner.id
+      }
+    })
+
+    const aliceP = await server.prisma.tournamentParticipant.create({
+      data: { tournamentId: tournament.id, alias: 'Alice', userId: alice.id, inviteState: 'ACCEPTED' }
+    })
+    const bobP = await server.prisma.tournamentParticipant.create({
+      data: { tournamentId: tournament.id, alias: 'Bob', userId: bob.id, inviteState: 'ACCEPTED' }
+    })
+    const carolP = await server.prisma.tournamentParticipant.create({
+      data: { tournamentId: tournament.id, alias: 'Carol', userId: carol.id, inviteState: 'ACCEPTED' }
+    })
+    const daveP = await server.prisma.tournamentParticipant.create({
+      data: { tournamentId: tournament.id, alias: 'Dave', userId: dave.id, inviteState: 'ACCEPTED' }
+    })
+    const placeholder = await server.prisma.tournamentParticipant.create({
+      data: { tournamentId: tournament.id, alias: 'TBD', inviteState: 'PLACEHOLDER' }
+    })
+
+    const match1 = await server.prisma.tournamentMatch.create({
+      data: { tournamentId: tournament.id, round: 1, playerAId: aliceP.id, playerBId: bobP.id, status: 'RUNNING' }
+    })
+    const match2 = await server.prisma.tournamentMatch.create({
+      data: { tournamentId: tournament.id, round: 1, playerAId: carolP.id, playerBId: daveP.id, status: 'RUNNING' }
+    })
+    await server.prisma.tournamentMatch.create({
+      data: { tournamentId: tournament.id, round: 2, playerAId: placeholder.id, playerBId: placeholder.id, status: 'PENDING' }
+    })
+
+    await tournamentService.handleMatchResult(match1.id, alice.id, 5, 3)
+
+    const afterFirst = await server.prisma.notification.findMany({ where: { type: 'TOURNAMENT_MATCH_READY' } })
+    expect(afterFirst).toHaveLength(0)
+
+    await tournamentService.handleMatchResult(match2.id, carol.id, 5, 1)
+
+    const notifications = await server.prisma.notification.findMany({ where: { type: 'TOURNAMENT_MATCH_READY' }, orderBy: { id: 'asc' } })
+    expect(notifications).toHaveLength(2)
+    expect(new Set(notifications.map((n) => n.userId))).toEqual(new Set([alice.id, carol.id]))
+
+    const payload = notifications.map((n) => (n.data ? JSON.parse(n.data) : null))
+    payload.forEach((data) => {
+      expect(data).toBeTruthy()
+      expect(data?.sessionId).toMatch(/^local-match-\d+$/)
+      expect(data?.p1Name).toBeTruthy()
+      expect(data?.p2Name).toBeTruthy()
+    })
   })
 })

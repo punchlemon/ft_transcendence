@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, useCallback } from 'react'
+import { useEffect, useRef, useState, useCallback, useMemo } from 'react'
 import { useParams, useNavigate, useSearchParams, useLocation } from 'react-router-dom'
 import useAuthStore from '../stores/authStore'
 import { soundManager } from '../lib/sound'
@@ -510,39 +510,32 @@ const GameRoomPage = () => {
     setReconnectKey((k: number) => k + 1)
   }, [searchParams, navigate, id])
 
-  const handleNextMatch = useCallback(() => {
-    if (!activeTournament) return
-    
-    // Find next match
-    const nextIndex = advanceToNextMatch(matchQueue, currentMatchIndex)
-    if (nextIndex !== -1) {
-        const nextMatch = matchQueue[nextIndex]
-        const p1 = nextMatch.players[0]
-        const p2 = nextMatch.players[1]
-        const p1Id = nextMatch.participantIds?.[0]
-        const p2Id = nextMatch.participantIds?.[1]
-        
-        let url = `/game/local-${nextMatch.id}?mode=local&p1Name=${encodeURIComponent(p1)}&p2Name=${encodeURIComponent(p2 ?? '')}`
-        url += `&tournamentId=${activeTournament.id}`
-        if (p1Id) url += `&p1Id=${p1Id}`
-        if (p2Id) url += `&p2Id=${p2Id}`
-        
-        // Force full reload or just navigate? Navigate should be enough if useEffect handles id change
-        // But we need to reset state.
-        // Navigate to new URL
-        navigate(url)
-        // Reset local state manually because component might not unmount
-        setReconnectKey(k => k + 1)
-        setStatus('connecting')
-        setScores({ p1: 0, p2: 0 })
-        setWinner(null)
-    } else {
-        // Tournament finished
-        setShowRanking(true)
+  const goHome = useCallback(() => {
+    sendLeaveAndClose()
+    try {
+      updateUser?.({ status: 'ONLINE' })
+    } catch (e) {
+      // ignore
     }
-  }, [activeTournament, matchQueue, currentMatchIndex, navigate])
+    navigate('/')
+  }, [navigate, updateUser])
 
-  // Space key behavior: when finished -> Play Again / Next Match. Pausing disabled.
+  const openTournamentResults = useCallback(() => {
+    if (!activeTournament) {
+      navigate('/')
+      return
+    }
+    setShowRanking(true)
+  }, [activeTournament, navigate])
+
+  const isTournamentMatch = Boolean(id?.startsWith('local-match-'))
+  const nextTournamentMatchIndex = useMemo(() => {
+    if (!isTournamentMatch) return -1
+    return advanceToNextMatch(matchQueue, currentMatchIndex)
+  }, [isTournamentMatch, matchQueue, currentMatchIndex])
+  const isFinalTournamentMatch = isTournamentMatch && nextTournamentMatchIndex === -1
+
+  // Space key behavior: when finished -> Play Again / Go Home / View Results. Pausing disabled.
   useEffect(() => {
     const handleSpace = (e: KeyboardEvent) => {
       if (e.code !== 'Space') return
@@ -550,8 +543,12 @@ const GameRoomPage = () => {
       e.preventDefault()
 
       if (status === 'finished') {
-        if (id?.startsWith('local-')) {
-          handleNextMatch()
+        if (isTournamentMatch) {
+          if (isFinalTournamentMatch) {
+            openTournamentResults()
+          } else {
+            goHome()
+          }
         } else {
           playAgain()
         }
@@ -560,7 +557,7 @@ const GameRoomPage = () => {
 
     window.addEventListener('keydown', handleSpace)
     return () => window.removeEventListener('keydown', handleSpace)
-  }, [status, playAgain, handleNextMatch, id])
+  }, [status, playAgain, isTournamentMatch, isFinalTournamentMatch, openTournamentResults, goHome])
 
   // Game loop
   useEffect(() => {
@@ -735,18 +732,28 @@ const GameRoomPage = () => {
                   {searchParams.get('mode') === 'local' ? `🏆 ${winner} Won!` : (winner === 'You' ? '🏆 You Won!' : '💀 You Lost')}
                 </div>
                 {/* Scores intentionally omitted from finished overlay per UX request */}
-                <div className="flex gap-4 justify-center">
-                  <button 
-                    onClick={() => {
-                      if (id?.startsWith('local-')) {
-                        handleNextMatch()
-                      } else {
-                        playAgain()
-                      }
-                    }}
-                    className="rounded-full bg-white px-8 py-3 font-bold text-slate-900 hover:bg-indigo-50 transition-colors shadow-lg hover:shadow-xl transform hover:-translate-y-0.5"
+                <div className="flex flex-wrap gap-4 justify-center">
+                  {!isTournamentMatch && (
+                    <button
+                      onClick={playAgain}
+                      className="rounded-full bg-white px-8 py-3 font-bold text-slate-900 hover:bg-indigo-50 transition-colors shadow-lg hover:shadow-xl transform hover:-translate-y-0.5"
+                    >
+                      Play Again
+                    </button>
+                  )}
+                  {isFinalTournamentMatch && (
+                    <button
+                      onClick={openTournamentResults}
+                      className="rounded-full bg-white px-8 py-3 font-bold text-slate-900 hover:bg-indigo-50 transition-colors shadow-lg hover:shadow-xl transform hover:-translate-y-0.5"
+                    >
+                      View Results
+                    </button>
+                  )}
+                  <button
+                    onClick={goHome}
+                    className="rounded-full border border-white/70 bg-transparent px-8 py-3 font-bold text-white hover:bg-white/10 transition-colors shadow-lg hover:shadow-xl transform hover:-translate-y-0.5"
                   >
-                    {id?.startsWith('local-') ? (advanceToNextMatch(matchQueue, currentMatchIndex) === -1 ? 'View Results' : 'Next Match') : 'Play Again'}
+                    Go Home
                   </button>
                 </div>
               </div>
