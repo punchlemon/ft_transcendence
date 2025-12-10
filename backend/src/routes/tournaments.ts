@@ -413,16 +413,6 @@ const tournamentsRoutes: FastifyPluginAsync = async (fastify) => {
         inviteTimers.delete(participant.id)
       }
       const updated = await fastify.prisma.tournamentParticipant.update({ where: { id: participant.id }, data: { inviteState: 'ACCEPTED', joinedAt: new Date() } })
-      const tournament = await fastify.prisma.tournament.findUnique({ where: { id: participant.tournamentId }, select: { createdById: true, name: true } })
-      if (tournament) {
-        await notificationService.createNotification(
-          tournament.createdById,
-          'TOURNAMENT_INVITE',
-          'Invite accepted',
-          `${(request.user as any).displayName || 'A user'} accepted invite for ${tournament.name}`,
-          { tournamentId: participant.tournamentId, participantId: updated.id }
-        )
-      }
       return { data: updated }
     } else {
       // DECLINE: mark declined and notify owner; allow owner to re-invite
