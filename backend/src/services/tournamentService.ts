@@ -1,5 +1,15 @@
 import { prisma } from '../utils/prisma';
 import { Prisma } from '@prisma/client';
+import { notificationService } from './notification';
+
+type MatchWithParticipants = Prisma.TournamentMatchGetPayload<{ include: { playerA: true; playerB: true } }>
+
+type ReadyMatchContext = {
+  tournamentId: number;
+  matchId: number;
+  playerA: NonNullable<MatchWithParticipants['playerA']>;
+  playerB: NonNullable<MatchWithParticipants['playerB']>;
+}
 
 export const tournamentService = {
   async handleMatchResult(matchId: number, winnerUserId: number, scoreA?: number, scoreB?: number) {
@@ -8,7 +18,7 @@ export const tournamentService = {
       throw new Error('SCORES_REQUIRED')
     }
 
-    await prisma.$transaction(async (tx) => {
+    const readyMatch = await prisma.$transaction(async (tx) => {
       // 1. Get the match with participants
       const match = await tx.tournamentMatch.findUnique({
         where: { id: matchId },
@@ -24,7 +34,7 @@ export const tournamentService = {
       }
 
       if (match.status === 'FINISHED') {
-        return;
+        return null;
       }
 
       // Lock the tournament
@@ -55,11 +65,64 @@ export const tournamentService = {
       });
 
       // 4. Advance winner to next round
-      await this.advanceWinner(match, winnerParticipantId, tx);
+      return await this.advanceWinner(match, winnerParticipantId, tx);
     });
+
+    if (!readyMatch) {
+      return;
+    }
+
+    const { tournamentId, matchId: nextMatchId, playerA, playerB } = readyMatch;
+
+    const payload = {
+      tournamentId,
+      matchId: nextMatchId,
+      sessionId: `local-match-${nextMatchId}`,
+      p1Id: playerA.id,
+      p2Id: playerB.id,
+      p1Name: playerA.alias ?? 'Player 1',
+      p2Name: playerB.alias ?? 'Player 2',
+      mode: (playerA.inviteState === 'AI' || playerB.inviteState === 'AI') ? 'ai' : 'remote'
+    };
+
+    const title = 'Tournament match ready';
+    const body = `${payload.p1Name} vs ${payload.p2Name}`;
+
+    const notifications: Promise<any>[] = [];
+    const delivered = new Set<number>();
+
+    if (typeof playerA.userId === 'number' && !delivered.has(playerA.userId)) {
+      delivered.add(playerA.userId);
+      notifications.push(
+        notificationService.createNotification(
+          playerA.userId,
+          'TOURNAMENT_MATCH_READY',
+          title,
+          body,
+          payload
+        )
+      );
+    }
+
+    if (typeof playerB.userId === 'number' && !delivered.has(playerB.userId)) {
+      delivered.add(playerB.userId);
+      notifications.push(
+        notificationService.createNotification(
+          playerB.userId,
+          'TOURNAMENT_MATCH_READY',
+          title,
+          body,
+          payload
+        )
+      );
+    }
+
+    if (notifications.length > 0) {
+      await Promise.allSettled(notifications);
+    }
   },
 
-  async advanceWinner(match: any, winnerId: number, tx: Prisma.TransactionClient) {
+  async advanceWinner(match: any, winnerId: number, tx: Prisma.TransactionClient): Promise<ReadyMatchContext | null> {
     const tournamentId = match.tournamentId;
     const currentRound = match.round;
 
@@ -102,7 +165,7 @@ export const tournamentService = {
 
     const targetMatch = nextRoundMatches[nextMatchIndex];
     if (!targetMatch) {
-        return;
+        return null;
     }
 
     // Update the target match
@@ -131,7 +194,14 @@ export const tournamentService = {
             where: { id: targetMatch.id },
             data: { status: 'PENDING' }
         });
+      return {
+        tournamentId,
+        matchId: targetMatch.id,
+        playerA: pA,
+        playerB: pB
+      };
     }
+    return null;
   },
 
   padWithBye<T>(participants: T[]): (T | null)[] {
