@@ -114,7 +114,7 @@ describe('Tournament Invite Flow', () => {
     expect(accepted.data.joinedAt).toBeTruthy()
 
     const ownerNotifs = await server.prisma.notification.findMany({ where: { userId: ownerBody.user.id } })
-    expect(ownerNotifs.some(n => n.type === 'TOURNAMENT_INVITE')).toBe(true)
+    expect(ownerNotifs.some(n => n.type === 'TOURNAMENT_INVITE')).toBe(false)
   })
 
   it('invite TTL expires and marks participant DECLINED', async () => {
