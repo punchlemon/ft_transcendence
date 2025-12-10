@@ -41,6 +41,11 @@ describe('GameEngine', () => {
     vi.useRealTimers();
   });
 
+  it('honors a preferred player slot when available', () => {
+    expect(game.addPlayer(mockWs1, undefined, undefined, 'p2')).toBe('p2');
+    expect(game.addPlayer(mockWs2)).toBe('p1');
+  });
+
   it('should process input and move paddle', () => {
     game.addPlayer(mockWs1);
     game.addPlayer(mockWs2);
