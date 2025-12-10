@@ -452,11 +452,6 @@ export const respondTournamentParticipant = async (tournamentId: number, partici
   return response.data as { data: any }
 }
 
-export const respondTournamentRoomInvite = async (roomId: number, inviteId: number, action: 'ACCEPT' | 'DECLINE') => {
-  const response = await apiClient.patch(`/tournaments/rooms/${roomId}/invites/${inviteId}`, { action })
-  return response.data as { data: any }
-}
-
 export type UpdateProfilePayload = {
   displayName?: string
   bio?: string
@@ -563,13 +558,15 @@ export const createPrivateRoom = async () => {
 }
 
 // Create a tournament room and send invites to listed users.
+// Create a tournament room and send invites to listed users.
 export const createTournamentRoom = async (tournamentId: number, invitedUserIds: number[]) => {
   const response = await apiClient.post(`/tournaments/${tournamentId}/rooms`, { invitedUserIds })
   return response.data as { data: { roomId: number } }
 }
 
-export const fetchTournamentRoom = async (tournamentId: number, roomId: number) => {
-  const res = await apiClient.get(`/tournaments/${tournamentId}/rooms/${roomId}`)
-  return res.data.data
-
+export const respondTournamentRoomInvite = async (roomId: number, inviteId: number, action: 'ACCEPT' | 'DECLINE') => {
+  const response = await apiClient.patch(`/tournaments/rooms/${roomId}/invites/${inviteId}`, { action })
+  return response.data as { data: any }
 }
+
+// Note: Tournament room APIs are still used for invite flows; keep these helpers here.

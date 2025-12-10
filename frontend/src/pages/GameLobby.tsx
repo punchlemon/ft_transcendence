@@ -87,20 +87,22 @@ const GameLobbyPage = () => {
             setCreatedTournament(detail.data)
             setIsStartDisabled(false)
 
-            // Create a tournament room and navigate owner into it
+            // Create a tournament room to send invites to selected friends
             try {
-              const invitedIds = selectedFriendIds
+              const invitedIds = selectedFriendIds || []
               const roomRes = await createTournamentRoom(detail.data.id, invitedIds)
-              const roomId = roomRes.roomId ?? roomRes.id ?? null
-              if (roomId) {
-                navigate(`/tournaments/${detail.data.id}/rooms/${roomId}`)
-                return
-              }
+              const roomId = roomRes?.data?.roomId ?? null
+
+              // Navigate owner into the game waiting area (pseudo session). The actual game start
+              // will wait until participants accept invites — participants will navigate directly
+              // into the game when they Accept (NotificationToast handles that).
+              const tid = detail.data.id
+              const sid = `tournament-${tid}-room-${roomId ?? 'unknown'}-${Date.now()}`
+              navigate(`/game/${encodeURIComponent(sid)}?mode=tournament&tournamentId=${encodeURIComponent(tid)}&roomId=${encodeURIComponent(String(roomId))}`)
+              return
             } catch (e) {
-              logger.error('Failed to create tournament room', e)
+              logger.error('Failed to create tournament room or navigate owner to game', e)
             }
-            // fallback: room creation failed — log and keep user on lobby
-            logger.error('Room creation failed; staying on lobby')
           } catch (err) {
             logger.error('Failed to create tournament', err)
             alert('Failed to create tournament')

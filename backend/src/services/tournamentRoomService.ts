@@ -3,7 +3,7 @@ import { notificationService } from './notification'
 import { SocketEvent } from '../types/protocol'
 import socketFacade from '../lib/socketFacade'
 
-export const tournamentRoomService = {
+const tournamentRoomService = {
   async createTournamentRoom(tournamentId: number, ownerId: number, invitedUserIds: number[], opts: { mode?: string } = {}) {
     // validate tournament exists
     const tournament = await prisma.tournament.findUnique({ where: { id: tournamentId } })
@@ -18,7 +18,7 @@ export const tournamentRoomService = {
     })
 
     // create invites
-    const invites = [] as any[]
+    const invites: any[] = []
     for (const uid of invitedUserIds) {
       const u = await prisma.user.findUnique({ where: { id: uid }, select: { id: true, displayName: true } })
       if (!u) continue
@@ -56,9 +56,6 @@ export const tournamentRoomService = {
 
     const updated = await prisma.tournamentRoomInvite.update({ where: { id: inviteId }, data: { state: 'ACCEPTED', updatedAt: new Date() } })
 
-    // Optionally create TournamentParticipant entry (if desired)
-    // For now we do not auto-create TournamentParticipant; caller can decide.
-
     // Join socket room if user has sockets
     try {
       const sockets = socketFacade.findSocketsByUser(userId)
@@ -73,9 +70,7 @@ export const tournamentRoomService = {
     } catch (e) {}
 
     return updated
-  }
-
-  ,
+  },
 
   async getRoom(roomId: number) {
     const room = await prisma.tournamentRoom.findUnique({

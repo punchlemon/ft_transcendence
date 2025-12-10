@@ -43,23 +43,48 @@ export default function NotificationToast() {
   const handleAction = async (action: 'ACCEPT' | 'DECLINE') => {
     setLoading(true)
     try {
-      // Room invite (has inviteId and roomId)
+      // Room-level invite (has inviteId and roomId)
       if (data.roomId && data.inviteId) {
-        await respondTournamentRoomInvite(data.roomId, data.inviteId, action)
+        await respondTournamentRoomInvite(Number(data.roomId), Number(data.inviteId), action)
         await markAsRead(n.id)
         setToast(null)
         if (action === 'ACCEPT') {
-          // Navigate to tournament room page
-          try { navigate(`/tournaments/${data.tournamentId}/rooms/${data.roomId}`) } catch (e) { /* ignore */ }
+          try {
+            const tid = data.tournamentId != null ? Number(data.tournamentId) : data.tournamentId
+            const rid = Number(data.roomId)
+            const sessionId = `tournament-${tid}-room-${rid}-${Date.now()}`
+            try {
+              navigate(`/game/${encodeURIComponent(sessionId)}?mode=tournament&tournamentId=${encodeURIComponent(tid)}&roomId=${encodeURIComponent(rid)}`)
+            } catch (e) {
+              /* ignore navigate errors */
+            }
+          } catch (e) {
+            /* ignore */
+          }
         }
         return
       }
 
-      // Fallback: participant-level tournament invite
+      // Participant-level tournament invite (fallback)
       if (!data.tournamentId || !data.participantId) return
       await respondTournamentParticipant(data.tournamentId, data.participantId, action)
       await markAsRead(n.id)
       setToast(null)
+      if (action === 'ACCEPT') {
+        // Navigate to game screen — use a pseudo session id so GameRoom can act as waiting area.
+        try {
+          const tid = data.tournamentId != null ? Number(data.tournamentId) : data.tournamentId
+          const rid = data.roomId != null ? Number(data.roomId) : data.roomId
+          const sessionId = `tournament-${tid}-room-${rid}-${Date.now()}`
+          try {
+            navigate(`/game/${encodeURIComponent(sessionId)}?mode=tournament&tournamentId=${encodeURIComponent(tid)}&roomId=${encodeURIComponent(rid)}`)
+          } catch (e) {
+            /* ignore navigate errors */
+          }
+        } catch (e) {
+          /* ignore */
+        }
+      }
     } catch (e) {
       logger.error('Failed to respond to invite', e)
     } finally {

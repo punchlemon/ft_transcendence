@@ -45,6 +45,7 @@ export const buildServer = async () => {
   await server.register(authRoutes, { prefix: '/api/auth' })
   await server.register(usersRoutes, { prefix: '/api/users' })
   await server.register(tournamentsRoutes, { prefix: '/api/tournaments' })
+  // tournament room endpoints (create room, invite, accept) — keep under the tournaments prefix
   await server.register(tournamentRoomsRoutes, { prefix: '/api/tournaments' })
   await server.register(gameRoutes, { prefix: '/api' })
   await server.register(chatRoutes, { prefix: '/api/chat' })
