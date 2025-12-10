@@ -38,6 +38,8 @@ describe('Friend Routes', () => {
     // Tournament related
     await prisma.tournamentMatch.deleteMany()
     await prisma.tournamentParticipant.deleteMany()
+    await prisma.tournamentRoomInvite.deleteMany()
+    await prisma.tournamentRoom.deleteMany()
     await prisma.tournament.deleteMany()
 
     // Social related

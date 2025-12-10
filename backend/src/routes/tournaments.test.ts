@@ -40,6 +40,8 @@ describe('Tournaments API', () => {
     await server.prisma.session.deleteMany()
     await server.prisma.tournamentMatch.deleteMany()
     await server.prisma.tournamentParticipant.deleteMany()
+    await server.prisma.tournamentRoomInvite.deleteMany()
+    await server.prisma.tournamentRoom.deleteMany()
     await server.prisma.tournament.deleteMany()
     await server.prisma.matchResult.deleteMany()
     await server.prisma.matchRound.deleteMany()

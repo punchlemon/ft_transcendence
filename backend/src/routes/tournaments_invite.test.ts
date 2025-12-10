@@ -31,6 +31,8 @@ describe('Tournament Invite Flow', () => {
     await p.session.deleteMany()
     await p.tournamentMatch.deleteMany()
     await p.tournamentParticipant.deleteMany()
+    await p.tournamentRoomInvite.deleteMany()
+    await p.tournamentRoom.deleteMany()
     await p.tournament.deleteMany()
     await p.matchResult.deleteMany()
     await p.matchRound.deleteMany()

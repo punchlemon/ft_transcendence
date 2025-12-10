@@ -1,7 +1,8 @@
 import { useEffect, useState } from 'react'
 import logger from '../../lib/logger'
 import { useNotificationStore, Notification } from '../../stores/notificationStore'
-import { respondTournamentParticipant } from '../../lib/api'
+import { respondTournamentParticipant, respondTournamentRoomInvite } from '../../lib/api'
+import { useNavigate } from 'react-router-dom'
 
 type ToastState = {
   notification: Notification
@@ -14,6 +15,7 @@ export default function NotificationToast() {
   const markAsRead = useNotificationStore((s) => s.markAsRead)
   const [toast, setToast] = useState<ToastState>(null)
   const [loading, setLoading] = useState(false)
+  const navigate = useNavigate()
 
   useEffect(() => {
     if (!notifications || notifications.length === 0) return
@@ -39,9 +41,22 @@ export default function NotificationToast() {
   const data = n.data || {}
 
   const handleAction = async (action: 'ACCEPT' | 'DECLINE') => {
-    if (!data.tournamentId || !data.participantId) return
     setLoading(true)
     try {
+      // Room invite (has inviteId and roomId)
+      if (data.roomId && data.inviteId) {
+        await respondTournamentRoomInvite(data.roomId, data.inviteId, action)
+        await markAsRead(n.id)
+        setToast(null)
+        if (action === 'ACCEPT') {
+          // Navigate to tournament room page
+          try { navigate(`/tournaments/${data.tournamentId}/rooms/${data.roomId}`) } catch (e) { /* ignore */ }
+        }
+        return
+      }
+
+      // Fallback: participant-level tournament invite
+      if (!data.tournamentId || !data.participantId) return
       await respondTournamentParticipant(data.tournamentId, data.participantId, action)
       await markAsRead(n.id)
       setToast(null)

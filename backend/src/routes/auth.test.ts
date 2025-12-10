@@ -57,6 +57,8 @@ beforeEach(async () => {
   await prisma.party.deleteMany()
   await prisma.tournamentMatch.deleteMany()
   await prisma.tournamentParticipant.deleteMany()
+  await prisma.tournamentRoomInvite.deleteMany()
+  await prisma.tournamentRoom.deleteMany()
   await prisma.tournament.deleteMany()
   await prisma.matchResult.deleteMany()
   await prisma.matchRound.deleteMany()

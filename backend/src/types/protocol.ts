@@ -23,6 +23,12 @@ export enum SocketEvent {
   // Control / keepalive
   PING = 'ping',
   PONG = 'pong',
+  
+  // Tournament-related
+  TOURNAMENT_INVITE = 'tournament:invite',
+  JOIN_TOURNAMENT_ROOM = 'tournament:join_room',
+  TOURNAMENT_ROOM_JOINED = 'tournament:room_joined',
+  TOURNAMENT_ROOM_LEFT = 'tournament:room_left',
 }
 
 /** Generic wrapper for socket events */
@@ -51,6 +57,21 @@ export interface ChatTypingPayload {
   roomId: string;
   userId: number;
   isTyping: boolean;
+}
+
+/* ===== Tournament payloads ===== */
+export interface TournamentInvitePayload {
+  roomId: number;
+  tournamentId: number;
+  ownerId: number;
+  ownerDisplayName?: string;
+  message?: string;
+}
+
+export interface TournamentRoomJoinedPayload {
+  roomId: number;
+  userId: number;
+  displayName?: string;
 }
 
 export type ChatEventPayloads = ChatMessagePayload | ChatMembershipPayload | ChatTypingPayload;
@@ -90,6 +111,9 @@ export type PayloadFor<T extends SocketEvent> =
   T extends SocketEvent.GAME_CREATE ? GameCreatePayload :
   T extends SocketEvent.GAME_JOIN ? GameJoinPayload :
   T extends SocketEvent.GAME_MOVE ? GameMovePayload :
+  T extends SocketEvent.TOURNAMENT_INVITE ? TournamentInvitePayload :
+  T extends SocketEvent.JOIN_TOURNAMENT_ROOM ? { roomId: number } :
+  T extends SocketEvent.TOURNAMENT_ROOM_JOINED ? TournamentRoomJoinedPayload :
   unknown;
 
 export default {

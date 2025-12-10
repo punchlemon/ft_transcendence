@@ -88,11 +88,23 @@ export const connectChatWs = () => {
         if (listeners['public_friend_update']) {
           listeners['public_friend_update'].forEach(cb => cb(payload.data));
         }
+      } else if (payload.type === 'TOURNAMENT_ROOM_JOINED' || payload.type === 'TOURNAMENT_ROOM_LEFT') {
+        // payload.payload contains { roomId, userId }
+        if (listeners[payload.type]) {
+          listeners[payload.type].forEach(cb => cb(payload.payload));
+        }
+      } else if (payload.type === 'tournament_invite' || payload.type === 'TOURNAMENT_INVITE') {
+        try {
+          useNotificationStore.getState().addNotification(payload.data)
+        } catch (e) {
+          logger.error('Failed to process tournament invite WS payload', e)
+        }
       }
     } catch (e) {
       logger.error('Failed to parse WS message', e);
     }
   };
+  
 
   socket.onclose = (event) => {
     logger.info('Chat WS disconnected', event.code, event.reason);

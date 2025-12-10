@@ -452,6 +452,11 @@ export const respondTournamentParticipant = async (tournamentId: number, partici
   return response.data as { data: any }
 }
 
+export const respondTournamentRoomInvite = async (roomId: number, inviteId: number, action: 'ACCEPT' | 'DECLINE') => {
+  const response = await apiClient.patch(`/tournaments/rooms/${roomId}/invites/${inviteId}`, { action })
+  return response.data as { data: any }
+}
+
 export type UpdateProfilePayload = {
   displayName?: string
   bio?: string
@@ -557,33 +562,14 @@ export const createPrivateRoom = async () => {
   return response.data as { sessionId: string }
 }
 
-/*
-解説:
+// Create a tournament room and send invites to listed users.
+export const createTournamentRoom = async (tournamentId: number, invitedUserIds: number[]) => {
+  const response = await apiClient.post(`/tournaments/${tournamentId}/rooms`, { invitedUserIds })
+  return response.data as { data: { roomId: number } }
+}
 
-1) import axios
-  - HTTP クライアントとして axios を使用し、共通のベース URL 設定を一箇所に集約する。
+export const fetchTournamentRoom = async (tournamentId: number, roomId: number) => {
+  const res = await apiClient.get(`/tournaments/${tournamentId}/rooms/${roomId}`)
+  return res.data.data
 
-2) rawBaseUrl / shouldUseRelativeBase / resolvedBaseUrl
-  - 環境変数 `VITE_API_BASE_URL` を解釈し、Docker 経由の `http://backend` や未設定の場合は相対パス `/api` にフォールバックしてフロント/バック間のプロキシ互換を確保する。
-
-3) const apiClient = axios.create
-  - 計算した `baseURL` で axios インスタンスを生成し、以降の API 呼び出しで URL の重複指定を避ける。
-
-4) attachAuthorizationHeader / 各 API 関数
-  - リクエスト前に `authStore`/`sessionStorage` からアクセストークンを取得し、`Authorization` ヘッダーへ付与するインターセプターを登録している。`fetchHealth`（匿名）以外の API でも個別処理を記述せずに済むよう統合した。
-
-5) completeOAuthCallback
-  - OAuth リダイレクト後の `code`/`state` をバックエンドへ橋渡しするための関数とレスポンス型を用意し、`mfaRequired` や `challengeId` フラグも併せて扱えるようにしている。
-
-6) トーナメント関連の型と API 関数
-  - トーナメントの一覧取得、詳細取得、作成を行うための型定義と API 関数を追加した。
-
-7) updateUserProfile
-  - ユーザープロフィールの更新を行うための関数と型定義を追加した。
-
-8) セッション関連の型と API 関数
-  - セッションの取得と無効化を行うための型定義と API 関数を追加した。
-
-9) ユーザー検索関連の型と API 関数
-  - ユーザーの検索、ソート、フィルタリングを行うための型定義と API 関数を追加した。
-*/
+}

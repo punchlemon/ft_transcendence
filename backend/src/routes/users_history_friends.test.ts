@@ -87,6 +87,8 @@ describe('User History & Friends API', () => {
     await prisma.party.deleteMany()
     await prisma.tournamentMatch.deleteMany()
     await prisma.tournamentParticipant.deleteMany()
+    await prisma.tournamentRoomInvite.deleteMany()
+    await prisma.tournamentRoom.deleteMany()
     await prisma.tournament.deleteMany()
     await prisma.twoFactorBackupCode.deleteMany()
     await prisma.mfaChallenge.deleteMany()

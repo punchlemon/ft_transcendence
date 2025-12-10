@@ -33,6 +33,7 @@ const GameRoomPage = () => {
   // be shown immediately when navigating to `/game/:id?showInvite=1`.
   const [sessionId, setSessionId] = useState<string | null>(id ?? null)
   const [showInviteModal, setShowInviteModal] = useState(false)
+  
   const [showSessionDestroyed, setShowSessionDestroyed] = useState(false)
 
   const mode = searchParams.get('mode')
@@ -810,6 +811,7 @@ const GameRoomPage = () => {
         </div>
         <div className="mb-6">
           <div className="flex">
+            {/* Tournament owner invite button intentionally removed — invitations are handled via Lobby FriendSelector */}
             <button
               onClick={() => {
                 try {
@@ -832,6 +834,7 @@ const GameRoomPage = () => {
             </button>
           </div>
         </div>
+        
 
         {/* Chat removed (old demo placeholder) */}
       </div>

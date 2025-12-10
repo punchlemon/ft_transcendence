@@ -10,6 +10,7 @@ import OAuthCallbackPage from './pages/OAuthCallback'
 import ProfilePage from './pages/Profile'
 import UsersPage from './pages/Users'
 import GameRoomPage from './pages/GameRoom'
+import TournamentRoomPage from './pages/TournamentRoom'
 import ChatDrawer from './components/chat/ChatDrawer'
 import UserMenu from './components/ui/UserMenu'
 import NotificationToast from './components/ui/NotificationToast'
@@ -133,6 +134,14 @@ const App = () => {
               element={
                 <RequireAuth>
                   <GameRoomPage />
+                </RequireAuth>
+              }
+            />
+            <Route
+              path="/tournaments/:tournamentId/rooms/:roomId"
+              element={
+                <RequireAuth>
+                  <TournamentRoomPage />
                 </RequireAuth>
               }
             />

@@ -1,8 +1,7 @@
 import React, { useEffect, useState } from 'react'
 import logger from '../../lib/logger'
 import Button from '../ui/Button'
-import { fetchUserFriends } from '../../lib/api'
-import { inviteTournamentParticipant } from '../../lib/api'
+import { fetchUserFriends, createTournamentRoom } from '../../lib/api'
 import useAuthStore from '../../stores/authStore'
 
 type Props = {
@@ -11,12 +10,13 @@ type Props = {
   tournamentId: number
 }
 
-const FriendSelectorModal = ({ open, onClose, tournamentId }: Props) => {
+const InviteToTournamentRoomModal = ({ open, onClose, tournamentId }: Props) => {
   const user = useAuthStore((s) => s.user)
   const [friends, setFriends] = useState<Array<any>>([])
   const [query, setQuery] = useState('')
   const [loading, setLoading] = useState(false)
-  const [inviting, setInviting] = useState<number | null>(null)
+  const [creating, setCreating] = useState(false)
+  const [selected, setSelected] = useState<Record<number, boolean>>({})
 
   useEffect(() => {
     if (!open || !user) return
@@ -32,17 +32,26 @@ const FriendSelectorModal = ({ open, onClose, tournamentId }: Props) => {
     .filter((f) => f.status === 'ONLINE')
     .filter((f) => f.displayName.toLowerCase().includes(query.toLowerCase()))
 
-  const handleInvite = async (friendId: number) => {
-    setInviting(friendId)
+  const toggle = (id: number) => {
+    setSelected((s) => ({ ...s, [id]: !s[id] }))
+  }
+
+  const handleCreateRoom = async () => {
+    const invited = Object.keys(selected).filter((k) => selected[Number(k)]).map((k) => Number(k))
+    if (invited.length === 0) {
+      alert('少なくとも1人を選択してください')
+      return
+    }
+    setCreating(true)
     try {
-      await inviteTournamentParticipant(tournamentId, friendId)
-      // optimistic - close modal
+      await createTournamentRoom(tournamentId, invited)
+      // Backend will send notifications/invites to invited users via WS/notifications
       onClose()
     } catch (e) {
-      logger.error('Failed to invite tournament participant', e)
-      alert('招待に失敗しました')
+      logger.error('Failed to create tournament room', e)
+      alert('ルーム作成に失敗しました')
     } finally {
-      setInviting(null)
+      setCreating(false)
     }
   }
 
@@ -52,7 +61,7 @@ const FriendSelectorModal = ({ open, onClose, tournamentId }: Props) => {
     <div className="fixed inset-0 z-50 flex items-start justify-center p-4">
       <div className="absolute inset-0 bg-black/40" onClick={onClose}></div>
       <div className="relative w-full max-w-lg rounded-lg bg-white p-6 shadow-lg">
-        <h3 className="mb-4 text-lg font-semibold">Invite Friends</h3>
+        <h3 className="mb-4 text-lg font-semibold">Invite Friends to Room</h3>
         <input
           value={query}
           onChange={(e) => setQuery(e.target.value)}
@@ -72,34 +81,19 @@ const FriendSelectorModal = ({ open, onClose, tournamentId }: Props) => {
                   <div className="text-xs text-slate-500">{f.login}</div>
                 </div>
                 <div>
-                  <Button disabled={inviting === f.id} onClick={() => handleInvite(f.id)}>
-                    {inviting === f.id ? 'Inviting...' : 'Invite'}
-                  </Button>
+                  <input type="checkbox" checked={!!selected[f.id]} onChange={() => toggle(f.id)} />
                 </div>
               </div>
             ))
           )}
         </div>
-        <div className="mt-4 text-right">
-          <Button onClick={onClose}>Close</Button>
+        <div className="mt-4 flex justify-end gap-2">
+          <Button onClick={onClose} variant="secondary">Cancel</Button>
+          <Button onClick={handleCreateRoom} disabled={creating}>{creating ? 'Creating...' : 'Create Room & Invite'}</Button>
         </div>
       </div>
     </div>
   )
 }
 
-export default FriendSelectorModal
-
-/*
-解説:
-
-1) 目的
-  - トーナメント作成者がフレンド一覧からオンラインフレンドを検索して招待できるモーダルUIの最小実装。
-
-2) 実装
-  - `fetchUserFriends` でフレンド一覧を取得し、検索フィルタを適用して表示。
-  - `inviteTournamentParticipant` を呼び出してサーバに招待を作成する（成功時にモーダルを閉じる）。
-
-3) 注意点
-  - 招待の成否や詳細なエラーハンドリングは簡易実装。実運用では toast/ローカル state の更新を追加すること。
-*/
+export default InviteToTournamentRoomModal

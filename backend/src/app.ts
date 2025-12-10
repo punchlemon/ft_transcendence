@@ -12,6 +12,7 @@ import blockPlugin from './plugins/block'
 import usersRoutes from './routes/users'
 import authGuard from './plugins/authGuard'
 import tournamentsRoutes from './routes/tournaments'
+import tournamentRoomsRoutes from './routes/tournamentRooms'
 import authRoutes from './routes/auth'
 import gameRoutes from './routes/game'
 import chatRoutes from './routes/chat'
@@ -44,6 +45,7 @@ export const buildServer = async () => {
   await server.register(authRoutes, { prefix: '/api/auth' })
   await server.register(usersRoutes, { prefix: '/api/users' })
   await server.register(tournamentsRoutes, { prefix: '/api/tournaments' })
+  await server.register(tournamentRoomsRoutes, { prefix: '/api/tournaments' })
   await server.register(gameRoutes, { prefix: '/api' })
   await server.register(chatRoutes, { prefix: '/api/chat' })
   // keep chat WS under '/api/ws/...' for compatibility with frontend

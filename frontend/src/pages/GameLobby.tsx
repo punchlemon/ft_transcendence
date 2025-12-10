@@ -6,8 +6,8 @@ import useAuthStore from '../stores/authStore'
 import BracketView from '../components/tournament/BracketView'
 import { useTournamentSetup } from '../hooks/useTournamentSetup'
 import { generatePreviewMatches } from '../lib/tournament'
-import FriendSelectorModal from '../components/tournament/FriendSelectorModal'
-import { fetchUserFriends, createTournament, fetchTournament } from '../lib/api'
+// FriendSelectorModal removed — use lobby flow / toasts instead
+import { fetchUserFriends, createTournament, fetchTournament, createTournamentRoom } from '../lib/api'
 
 type GameMode = 'local' | 'remote' | 'ai' | 'tournament'
 type MatchType = 'public' | 'private'
@@ -68,31 +68,46 @@ const GameLobbyPage = () => {
       // Create tournament using selected friends + current user
       if (!user) return
       setIsCreatingTournament(true)
-      try {
-        const participants: Array<any> = []
-        participants.push({ alias: user.displayName, userId: user.id })
-        const selectedFriends = friends.filter((f) => selectedFriendIds.includes(f.id))
-        selectedFriends.forEach((f) => participants.push({ alias: f.displayName, userId: f.id }))
-        if (participants.length % 2 !== 0) {
-          participants.push({ alias: 'AI' })
-        }
+          try {
+            const participants: Array<any> = []
+            participants.push({ alias: user.displayName, userId: user.id })
+            const selectedFriends = friends.filter((f) => selectedFriendIds.includes(f.id))
+            selectedFriends.forEach((f) => participants.push({ alias: f.displayName, userId: f.id }))
+            if (participants.length % 2 !== 0) {
+              participants.push({ alias: 'AI' })
+            }
 
-        const res = await createTournament({
-          name: tournamentName || `${user.displayName}'s Tournament`,
-          createdById: user.id,
-          participants: participants.map((p) => ({ alias: p.alias, userId: p.userId }))
-        })
+            const res = await createTournament({
+              name: tournamentName || `${user.displayName}'s Tournament`,
+              createdById: user.id,
+              participants: participants.map((p) => ({ alias: p.alias, userId: p.userId }))
+            })
 
-        const detail = await fetchTournament(res.data.id)
-        setCreatedTournament(detail.data)
-        setIsStartDisabled(false)
-        setIsInviteModalOpen(true)
-        } catch (err) {
-        logger.error('Failed to create tournament', err)
-        alert('Failed to create tournament')
-      } finally {
-        setIsCreatingTournament(false)
-      }
+            const detail = await fetchTournament(res.data.id)
+            setCreatedTournament(detail.data)
+            setIsStartDisabled(false)
+
+            // Create a tournament room and navigate owner into it
+            try {
+              const invitedIds = selectedFriendIds
+              const roomRes = await createTournamentRoom(detail.data.id, invitedIds)
+              const roomId = roomRes.roomId ?? roomRes.id ?? null
+              if (roomId) {
+                navigate(`/tournaments/${detail.data.id}/rooms/${roomId}`)
+                return
+              }
+            } catch (e) {
+              logger.error('Failed to create tournament room', e)
+            }
+
+            // fallback: open invite modal if room creation failed
+            setIsInviteModalOpen(true)
+          } catch (err) {
+            logger.error('Failed to create tournament', err)
+            alert('Failed to create tournament')
+          } finally {
+            setIsCreatingTournament(false)
+          }
     } else if (selectedMode === 'remote') {
       if (matchType === 'public') {
         // Start real matching: open a WS to /api/ws/game without sessionId
@@ -314,7 +329,7 @@ const GameLobbyPage = () => {
                   />
                 </div>
               </div>
-              <FriendSelectorModal open={isInviteModalOpen} onClose={() => setIsInviteModalOpen(false)} tournamentId={createdTournament?.id ?? -1} />
+              {/* Invite modal removed: lobby-based invites use NotificationToast */}
             </div>
           )}
 
@@ -428,12 +443,6 @@ const GameLobbyPage = () => {
                       className="rounded-md border px-4 py-2 text-sm"
                     >
                       Invite Friends
-                    </button>
-                    <button
-                      onClick={handleStartTournamentNow}
-                      className="ml-2 rounded-md bg-indigo-600 px-4 py-2 text-sm text-white"
-                    >
-                      Start Tournament
                     </button>
                   </div>
                 )}
