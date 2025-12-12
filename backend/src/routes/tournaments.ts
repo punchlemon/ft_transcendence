@@ -52,8 +52,8 @@ const matchParamSchema = z.object({
 })
 
 const tournamentsRoutes: FastifyPluginAsync = async (fastify) => {
-  // In-memory timers for INVITED participants (participantId -> Timeout)
-  const inviteTimers = new Map<number, NodeJS.Timeout>()
+  // Invite expiry TTL removed. Invited participants remain INVITED until they
+  // accept/decline or the tournament owner updates their state.
 
   const generateBracket = async (tournamentId: number) => {
     const participants = await fastify.prisma.tournamentParticipant.findMany({
@@ -150,40 +150,7 @@ const tournamentsRoutes: FastifyPluginAsync = async (fastify) => {
     }
   }
 
-  const scheduleInviteExpiry = (participantId: number) => {
-    // clear existing
-    if (inviteTimers.has(participantId)) {
-      clearTimeout(inviteTimers.get(participantId)!)
-    }
-    const ttl = Number(process.env.TOURNAMENT_INVITE_TTL_SEC || 20)
-    const t = setTimeout(async () => {
-      try {
-        const p = await fastify.prisma.tournamentParticipant.findUnique({ where: { id: participantId } })
-        if (!p) return
-        if (p.inviteState === 'INVITED') {
-          await fastify.prisma.tournamentParticipant.update({ where: { id: participantId }, data: { inviteState: 'DECLINED' } })
-          // notify owner
-          const tournament = await fastify.prisma.tournament.findUnique({ where: { id: p.tournamentId }, select: { createdById: true, name: true } })
-          if (tournament) {
-            await notificationService.createNotification(
-              tournament.createdById,
-              'TOURNAMENT_INVITE',
-              'Invite expired',
-              `Invite for ${p.alias} expired for tournament ${tournament.name}`,
-              { tournamentId: p.tournamentId, participantId }
-            )
-            fastify.log.info({ participantId }, 'Invite expired and marked DECLINED')
-          }
-        }
-      } catch (e) {
-        fastify.log.error(e)
-      } finally {
-        inviteTimers.delete(participantId)
-      }
-    }, ttl * 1000)
-
-    inviteTimers.set(participantId, t)
-  }
+  // scheduleInviteExpiry removed — no automatic expiration of invites
 
   fastify.post('/', async (request, reply) => {
     const parsed = createTournamentSchema.safeParse(request.body)
@@ -250,8 +217,6 @@ const tournamentsRoutes: FastifyPluginAsync = async (fastify) => {
     )
 
     for (const participant of initialInvites) {
-      scheduleInviteExpiry(participant.id)
-
       await notificationService.createNotification(
         participant.userId!,
         'TOURNAMENT_INVITE',
@@ -359,8 +324,7 @@ const tournamentsRoutes: FastifyPluginAsync = async (fastify) => {
       }
     })
 
-    // schedule TTL expiry
-    scheduleInviteExpiry(participant.id)
+    // No TTL scheduling: invites persist until the user accepts or declines
 
     // create notification which will be emitted over WS by notificationService -> chatWs
     await notificationService.createNotification(
@@ -407,19 +371,12 @@ const tournamentsRoutes: FastifyPluginAsync = async (fastify) => {
     }
 
     if (body.data.action === 'ACCEPT') {
-      // cancel TTL timer if any
-      if (inviteTimers.has(participant.id)) {
-        clearTimeout(inviteTimers.get(participant.id)!)
-        inviteTimers.delete(participant.id)
-      }
+      // No TTL timer to cancel (TTL removed)
       const updated = await fastify.prisma.tournamentParticipant.update({ where: { id: participant.id }, data: { inviteState: 'ACCEPTED', joinedAt: new Date() } })
       return { data: updated }
     } else {
       // DECLINE: mark declined and notify owner; allow owner to re-invite
-      if (inviteTimers.has(participant.id)) {
-        clearTimeout(inviteTimers.get(participant.id)!)
-        inviteTimers.delete(participant.id)
-      }
+      // No TTL timer to cancel (TTL removed)
       const updated = await fastify.prisma.tournamentParticipant.update({ where: { id: participant.id }, data: { inviteState: 'DECLINED' } })
       const tournament = await fastify.prisma.tournament.findUnique({ where: { id: participant.tournamentId }, select: { createdById: true, name: true } })
       if (tournament) {

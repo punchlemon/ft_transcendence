@@ -117,10 +117,8 @@ describe('Tournament Invite Flow', () => {
     expect(ownerNotifs.some(n => n.type === 'TOURNAMENT_INVITE')).toBe(false)
   })
 
-  it('invite TTL expires and marks participant DECLINED', async () => {
-    // For reliability across different timer implementations, use a short real TTL
-    const originalTtl = process.env.TOURNAMENT_INVITE_TTL_SEC
-    process.env.TOURNAMENT_INVITE_TTL_SEC = '1'
+  it('invite persists and is not auto-declined (TTL removed)', async () => {
+    // TTL removed: ensure invite remains INVITED after a short delay
     try {
       const ownerBody = await register(server, { email: 'owner3@example.com', username: 'owner3', displayName: 'Owner3', password: 'Pass1234' })
       const friendBody = await register(server, { email: 'friend3@example.com', username: 'friend3', displayName: 'Friend3', password: 'Pass1234' })
@@ -139,16 +137,12 @@ describe('Tournament Invite Flow', () => {
       expect(inviteRes.statusCode).toBe(201)
       const invite = inviteRes.json<{ data: { id: number } }>()
 
-      // Advance timers by the configured TTL (default 20s) - read env var if set
-      const ttlSec = Number(process.env.TOURNAMENT_INVITE_TTL_SEC || 1)
-      // Wait slightly longer than TTL to allow server-side expiry to run
-      await new Promise((res) => setTimeout(res, ttlSec * 1000 + 300))
-
+      // Wait shortly to ensure no server-side expiration ran
+      await new Promise((res) => setTimeout(res, 300))
       const participant = await server.prisma.tournamentParticipant.findUnique({ where: { id: invite.data.id } })
-      expect(participant?.inviteState).toBe('DECLINED')
+      expect(participant?.inviteState).toBe('INVITED')
     } finally {
-      if (originalTtl === undefined) delete process.env.TOURNAMENT_INVITE_TTL_SEC
-      else process.env.TOURNAMENT_INVITE_TTL_SEC = originalTtl
+      // nothing to restore—TTL removed
     }
   })
 })
