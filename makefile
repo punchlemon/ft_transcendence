@@ -61,3 +61,19 @@ ai-init:
 	@cat .ai_prompt_temp | $(CLIP)
 	@rm .ai_prompt_temp
 	@echo "🚀 Initialization prompt copied! Paste to AI."
+
+# ==============================================================================
+# 3. Docker Compose Commands
+# ==============================================================================
+
+up:
+	@echo "Starting development environment..."
+	@docker compose up --build
+	@echo "✅ Development environment is up!"
+
+down:
+	@echo "Stopping development environment..."
+	@docker compose down
+	@echo "✅ Development environment is down!"
+
+.PHONY: ai ai-init up down
